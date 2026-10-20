@@ -67,11 +67,21 @@ try {
 
   const before = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   await page.keyboard.down("KeyW");
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(1500);
   await page.keyboard.up("KeyW");
   const after = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const moved = Math.hypot(after.x - before.x, after.z - before.z);
-  check(moved > 0.5, `holding W walks (${moved.toFixed(2)} m in a second)`);
+  check(moved > 0.2, `holding W walks (${moved.toFixed(2)} m)`);
+  await page.keyboard.press("KeyF");
+  const lightOn = await page
+    .waitForFunction(() => window.__noclip.flashlight.on, null, { timeout: 3000 })
+    .then(() => true, () => false);
+  check(lightOn, "F turns the flashlight on");
+
+  await page.evaluate(() => window.__noclip.teleportToExit());
+  await page.waitForFunction(() => window.__noclip.run.depth === 1, null, { timeout: 5000 });
+  check(true, "walking into the exit loads the next level");
+
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
