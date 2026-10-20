@@ -117,6 +117,34 @@ export function createAudio() {
         l.forwardZ.value = -Math.cos(yaw);
       }
     },
+    // an entity's tell, from where it is
+    entity(sound, x, y, z, volume = 1) {
+      const dest = panner(x, y, z, 1.6);
+      const t = ctx.currentTime;
+      if (sound === "teeth") {
+        for (let i = 0; i < 3; i++) {
+          burst({ duration: 0.03, frequency: 4200 + i * 300, q: 10, type: "bandpass", level: 0.5 * volume, at: t + i * 0.09, destination: dest });
+        }
+      } else if (sound === "panting") {
+        for (let i = 0; i < 2; i++) {
+          burst({ duration: 0.22, frequency: 900, q: 1.5, type: "bandpass", level: 0.35 * volume, at: t + i * 0.32, destination: dest });
+        }
+        burst({ duration: 0.05, frequency: 2600, q: 5, type: "bandpass", level: 0.2 * volume, at: t + 0.15, destination: dest });
+      }
+    },
+    // the knock-down: a low thump and a ring in the ears
+    hit() {
+      const t = ctx.currentTime;
+      burst({ duration: 0.5, frequency: 120, level: 0.9, at: t });
+      const ring = ctx.createOscillator();
+      ring.frequency.value = 5200;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.06, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 3);
+      ring.connect(g).connect(master);
+      ring.start(t);
+      ring.stop(t + 3);
+    },
     burst,
     panner,
     noiseBuffer,
