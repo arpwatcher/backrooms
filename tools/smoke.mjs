@@ -42,6 +42,7 @@ function check(ok, message) {
 
 try {
   await page.goto(`http://localhost:${port}/index.html?seed=smoke&smoke`);
+  await page.evaluate(() => document.getElementById("enter").click());
   await page.waitForFunction(() => window.__noclip && window.__noclip.frames > 5, null, { timeout: 30000 });
   check(true, "renders frames");
   const stats = await page.evaluate(() => {
@@ -71,6 +72,8 @@ try {
   const after = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const moved = Math.hypot(after.x - before.x, after.z - before.z);
   check(moved > 0.5, `holding W walks (${moved.toFixed(2)} m in a second)`);
+  const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
+  check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);

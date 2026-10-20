@@ -6,6 +6,7 @@ import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
+import { createAudio } from "./audio/sound.js";
 
 const params = new URLSearchParams(location.search);
 const seed = params.get("seed") || "noclip-0";
@@ -26,10 +27,15 @@ const start = cellCenter(layout.start.x, layout.start.y);
 const player = createPlayer(start.x, start.z, -Math.PI * 0.75);
 const input = createInput(canvas);
 
+let audio = null;
 const title = document.getElementById("title");
 document.getElementById("enter").addEventListener("click", () => {
   title.classList.add("hidden");
   input.lock();
+  // browsers only allow sound after a click, so it starts here
+  audio ??= createAudio();
+  audio.resume();
+  audio.setHum(1, 2);
 });
 canvas.addEventListener("click", () => {
   if (title.classList.contains("hidden") && !input.locked) input.lock();
@@ -56,7 +62,15 @@ function frame() {
   camera.position.set(player.x, player.height + bobHeight, player.z);
   camera.rotation.set(player.pitch, player.yaw, 0);
 
-  updateLights(world, camera.position, time);
+  const ticks = updateLights(world, camera.position, time);
+  if (audio) {
+    audio.listen(camera.position, player.yaw);
+    if (moved.stepped) audio.footstep(player.running, player.crouching);
+    for (const panel of ticks) {
+      const p = panel.mesh.position;
+      if (p.distanceToSquared(camera.position) < 100) audio.flickerTick(p.x, p.y, p.z);
+    }
+  }
   renderer.render(scene, camera);
   frames++;
   requestAnimationFrame(frame);
@@ -64,4 +78,4 @@ function frame() {
 requestAnimationFrame(frame);
 
 // read by the smoke test
-window.__noclip = { seed, layout, player, get frames() { return frames; } };
+window.__noclip = { seed, layout, player, get frames() { return frames; }, get audio() { return audio; } };

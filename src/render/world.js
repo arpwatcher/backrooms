@@ -115,11 +115,14 @@ export function buildWorld(scene, layout) {
 }
 
 // per frame: flicker, then hand the light pool to the nearest live panels
+// returns the panels that just flickered off, so the caller can tick them
 export function updateLights(world, position, time) {
+  const ticks = [];
   for (const panel of world.panels) {
     if (panel.state === "flicker") {
       const t = time * 9 + panel.phase;
       const off = Math.sin(t) * Math.sin(t * 2.7) > 0.55 || Math.sin(t * 0.31) > 0.97;
+      if (off && panel.level > 0.5) ticks.push(panel);
       panel.level = off ? 0.05 : 1;
       panel.mesh.material.color.setHex(off ? 0x5a5236 : 0xfff6d0);
     }
@@ -137,4 +140,5 @@ export function updateLights(world, position, time) {
     light.position.set(entry.p.mesh.position.x, WALL_HEIGHT - 0.25, entry.p.mesh.position.z);
     light.intensity = 3.0 * entry.p.level;
   });
+  return ticks;
 }
