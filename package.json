@@ -1,0 +1,13 @@
+{
+  "name": "noclip-infinity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NOCLIP - a Backrooms horror game that runs in the browser",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\"",
+    "smoke": "node tools/smoke.mjs",
+    "serve": "http-server -p 8080 -c-1 ."
+  },
+  "license": "MIT"
+}
