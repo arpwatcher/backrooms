@@ -10,6 +10,7 @@ document is the target and the code is where things currently stand.
 | 1 | [Pitch and pillars](01-pitch-and-pillars.md) | what the game is, and the rules every decision is checked against |
 | 2 | [Core loop and co-op](02-core-loop-and-coop.md) | a level from entering to leaving, and how four people play it together |
 | 3 | [Lucidity, death and items](03-lucidity-death-items.md) | the meters, how you die, Echo deaths, what you carry |
+| 4 | [Entities: twenty in full](04-entities.md) | each entity's tell, rule, counter, co-op twist and pairs |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
