@@ -121,3 +121,21 @@ test("idle hounds wander instead of standing still", () => {
   run(hounds, e, sense, 6);
   assert.ok(Math.hypot(e.x - start.x, e.z - start.z) > 1);
 });
+
+import { loadCodex, recordSurvival } from "../src/game/codex.js";
+
+test("the codex remembers what you survived, once each, across loads", () => {
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const codex = loadCodex(storage);
+  assert.equal(recordSurvival(codex, "smiler", storage), true);
+  assert.equal(recordSurvival(codex, "smiler", storage), false);
+  assert.deepEqual([...loadCodex(storage)], ["smiler"]);
+});
+
+test("a broken or missing store gives an empty codex instead of an error", () => {
+  assert.equal(loadCodex({ getItem: () => "not json" }).size, 0);
+  assert.equal(loadCodex(undefined).size, 0);
+  const codex = new Set();
+  assert.equal(recordSurvival(codex, "hounds", { setItem: () => { throw new Error("quota"); } }), true);
+});
