@@ -33,7 +33,7 @@ export const hounds = {
       }
     }
     const den = rng.pick(far);
-    return Array.from({ length: count }, () => spawn(hounds, den, { rng: rng.fork(`hound-${count}`) }));
+    return Array.from({ length: count }, (_, i) => spawn(hounds, den, { rng: rng.fork(`hound-${i}`) }));
   },
 
   heard(e, sense) {

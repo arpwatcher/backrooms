@@ -221,3 +221,16 @@ test("switch off and they fly to where the light was, then lose interest", () =>
   run(deathmoths, e, sense, 8);
   assert.notEqual(e.state, "search");
 });
+
+test("each hound in a pack wanders its own way", () => {
+  const layout = generateLayout({ seed: "pack" });
+  const pack = hounds.spawn(layout, new Rng("pack"), {});
+  assert.ok(pack.length >= 2);
+  const sense = senseFor(layout, { x: c(layout.start.x), z: c(layout.start.y) });
+  for (let t = 0; t < 20; t += 0.05) {
+    sense.time = t;
+    for (const h of pack) hounds.update(h, sense, 0.05);
+  }
+  const spots = new Set(pack.map((h) => `${h.x.toFixed(2)},${h.z.toFixed(2)}`));
+  assert.equal(spots.size, pack.length);
+});
