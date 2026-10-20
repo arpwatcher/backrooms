@@ -3,8 +3,9 @@
 import { smiler } from "./smiler.js";
 import { hounds } from "./hounds.js";
 import { stillLife } from "./stillLife.js";
+import { deathmoths } from "./deathmoths.js";
 
-export const ENTITIES = [hounds, smiler, stillLife];
+export const ENTITIES = [hounds, smiler, stillLife, deathmoths];
 
 export function entityById(id) {
   return ENTITIES.find((d) => d.id === id) ?? null;

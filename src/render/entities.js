@@ -138,4 +138,63 @@ export function stillLifeMesh() {
   return group;
 }
 
-export const MESHES = { smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh };
+function mothTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 44;
+  const g = canvas.getContext("2d");
+  const wing = (cx, cy, rx, ry, tilt, shade) => {
+    g.fillStyle = shade;
+    g.beginPath();
+    g.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2);
+    g.fill();
+  };
+  for (const side of [-1, 1]) {
+    wing(32 + side * 15, 16, 15, 10, side * 0.5, "#a89c80");
+    wing(32 + side * 11, 30, 9, 8, side * -0.4, "#8e8268");
+    g.fillStyle = "#3a3226";
+    g.beginPath();
+    g.arc(32 + side * 17, 15, 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = "#4a4030";
+  g.fillRect(30, 8, 4, 28);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// a cloud of pale wings, each on its own wobbling orbit
+export function deathmothsMesh() {
+  const group = new THREE.Group();
+  const count = 46;
+  const wing = new THREE.PlaneGeometry(0.13, 0.09);
+  const material = new THREE.MeshLambertMaterial({
+    map: mothTexture(), side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, emissive: 0x2a2418,
+  });
+  const moths = new THREE.InstancedMesh(wing, material, count);
+  group.add(moths);
+  const orbits = Array.from({ length: count }, (_, i) => ({
+    radius: 0.25 + ((i * 37) % 11) / 14,
+    height: 1.2 + ((i * 53) % 13) / 11,
+    speed: 2 + ((i * 29) % 7) / 2,
+    phase: i * 2.399,
+  }));
+  const dummy = new THREE.Object3D();
+  group.userData.animate = (time, entity) => {
+    const tight = entity.state === "swarm" ? 0.55 : entity.state === "circle" ? 1.3 : 1;
+    const lift = entity.state === "circle" ? 0.7 : 0;
+    orbits.forEach((o, i) => {
+      const a = o.phase + time * o.speed;
+      dummy.position.set(Math.cos(a) * o.radius * tight, o.height + lift + Math.sin(time * 7 + o.phase) * 0.12, Math.sin(a * 1.3) * o.radius * tight);
+      dummy.rotation.set(-1.2 + Math.sin(time * 34 + i) * 0.7, a, 0);
+      dummy.scale.set(0.6 + Math.abs(Math.sin(time * 34 + i)) * 0.4, 1, 1);
+      dummy.updateMatrix();
+      moths.setMatrixAt(i, dummy.matrix);
+    });
+    moths.instanceMatrix.needsUpdate = true;
+  };
+  return group;
+}
+
+export const MESHES = { smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh };

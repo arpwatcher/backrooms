@@ -9,6 +9,7 @@ import { contact, spawn } from "../src/entities/core.js";
 import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
 import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
+import { deathmoths } from "../src/entities/deathmoths.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -185,4 +186,38 @@ test("looking back at it after it moved makes it scrape, so you know it came", (
   looking = true;
   const events = run(stillLife, e, sense, 0.2);
   assert.ok(events.some((ev) => ev.sound === "scrape"));
+});
+
+test("deathmoths come for a flashlight in the dark, after a moment to notice it", () => {
+  const layout = open();
+  const e = spawn(deathmoths, { x: 6, y: 2 }, { rng: new Rng("m") });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(2) }), flashlightOn: true };
+  run(deathmoths, e, sense, 1);
+  assert.equal(e.state, "notice");
+  const events = run(deathmoths, e, sense, 6);
+  assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+test("deathmoths ignore you with the flashlight off, or under a working panel", () => {
+  const layout = open();
+  for (const [flashlightOn, light] of [[false, () => "dark"], [true, (x, z) => (Math.hypot(x - c(1), z - c(2)) < 2 ? "lit" : "dark")]]) {
+    const e = spawn(deathmoths, { x: 6, y: 2 }, { rng: new Rng("m") });
+    const sense = { ...senseFor(layout, { x: c(1), z: c(2) }, { light }), flashlightOn };
+    const events = run(deathmoths, e, sense, 8);
+    assert.ok(!events.some((ev) => ev.type === "contact"), `flashlight ${flashlightOn}`);
+  }
+});
+
+test("switch off and they fly to where the light was, then lose interest", () => {
+  const layout = open();
+  const e = spawn(deathmoths, { x: 6, y: 2 }, { rng: new Rng("m") });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(2) }), flashlightOn: true };
+  run(deathmoths, e, sense, 2.2);
+  sense.flashlightOn = false;
+  sense.player.x = c(1);
+  sense.player.z = c(9);
+  run(deathmoths, e, sense, 0.2);
+  assert.equal(e.state, "search");
+  run(deathmoths, e, sense, 8);
+  assert.notEqual(e.state, "search");
 });

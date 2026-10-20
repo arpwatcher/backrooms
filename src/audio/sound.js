@@ -130,6 +130,11 @@ export function createAudio() {
           burst({ duration: 0.22, frequency: 900, q: 1.5, type: "bandpass", level: 0.35 * volume, at: t + i * 0.32, destination: dest });
         }
         burst({ duration: 0.05, frequency: 2600, q: 5, type: "bandpass", level: 0.2 * volume, at: t + 0.15, destination: dest });
+      } else if (sound === "flutter") {
+        // dozens of papery wingbeats
+        for (let i = 0; i < 9; i++) {
+          burst({ duration: 0.025, frequency: 2200 + ((i * 431) % 1800), q: 1.2, type: "bandpass", level: 0.22 * volume, at: t + i * 0.045 + (i % 3) * 0.01, destination: dest });
+        }
       } else if (sound === "scrape") {
         // something heavy dragged a little way over carpet and stopped
         burst({ duration: 0.45, frequency: 260, q: 3, type: "bandpass", level: 0.6 * volume, at: t, destination: dest });

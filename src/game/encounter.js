@@ -69,6 +69,7 @@ export function makeSense({ player, flashlight, camera, layout, paths, lightAt, 
     time,
     darkCells: dark,
     lightAt,
+    flashlightOn: flashlight.on && flashlight.battery > 0,
     canSee(entity, range) {
       return (
         Math.hypot(entity.x - player.x, entity.z - player.z) <= range &&

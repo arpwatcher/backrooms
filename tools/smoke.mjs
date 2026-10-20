@@ -98,7 +98,7 @@ try {
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();
-    for (let depth = 3; depth < 12 && kinds.size < 3; depth++) {
+    for (let depth = 3; depth < 16 && kinds.size < 4; depth++) {
       window.__noclip.goToDepth(depth);
       await new Promise((r) => setTimeout(r, 120));
       for (const e of window.__noclip.entities) kinds.add(e.kind);
@@ -106,7 +106,7 @@ try {
     window.__noclip.goToDepth(3);
     return [...kinds].sort();
   });
-  check(all.length >= 3, `entities met on levels 3-11: ${all.join(", ")}`);
+  check(all.length >= 4, `entities met on levels 3-15: ${all.join(", ")}`);
 
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({
