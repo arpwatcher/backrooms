@@ -82,6 +82,29 @@ try {
   await page.waitForFunction(() => window.__noclip.run.depth === 1, null, { timeout: 5000 });
   check(true, "walking into the exit loads the next level");
 
+  await page.evaluate(() => window.__noclip.goToDepth(3));
+  const kinds = await page.evaluate(() => [...new Set(window.__noclip.entities.map((e) => e.kind))].sort());
+  check(kinds.join(",") === "hounds,smiler", `entities spawn on level 3 (${kinds.join(", ")})`);
+  await page.waitForTimeout(1500);
+  const moving = await page.evaluate(() => window.__noclip.entities.some((e) => e.state !== "idle"));
+  check(moving, "and they run their behaviour");
+
+  await page.evaluate(() => window.__noclip.touch(0));
+  const firstTouch = await page.evaluate(() => ({
+    down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],
+  }));
+  check(firstTouch.down && !firstTouch.dead && firstTouch.marks.length === 1, "first contact knocks you down and marks you");
+  await page.evaluate(() => window.__noclip.touch(0));
+  const death = await page.evaluate(() => ({
+    dead: window.__noclip.dead, name: document.getElementById("death-name").textContent,
+    rule: document.getElementById("death-rule").textContent,
+  }));
+  check(death.dead && death.name.length > 0 && death.rule.startsWith("the rule:"), `second contact kills and names it (${death.name})`);
+  if (shot) await page.screenshot({ path: "smoke-death.png" });
+  await page.evaluate(() => document.getElementById("death-wake").click());
+  const woke = await page.evaluate(() => ({ dead: window.__noclip.dead, depth: window.__noclip.run.depth }));
+  check(!woke.dead && woke.depth === 0, `waking up goes back to the checkpoint (level ${woke.depth})`);
+
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);

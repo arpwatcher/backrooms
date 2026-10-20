@@ -12,7 +12,16 @@ import { stepLucidity } from "./game/lucidity.js";
 import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength } from "./game/flashlight.js";
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
+import { createScreens } from "./ui/screens.js";
 import { CELL } from "./world/units.js";
+import { Rng } from "./core/rng.js";
+import { createPathfinder } from "./world/path.js";
+import { createEncounter, makeSense } from "./game/encounter.js";
+import { contact } from "./entities/core.js";
+import { smiler } from "./entities/smiler.js";
+import { hounds } from "./entities/hounds.js";
+import { loadCodex, recordSurvival } from "./game/codex.js";
+import { checkpointFor } from "./game/run.js";
 
 const params = new URLSearchParams(location.search);
 const smoke = params.has("smoke");
@@ -41,6 +50,9 @@ const run = createRun(params.get("seed") || `run-${Date.now().toString(36)}`);
 const flashlight = createFlashlight();
 const input = createInput(canvas);
 const hud = createHud();
+const screens = createScreens();
+const codex = loadCodex();
+let marks = new Set();
 let player = null;
 let level = null;
 let audio = null;
@@ -54,8 +66,11 @@ function loadLevel() {
       if (o.material && !Array.isArray(o.material)) o.material.dispose?.();
     });
   }
-  const layout = generateLayout({ seed: levelSeed(run) });
+  if (level?.encounter) level.encounter.dispose();
+  const roster = rosterFor(run.depth);
+  const layout = generateLayout({ seed: levelSeed(run), darkPatches: roster.includes(smiler) ? 3 : 0 });
   const world = buildWorld(scene, layout);
+  const paths = createPathfinder(layout);
   const bottles = layout.items.map((cell) => {
     const mesh = placeInCell(almondWater(), cell.x, cell.y);
     mesh.position.x += 0.4;
@@ -71,7 +86,42 @@ function loadLevel() {
   const lucidity = player ? player.lucidity : 1;
   player = createPlayer(start.x, start.z, -Math.PI * 0.75);
   player.lucidity = lucidity;
-  level = { layout, world, bottles, exits };
+  marks = new Set();
+  level = { layout, world, bottles, exits, paths };
+  level.encounter = createEncounter({
+    scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
+  });
+}
+
+// stand-in until the director: who lives on which level
+function rosterFor(depth) {
+  if (depth === 0) return [];
+  if (depth === 1) return [hounds];
+  if (depth === 2) return [smiler];
+  return [smiler, hounds];
+}
+
+function onContact(entity, time) {
+  const { fatal } = contact(marks, entity.kind);
+  if (fatal) {
+    run.deaths += 1;
+    hud.hush();
+    screens.die(entity.def, () => {
+      run.depth = checkpointFor(run.depth);
+      player = null;
+      loadLevel();
+      input.lock();
+    });
+    return;
+  }
+  // first contact: knocked down, shaken, and it backs off
+  player.downUntil = time + 2.2;
+  player.lucidity = Math.max(0, player.lucidity - 0.3);
+  screens.hit();
+  audio?.hit();
+  level.encounter.retreat(entity, time);
+  if (recordSurvival(codex, entity.kind)) hud.say(`codex: ${entity.def.name} - ${entity.def.counter}`, 7, time);
+  else hud.say(`${entity.def.name} marked you. it won't let go next time.`, 5, time);
 }
 
 function lightAt(x, z) {
@@ -129,9 +179,21 @@ function frame() {
   if (frameInput.pressed.has("KeyF")) toggleFlashlight(flashlight);
   if (frameInput.pressed.has("KeyQ") && drinkAlmondWater(run, player)) hud.say("almond water", 1.5, time);
 
-  const moved = stepPlayer(player, frameInput, dt, level.layout);
+  const down = (player.downUntil ?? 0) > time || screens.dead;
+  const moved = stepPlayer(player, down ? { lookX: frameInput.lookX, lookY: frameInput.lookY } : frameInput, dt, level.layout);
+  const sense = makeSense({
+    player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells,
+  });
+  if (!screens.dead) {
+    for (const event of level.encounter.update(sense, dt)) {
+      if (event.type === "sound") audio?.entity(event.sound, event.x, 1.2, event.z, event.volume);
+      else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
+      else if (event.type === "contact" && !down) onContact(event.entity, time);
+    }
+  }
   stepFlashlight(flashlight, dt);
-  player.lucidity = stepLucidity(player.lucidity, { light: lightAt(player.x, player.z) }, dt);
+  const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
+  player.lucidity = stepLucidity(player.lucidity, { light: lightAt(player.x, player.z), presences }, dt);
 
   for (const bottle of level.bottles) {
     if (bottle.taken) continue;
@@ -149,8 +211,8 @@ function frame() {
 
   bob += moved.travelled * (player.running ? 5.2 : 6.4);
   const bobHeight = moved.travelled > 0 ? Math.sin(bob) * (player.running ? 0.045 : 0.025) : 0;
-  camera.position.set(player.x, player.height + bobHeight, player.z);
-  camera.rotation.set(player.pitch, player.yaw, 0);
+  camera.position.set(player.x, (down ? 0.45 : player.height) + bobHeight, player.z);
+  camera.rotation.set(player.pitch, player.yaw, down ? 0.5 : 0);
   // low lucidity: the room breathes
   const unease = Math.max(0, 0.6 - player.lucidity);
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9;
@@ -188,6 +250,17 @@ window.__noclip = {
   get player() { return player; },
   get frames() { return frames; },
   get audio() { return audio; },
+  get entities() { return level.encounter.entities; },
+  marks: () => marks,
+  // test hooks
+  touch(index) {
+    onContact(level.encounter.entities[index], clock.elapsedTime);
+  },
+  get dead() { return screens.dead; },
+  goToDepth(depth) {
+    run.depth = depth;
+    loadLevel();
+  },
   // test hook: stand in front of the exit
   teleportToExit() {
     const exit = level.exits[0].door.position;

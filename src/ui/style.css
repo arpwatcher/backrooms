@@ -11,3 +11,8 @@ button:hover { background: rgba(243,230,162,0.08); }
 #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(10,6,0,0.92) 100%); opacity: 0.15; transition: opacity 0.6s; }
 #toast { position: fixed; left: 0; right: 0; top: 18%; text-align: center; font-size: 18px; letter-spacing: 0.15em; color: #f0e3a8; opacity: 0; transition: opacity 0.8s; pointer-events: none; text-shadow: 0 0 8px #000; }
 #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.9s; }
+#death h1 { color: #e9d9a0; font-size: 52px; }
+#death-rule { max-width: 560px; line-height: 1.5; margin: 6px 0 4px; }
+#death-counter { max-width: 560px; line-height: 1.5; margin-bottom: 26px; }
+#flash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(120,20,10,0.2), rgba(60,0,0,0.9)); opacity: 0; }
+#death { z-index: 20; background: radial-gradient(ellipse at center, rgba(30,8,4,0.9), rgba(4,1,0,0.99)); }

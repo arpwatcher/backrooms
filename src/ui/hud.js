@@ -23,6 +23,10 @@ export function createHud() {
       vignette.style.filter = `saturate(${(1 - edge * 0.6).toFixed(2)})`;
       if (time > toastUntil) toast.style.opacity = "0";
     },
+    hush() {
+      toast.style.opacity = "0";
+      toastUntil = 0;
+    },
     say(text, seconds, time) {
       toast.textContent = text;
       toast.style.opacity = "1";
