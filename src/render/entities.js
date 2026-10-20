@@ -97,11 +97,15 @@ export function stillLifeMesh() {
     group.add(mesh);
     return mesh;
   };
-  const torso = part(new THREE.CylinderGeometry(0.2, 0.15, 0.62, 10), 0, 1.25, 0);
-  part(new THREE.CylinderGeometry(0.15, 0.17, 0.2, 10), 0, 0.88, 0);
-  const head = part(new THREE.SphereGeometry(0.13, 12, 10), 0, 1.72, 0.02);
-  head.scale.set(0.85, 1.2, 0.95);
-  part(new THREE.CylinderGeometry(0.04, 0.05, 0.12, 6), 0, 1.6, 0);
+  const torso = part(new THREE.CapsuleGeometry(0.16, 0.4, 6, 12), 0, 1.27, 0);
+  torso.scale.set(1.2, 1, 0.72);
+  const hips = part(new THREE.CapsuleGeometry(0.13, 0.08, 4, 10), 0, 0.9, 0);
+  hips.scale.set(1.25, 1, 0.8);
+  part(new THREE.CylinderGeometry(0.035, 0.045, 0.14, 6), 0, 1.6, 0);
+  const head = part(new THREE.SphereGeometry(0.105, 14, 12), 0, 1.74, 0.01);
+  head.scale.set(0.88, 1.28, 1);
+  // a default pose that is already slightly wrong
+  head.rotation.set(0.18, 0, 0.22);
   const limb = (length) => {
     const pivot = new THREE.Group();
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, length, 6), plaster);
@@ -110,9 +114,11 @@ export function stillLifeMesh() {
     group.add(pivot);
     return pivot;
   };
-  const arms = [limb(0.68), limb(0.68)];
-  arms[0].position.set(-0.25, 1.52, 0);
-  arms[1].position.set(0.25, 1.52, 0);
+  const arms = [limb(0.66), limb(0.66)];
+  arms[0].position.set(-0.235, 1.5, 0);
+  arms[1].position.set(0.235, 1.5, 0);
+  arms[0].rotation.set(0.1, 0, -0.06);
+  arms[1].rotation.set(-0.35, 0, 0.1);
   const legs = [limb(0.82), limb(0.82)];
   legs[0].position.set(-0.09, 0.82, 0);
   legs[1].position.set(0.09, 0.82, 0);
@@ -122,8 +128,8 @@ export function stillLifeMesh() {
     if (settled && lastState && lastState !== entity.state && lastState !== "waking") {
       // a new pose, chosen while nobody was looking
       const r = (k) => Math.sin(entity.x * 12.9898 + entity.z * 78.233 + k) * 0.5;
-      arms[0].rotation.set(r(1) - 0.3, 0, -0.15 + r(2) * 0.4);
-      arms[1].rotation.set(r(3) - 0.3, 0, 0.15 + r(4) * 0.4);
+      arms[0].rotation.set(r(1) * 1.6 - 0.4, 0, -0.06 - Math.abs(r(2)) * 0.5);
+      arms[1].rotation.set(r(3) * 1.6 - 0.4, 0, 0.06 + Math.abs(r(4)) * 0.5);
       head.rotation.set(r(5) * 0.4, r(6) * 0.8, r(7) * 0.5);
       torso.rotation.z = r(8) * 0.12;
     }
