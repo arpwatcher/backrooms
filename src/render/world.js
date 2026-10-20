@@ -7,9 +7,9 @@
 import * as THREE from "three";
 import { wallpaperTexture, carpetTexture, ceilingTexture, panelTexture } from "./textures.js";
 
-export const CELL = 2.4;
-export const WALL_HEIGHT = 2.7;
-const WALL_THICKNESS = 0.14;
+import { CELL, WALL_HEIGHT, WALL_THICKNESS, PILLAR_HALF } from "../world/units.js";
+
+export { CELL, WALL_HEIGHT };
 const LIGHT_POOL = 10;
 
 export function cellCenter(x, y) {
@@ -72,7 +72,7 @@ export function buildWorld(scene, layout) {
 
   if (layout.pillars.length) {
     const pillars = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.55, WALL_HEIGHT, 0.55),
+      new THREE.BoxGeometry(PILLAR_HALF * 2, WALL_HEIGHT, PILLAR_HALF * 2),
       wallMaterial,
       layout.pillars.length,
     );

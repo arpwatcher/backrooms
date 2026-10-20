@@ -63,6 +63,14 @@ try {
   check(stats.lit > 0.25, `the screen is lit (${(stats.lit * 100).toFixed(0)}% of pixels)`);
   check(stats.yellow > 0.35, `and it is Backrooms yellow (${(stats.yellow * 100).toFixed(0)}% of pixels)`);
   if (shot) await page.screenshot({ path: "smoke-frame.png" });
+
+  const before = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(1000);
+  await page.keyboard.up("KeyW");
+  const after = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
+  const moved = Math.hypot(after.x - before.x, after.z - before.z);
+  check(moved > 0.5, `holding W walks (${moved.toFixed(2)} m in a second)`);
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
