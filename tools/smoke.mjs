@@ -117,6 +117,33 @@ try {
     return [...ids];
   });
   check(places.length >= 4, `levels 0-15 visit different kinds of place: ${places.join(", ")}`);
+  const shifts = await page.evaluate(() => {
+    const found = {};
+    for (let depth = 0; depth < 40; depth++) {
+      window.__noclip.goToDepth(depth);
+      const id = window.__noclip.shift;
+      if (id && !(id in found)) found[id] = depth;
+    }
+    return found;
+  });
+  check(Object.keys(shifts).length >= 3 && Math.min(...Object.values(shifts)) >= 3, `rule shifts turn up from level 3 on: ${JSON.stringify(shifts)}`);
+  if ("flat" in shifts) {
+    await page.evaluate((d) => window.__noclip.goToDepth(d), shifts.flat);
+    await page.keyboard.press("KeyF");
+    await page.waitForTimeout(300);
+    check(!(await page.evaluate(() => window.__noclip.flashlight.on)), "on a dead-battery level F does nothing");
+  }
+  if ("soaked" in shifts) {
+    await page.evaluate((d) => window.__noclip.goToDepth(d), shifts.soaked);
+    await page.keyboard.down("ShiftLeft");
+    await page.keyboard.down("KeyW");
+    await page.waitForTimeout(600);
+    const running = await page.evaluate(() => window.__noclip.player.running);
+    await page.keyboard.up("KeyW");
+    await page.keyboard.up("ShiftLeft");
+    check(!running, "on a soaked level you cannot run");
+  }
+  await page.evaluate(() => window.__noclip.goToDepth(3));
 
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({

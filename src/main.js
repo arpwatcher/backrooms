@@ -20,6 +20,7 @@ import { createEncounter, makeSense } from "./game/encounter.js";
 import { contact } from "./entities/core.js";
 import { ENTITIES } from "./entities/index.js";
 import { archetypeFor } from "./world/archetypes.js";
+import { pickShift, createTrail, stepTrail } from "./game/shifts.js";
 import { planLevel, TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { checkpointFor } from "./game/run.js";
@@ -84,7 +85,9 @@ function loadLevel() {
   const archetype = archetypeFor(run.depth, (d) => new Rng(`${levelSeed(run, d)}/archetype`));
   const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
   const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
-  const world = buildWorld(scene, layout, archetype.look);
+  const shift = pickShift(run.depth, new Rng(`${levelSeed(run)}/shift`));
+  const effects = shift?.effects ?? {};
+  const world = buildWorld(scene, layout, { ...archetype.look, ...effects.look });
   const paths = createPathfinder(layout);
   const bottles = layout.items.map((cell) => {
     const mesh = placeInCell(almondWater(), cell.x, cell.y);
@@ -103,7 +106,8 @@ function loadLevel() {
   player.lucidity = lucidity;
   marks = new Map();
   tension = createTension();
-  level = { layout, world, bottles, exits, paths, plan, archetype };
+  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, trail: createTrail() };
+  if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
   });
@@ -133,6 +137,35 @@ function onContact(entity, time) {
   else hud.say(`${entity.def.name} marked you. it won't let go next time.`, 5, time);
 }
 
+const lookDirection = new THREE.Vector3();
+const toPanel = new THREE.Vector3();
+function applyShiftToLights(time) {
+  const { effects, world, layout } = level;
+  if (effects.lightsDieBehind) {
+    const cell = { x: Math.floor(player.x / CELL), y: Math.floor(player.z / CELL) };
+    for (const i of stepTrail(level.trail, layout.lights, cell, time, effects.lightsDieBehind)) {
+      const panel = world.panels[i];
+      panel.state = "dead";
+      panel.level = 0;
+      panel.mesh.material.color.setHex(0x3a3628);
+      const p = panel.mesh.position;
+      audio?.flickerTick(p.x, p.y, p.z);
+    }
+  }
+  if (effects.shyLights) {
+    camera.getWorldDirection(lookDirection);
+    for (const panel of world.panels) {
+      if (panel.state === "dead") continue;
+      toPanel.copy(panel.mesh.position).sub(camera.position);
+      const d = toPanel.length();
+      const seen = d < 22 && toPanel.dot(lookDirection) / d > Math.cos(0.42);
+      const target = seen ? 0.04 : 1;
+      panel.level += (target - panel.level) * 0.25;
+      panel.mesh.material.color.setHex(panel.level > 0.5 ? panel.on : 0x4a4430);
+    }
+  }
+}
+
 function lightAt(x, z) {
   for (const panel of level.world.panels) {
     if (panel.level < 0.5) continue;
@@ -152,6 +185,7 @@ function nextLevel(time) {
     loadLevel();
     fade.style.opacity = "0";
     hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
+    if (level.shift) setTimeout(() => hud.say(level.shift.note, 6, clock.elapsedTime), 4200);
     transitioning = false;
   }, 950);
 }
@@ -213,7 +247,11 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   const time = clock.elapsedTime;
   const frameInput = input.read();
-  if (frameInput.pressed.has("KeyF")) toggleFlashlight(flashlight);
+  if (frameInput.pressed.has("KeyF")) {
+    if (level.effects.noFlashlight) hud.say("click. nothing.", 1.5, time);
+    else toggleFlashlight(flashlight);
+  }
+  if (level.effects.noRun) frameInput.cannotRun = true;
   if (frameInput.pressed.has("KeyQ") && drinkAlmondWater(run, player)) hud.say("almond water", 1.5, time);
 
   if (player.lucidity < 0.33 && time > (player.nextBlink ?? 0)) {
@@ -270,6 +308,7 @@ function frame() {
   camera.updateProjectionMatrix();
   beam.intensity = beamStrength(flashlight, time) * 26;
 
+  applyShiftToLights(time);
   const ticks = updateLights(level.world, camera.position, time);
   if (audio) {
     audio.listen(camera.position, player.yaw);
@@ -311,6 +350,7 @@ window.__noclip = {
   get tension() { return tension; },
   get plan() { return level.plan; },
   get archetype() { return level.archetype.id; },
+  get shift() { return level.shift?.id ?? null; },
   get tier() { return tier.name; },
   goToDepth(depth) {
     run.depth = depth;
