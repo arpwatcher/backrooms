@@ -77,3 +77,15 @@ test("lights come in three states, mostly on", () => {
   assert.ok(states.filter((s) => s === "on").length > states.length * 0.7);
   assert.ok(new Set(states).size >= 2);
 });
+
+import { darkCells } from "../src/world/layout.js";
+
+test("dark patches kill the panels around them and leave dark cells", () => {
+  const plain = generateLayout({ seed: "dark" });
+  const gloomy = generateLayout({ seed: "dark", darkPatches: 3 });
+  assert.ok(gloomy.darkPatches.length > 0);
+  assert.ok(darkCells(gloomy).length > darkCells(plain).length + 10);
+  for (const patch of gloomy.darkPatches) {
+    assert.ok(Math.abs(patch.x - gloomy.start.x) + Math.abs(patch.y - gloomy.start.y) >= 8, "never on top of the start");
+  }
+});

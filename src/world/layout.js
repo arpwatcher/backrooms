@@ -121,6 +121,7 @@ export function generateLayout({
   flickerChance = 0.06,
   exits = 1,
   items = 4,
+  darkPatches = 0,
 } = {}) {
   const rng = new Rng(seed ?? 1);
   const layout = {
@@ -169,6 +170,20 @@ export function generateLayout({
     }
   }
 
+  // dark patches: clusters of dead panels, away from the start. The light
+  // pool in the renderer skips dead panels, so these really are dark.
+  layout.darkPatches = [];
+  const gloom = rng.fork("dark");
+  for (let i = 0; i < darkPatches; i++) {
+    const centre = { x: gloom.int(4, width - 5), y: gloom.int(4, height - 5) };
+    if (Math.abs(centre.x - start.x) + Math.abs(centre.y - start.y) < 8) continue;
+    const radius = gloom.int(3, 5);
+    layout.darkPatches.push({ ...centre, radius });
+    for (const light of layout.lights) {
+      if (Math.hypot(light.x - centre.x, light.y - centre.y) <= radius) light.state = "dead";
+    }
+  }
+
   // exits: the farthest cells by walking distance, spread apart
   const dist = distancesFrom(layout, start);
   const cells = [];
@@ -193,4 +208,16 @@ export function generateLayout({
   for (const cell of loot.shuffle(middle).slice(0, items)) layout.items.push({ x: cell.x, y: cell.y });
 
   return layout;
+}
+
+// cells with no working panel close enough to light them
+export function darkCells(layout) {
+  const lit = layout.lights.filter((l) => l.state !== "dead");
+  const out = [];
+  for (let y = 0; y < layout.height; y++) {
+    for (let x = 0; x < layout.width; x++) {
+      if (!lit.some((l) => Math.hypot(l.x - x, l.y - y) < 1.6)) out.push({ x, y });
+    }
+  }
+  return out;
 }
