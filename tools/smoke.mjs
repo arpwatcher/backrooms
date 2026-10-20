@@ -82,9 +82,15 @@ try {
   await page.waitForFunction(() => window.__noclip.run.depth === 1, null, { timeout: 5000 });
   check(true, "walking into the exit loads the next level");
 
+  await page.evaluate(() => window.__noclip.goToDepth(1));
+  const debut = await page.evaluate(() => window.__noclip.plan);
+  check(debut.reason === "debut" && debut.roster.length === 1, `level 1 debuts one entity alone (${debut.roster.map((d) => d.id)})`);
   await page.evaluate(() => window.__noclip.goToDepth(3));
-  const kinds = await page.evaluate(() => [...new Set(window.__noclip.entities.map((e) => e.kind))].sort());
-  check(kinds.join(",") === "hounds,smiler", `entities spawn on level 3 (${kinds.join(", ")})`);
+  const { kinds, planned } = await page.evaluate(() => ({
+    kinds: [...new Set(window.__noclip.entities.map((e) => e.kind))].sort(),
+    planned: window.__noclip.plan.roster.map((d) => d.id).sort(),
+  }));
+  check(kinds.length > 0 && kinds.join() === planned.join(), `the director's roster spawns on level 3 (${kinds.join(", ")})`);
   await page.waitForTimeout(1500);
   const moving = await page.evaluate(() => window.__noclip.entities.some((e) => e.state !== "idle"));
   check(moving, "and they run their behaviour");

@@ -14,6 +14,8 @@ export const smiler = {
   threat: 1,
   minDepth: 2,
   hunting: (e) => e.state === "approach",
+  // it needs somewhere dark to live
+  layout: { darkPatches: 3 },
   tell: "a grin and two pale points in a dark patch, and a faint wet clicking, like teeth",
   counter: "stay under working lights, or hold your flashlight on it - it flinches back from the beam",
   rule: "it only moves in the dark, and only while you are in the dark too",

@@ -44,6 +44,14 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) 
       entity.goal = null;
       entity.stunnedUntil = time + 8;
     },
+    // mercy: everything freezes for a while, and whatever you can't see
+    // right now quietly goes home
+    calm(sense, seconds) {
+      for (const entity of entities) {
+        if (!sense.canSee(entity, 40)) this.retreat(entity, sense.time);
+        entity.stunnedUntil = sense.time + seconds;
+      }
+    },
     dispose() {
       for (const entity of entities) scene.remove(entity.mesh);
     },

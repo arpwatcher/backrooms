@@ -35,10 +35,17 @@ function run(def, entity, sense, seconds, dt = 0.05) {
 }
 
 test("first contact marks you, the second with the same thing kills", () => {
-  const marks = new Set();
+  const marks = new Map();
   assert.deepEqual(contact(marks, "smiler"), { fatal: false, first: true });
   assert.deepEqual(contact(marks, "hounds"), { fatal: false, first: true });
   assert.deepEqual(contact(marks, "smiler"), { fatal: true, first: false });
+});
+
+test("the easiest tier lets you live through one more touch", () => {
+  const marks = new Map();
+  assert.equal(contact(marks, "hounds", 3).fatal, false);
+  assert.equal(contact(marks, "hounds", 3).fatal, false);
+  assert.equal(contact(marks, "hounds", 3).fatal, true);
 });
 
 test("the smiler closes in while you stand in the dark", () => {

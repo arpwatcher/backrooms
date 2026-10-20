@@ -61,8 +61,10 @@ export function moveToward(entity, point, speed, dt) {
 
 // what a touch from `kind` does: the first one marks you, the second kills.
 // returns { fatal, first }
-export function contact(marks, kind) {
-  if (marks.has(kind)) return { fatal: true, first: false };
-  marks.add(kind);
-  return { fatal: false, first: true };
+// marks: Map of kind -> contacts so far this level. `allowed` is how many
+// touches from the same kind you live through, plus the one that kills.
+export function contact(marks, kind, allowed = 2) {
+  const count = (marks.get(kind) ?? 0) + 1;
+  marks.set(kind, count);
+  return { fatal: count >= allowed, first: count === 1 };
 }

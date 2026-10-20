@@ -18,8 +18,8 @@ import { Rng } from "./core/rng.js";
 import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
 import { contact } from "./entities/core.js";
-import { smiler } from "./entities/smiler.js";
-import { hounds } from "./entities/hounds.js";
+import { ENTITIES } from "./entities/index.js";
+import { planLevel, TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { checkpointFor } from "./game/run.js";
 
@@ -52,7 +52,10 @@ const input = createInput(canvas);
 const hud = createHud();
 const screens = createScreens();
 const codex = loadCodex();
-let marks = new Set();
+let marks = new Map();
+let tier = TIERS[params.get("tier")] ?? TIERS[readTier()] ?? TIERS.uneasy;
+let tension = createTension();
+const recent = [];
 let player = null;
 let level = null;
 let audio = null;
@@ -67,8 +70,12 @@ function loadLevel() {
     });
   }
   if (level?.encounter) level.encounter.dispose();
-  const roster = rosterFor(run.depth);
-  const layout = generateLayout({ seed: levelSeed(run), darkPatches: roster.includes(smiler) ? 3 : 0 });
+  const plan = planLevel({ depth: run.depth, rng: new Rng(`${levelSeed(run)}/director`), pool: ENTITIES, tier, recent });
+  const roster = plan.roster;
+  recent.push(roster.map((d) => d.id));
+  if (recent.length > 3) recent.shift();
+  const darkPatches = Math.max(0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
+  const layout = generateLayout({ seed: levelSeed(run), darkPatches });
   const world = buildWorld(scene, layout);
   const paths = createPathfinder(layout);
   const bottles = layout.items.map((cell) => {
@@ -86,23 +93,17 @@ function loadLevel() {
   const lucidity = player ? player.lucidity : 1;
   player = createPlayer(start.x, start.z, -Math.PI * 0.75);
   player.lucidity = lucidity;
-  marks = new Set();
-  level = { layout, world, bottles, exits, paths };
+  marks = new Map();
+  tension = createTension();
+  level = { layout, world, bottles, exits, paths, plan };
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
   });
 }
 
-// stand-in until the director: who lives on which level
-function rosterFor(depth) {
-  if (depth === 0) return [];
-  if (depth === 1) return [hounds];
-  if (depth === 2) return [smiler];
-  return [smiler, hounds];
-}
-
 function onContact(entity, time) {
-  const { fatal } = contact(marks, entity.kind);
+  const { fatal } = contact(marks, entity.kind, tier.contacts);
+  noteContact(tension, time);
   if (fatal) {
     run.deaths += 1;
     hud.hush();
@@ -149,6 +150,34 @@ function nextLevel(time) {
 
 loadLevel();
 
+function readTier() {
+  try {
+    return localStorage.getItem("noclip.tier");
+  } catch {
+    return null;
+  }
+}
+
+const TIER_NOTES = {
+  lucid: "fewer of them, and they let go sooner. you survive two touches instead of one.",
+  uneasy: "the way it is meant to be played.",
+  lost: "more of them at once, and less mercy when it gets bad.",
+  noclip: "everything it has. it rarely lets go.",
+};
+const tierNote = document.getElementById("tier-note");
+for (const button of document.querySelectorAll("#tiers button")) {
+  button.classList.toggle("on", button.dataset.tier === tier.name);
+  button.addEventListener("click", () => {
+    tier = TIERS[button.dataset.tier];
+    try {
+      localStorage.setItem("noclip.tier", tier.name);
+    } catch {}
+    for (const b of document.querySelectorAll("#tiers button")) b.classList.toggle("on", b === button);
+    tierNote.textContent = TIER_NOTES[tier.name];
+  });
+}
+tierNote.textContent = TIER_NOTES[tier.name];
+
 const title = document.getElementById("title");
 document.getElementById("enter").addEventListener("click", () => {
   title.classList.add("hidden");
@@ -190,6 +219,14 @@ function frame() {
       else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
       else if (event.type === "contact" && !down) onContact(event.entity, time);
     }
+  }
+  const nearest = Math.min(...level.encounter.entities.map((e) => Math.hypot(e.x - player.x, e.z - player.z)));
+  const hunting = level.encounter.entities.filter((e) => e.def.hunting?.(e)).length;
+  if (stepTension(tension, { nearest, hunting, time, tier }, dt) === "mercy") {
+    level.encounter.calm(sense, tier.mercyFor);
+    audio?.setHum(0.55, 3);
+    setTimeout(() => audio?.setHum(1, 6), tier.mercyFor * 1000);
+    hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
   stepFlashlight(flashlight, dt);
   const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
@@ -257,6 +294,9 @@ window.__noclip = {
     onContact(level.encounter.entities[index], clock.elapsedTime);
   },
   get dead() { return screens.dead; },
+  get tension() { return tension; },
+  get plan() { return level.plan; },
+  get tier() { return tier.name; },
   goToDepth(depth) {
     run.depth = depth;
     loadLevel();
