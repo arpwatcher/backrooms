@@ -107,6 +107,16 @@ try {
     return [...kinds].sort();
   });
   check(all.length >= 4, `entities met on levels 3-15: ${all.join(", ")}`);
+  const places = await page.evaluate(async () => {
+    const ids = new Set();
+    for (let depth = 0; depth < 16; depth++) {
+      window.__noclip.goToDepth(depth);
+      ids.add(window.__noclip.archetype);
+    }
+    window.__noclip.goToDepth(3);
+    return [...ids];
+  });
+  check(places.length >= 4, `levels 0-15 visit different kinds of place: ${places.join(", ")}`);
 
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({

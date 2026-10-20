@@ -19,6 +19,7 @@ import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
 import { contact } from "./entities/core.js";
 import { ENTITIES } from "./entities/index.js";
+import { archetypeFor } from "./world/archetypes.js";
 import { planLevel, TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { checkpointFor } from "./game/run.js";
@@ -80,9 +81,10 @@ function loadLevel() {
   const roster = plan.roster;
   recent.push(roster.map((d) => d.id));
   if (recent.length > 3) recent.shift();
-  const darkPatches = Math.max(0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
-  const layout = generateLayout({ seed: levelSeed(run), darkPatches });
-  const world = buildWorld(scene, layout);
+  const archetype = archetypeFor(run.depth, (d) => new Rng(`${levelSeed(run, d)}/archetype`));
+  const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
+  const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
+  const world = buildWorld(scene, layout, archetype.look);
   const paths = createPathfinder(layout);
   const bottles = layout.items.map((cell) => {
     const mesh = placeInCell(almondWater(), cell.x, cell.y);
@@ -101,7 +103,7 @@ function loadLevel() {
   player.lucidity = lucidity;
   marks = new Map();
   tension = createTension();
-  level = { layout, world, bottles, exits, paths, plan };
+  level = { layout, world, bottles, exits, paths, plan, archetype };
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
   });
@@ -149,7 +151,7 @@ function nextLevel(time) {
     descend(run);
     loadLevel();
     fade.style.opacity = "0";
-    hud.say(`level ${run.depth}`, 3, time + 1);
+    hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
     transitioning = false;
   }, 950);
 }
@@ -308,6 +310,7 @@ window.__noclip = {
   get dead() { return screens.dead; },
   get tension() { return tension; },
   get plan() { return level.plan; },
+  get archetype() { return level.archetype.id; },
   get tier() { return tier.name; },
   goToDepth(depth) {
     run.depth = depth;

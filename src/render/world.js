@@ -16,7 +16,8 @@ export function cellCenter(x, y) {
   return new THREE.Vector3((x + 0.5) * CELL, 0, (y + 0.5) * CELL);
 }
 
-export function buildWorld(scene, layout) {
+// look: optional tints and fog from the level's archetype
+export function buildWorld(scene, layout, look = {}) {
   const group = new THREE.Group();
   scene.add(group);
   const width = layout.width * CELL;
@@ -26,7 +27,7 @@ export function buildWorld(scene, layout) {
   carpet.repeat.set(layout.width / 2, layout.height / 2);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshLambertMaterial({ map: carpet }),
+    new THREE.MeshLambertMaterial({ map: carpet, color: look.carpet ?? 0xffffff }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(width / 2, 0, depth / 2);
@@ -54,7 +55,7 @@ export function buildWorld(scene, layout) {
       if (layout.west[y][x]) segments.push({ x: x * CELL, z: (y + 0.5) * CELL, rotate: true });
     }
   }
-  const wallMaterial = new THREE.MeshLambertMaterial({ map: wallpaperTexture(`${layout.seed}-wallpaper`) });
+  const wallMaterial = new THREE.MeshLambertMaterial({ map: wallpaperTexture(`${layout.seed}-wallpaper`), color: look.wall ?? 0xffffff });
   const walls = new THREE.InstancedMesh(
     new THREE.BoxGeometry(CELL + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS),
     wallMaterial,
@@ -88,27 +89,27 @@ export function buildWorld(scene, layout) {
   const panelGeometry = new THREE.PlaneGeometry(1.2, 0.6);
   const panelMap = panelTexture();
   const panels = layout.lights.map((light) => {
-    const material = new THREE.MeshBasicMaterial({ map: panelMap, color: 0xfff6d0 });
+    const material = new THREE.MeshBasicMaterial({ map: panelMap, color: look.panel ?? 0xfff6d0 });
     const mesh = new THREE.Mesh(panelGeometry, material);
     const c = cellCenter(light.x, light.y);
     mesh.position.set(c.x, WALL_HEIGHT - 0.01, c.z);
     mesh.rotation.x = Math.PI / 2;
     group.add(mesh);
-    const panel = { ...light, mesh, level: light.state === "dead" ? 0 : 1, phase: Math.random() * 100 };
+    const panel = { ...light, mesh, level: light.state === "dead" ? 0 : 1, phase: Math.random() * 100, on: look.panel ?? 0xfff6d0 };
     if (light.state === "dead") material.color.setHex(0x3a3628);
     return panel;
   });
 
   const pool = [];
   for (let i = 0; i < LIGHT_POOL; i++) {
-    const light = new THREE.PointLight(0xfff1c4, 0, CELL * 5, 1.6);
+    const light = new THREE.PointLight(look.light ?? 0xfff1c4, 0, CELL * 5, 1.6);
     group.add(light);
     pool.push(light);
   }
 
-  scene.background = new THREE.Color(0x1a1608);
-  scene.fog = new THREE.FogExp2(0x3b3316, 0.048);
-  const ambient = new THREE.AmbientLight(0x9a8848, 0.6);
+  scene.background = new THREE.Color(look.background ?? 0x1a1608);
+  scene.fog = new THREE.FogExp2(look.fog ?? 0x3b3316, look.fogDensity ?? 0.048);
+  const ambient = new THREE.AmbientLight(look.ambientColor ?? 0x9a8848, look.ambient ?? 0.6);
   group.add(ambient);
 
   return { group, panels, pool, ambient, segments };
@@ -124,7 +125,7 @@ export function updateLights(world, position, time) {
       const off = Math.sin(t) * Math.sin(t * 2.7) > 0.55 || Math.sin(t * 0.31) > 0.97;
       if (off && panel.level > 0.5) ticks.push(panel);
       panel.level = off ? 0.05 : 1;
-      panel.mesh.material.color.setHex(off ? 0x5a5236 : 0xfff6d0);
+      panel.mesh.material.color.setHex(off ? 0x5a5236 : panel.on);
     }
   }
   const live = world.panels
