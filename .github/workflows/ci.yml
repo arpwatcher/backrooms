@@ -32,6 +32,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    # pages has to be switched on once in the repo settings (Settings > Pages >
+    # Source: GitHub Actions); until then this job can't deploy, and that
+    # shouldn't turn every push red
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
