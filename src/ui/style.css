@@ -20,3 +20,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #tiers button { font-size: 13px; padding: 6px 12px; opacity: 0.55; }
 #tiers button.on { opacity: 1; border-color: #f0e3a8; }
 #tier-note { min-height: 1.4em; margin-bottom: 18px; }
+#lids { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 5; }

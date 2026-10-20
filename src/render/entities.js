@@ -86,4 +86,50 @@ export function houndMesh() {
   return group;
 }
 
-export const MESHES = { smiler: smilerMesh, hounds: houndMesh };
+// a featureless grey mannequin; every time it has moved unseen, its pose
+// is a little different when you look back
+export function stillLifeMesh() {
+  const group = new THREE.Group();
+  const plaster = new THREE.MeshLambertMaterial({ color: 0x9a968c });
+  const part = (geometry, x, y, z) => {
+    const mesh = new THREE.Mesh(geometry, plaster);
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+    return mesh;
+  };
+  const torso = part(new THREE.CylinderGeometry(0.2, 0.15, 0.62, 10), 0, 1.25, 0);
+  part(new THREE.CylinderGeometry(0.15, 0.17, 0.2, 10), 0, 0.88, 0);
+  const head = part(new THREE.SphereGeometry(0.13, 12, 10), 0, 1.72, 0.02);
+  head.scale.set(0.85, 1.2, 0.95);
+  part(new THREE.CylinderGeometry(0.04, 0.05, 0.12, 6), 0, 1.6, 0);
+  const limb = (length) => {
+    const pivot = new THREE.Group();
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, length, 6), plaster);
+    mesh.position.y = -length / 2;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  };
+  const arms = [limb(0.68), limb(0.68)];
+  arms[0].position.set(-0.25, 1.52, 0);
+  arms[1].position.set(0.25, 1.52, 0);
+  const legs = [limb(0.82), limb(0.82)];
+  legs[0].position.set(-0.09, 0.82, 0);
+  legs[1].position.set(0.09, 0.82, 0);
+  let lastState = "";
+  group.userData.animate = (time, entity) => {
+    const settled = entity.state === "frozen" || entity.state === "waking";
+    if (settled && lastState && lastState !== entity.state && lastState !== "waking") {
+      // a new pose, chosen while nobody was looking
+      const r = (k) => Math.sin(entity.x * 12.9898 + entity.z * 78.233 + k) * 0.5;
+      arms[0].rotation.set(r(1) - 0.3, 0, -0.15 + r(2) * 0.4);
+      arms[1].rotation.set(r(3) - 0.3, 0, 0.15 + r(4) * 0.4);
+      head.rotation.set(r(5) * 0.4, r(6) * 0.8, r(7) * 0.5);
+      torso.rotation.z = r(8) * 0.12;
+    }
+    lastState = entity.state;
+  };
+  return group;
+}
+
+export const MESHES = { smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh };

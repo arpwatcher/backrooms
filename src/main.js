@@ -42,6 +42,12 @@ beam.position.set(0.15, -0.12, 0);
 beam.target.position.set(0, -0.2, -1);
 camera.add(beam, beam.target);
 
+// eyelids: at low lucidity you start to blink, and things that move while
+// unwatched get their chance
+const lids = document.createElement("div");
+lids.id = "lids";
+document.body.appendChild(lids);
+
 const fade = document.createElement("div");
 fade.id = "fade";
 document.body.appendChild(fade);
@@ -208,6 +214,12 @@ function frame() {
   if (frameInput.pressed.has("KeyF")) toggleFlashlight(flashlight);
   if (frameInput.pressed.has("KeyQ") && drinkAlmondWater(run, player)) hud.say("almond water", 1.5, time);
 
+  if (player.lucidity < 0.33 && time > (player.nextBlink ?? 0)) {
+    player.blinkUntil = time + 0.14 + (0.33 - player.lucidity) * 0.6;
+    player.nextBlink = time + 2.5 + Math.random() * 4 * (player.lucidity / 0.33 + 0.4);
+  }
+  player.blinking = time < (player.blinkUntil ?? 0);
+  lids.style.opacity = player.blinking ? "1" : "0";
   const down = (player.downUntil ?? 0) > time || screens.dead;
   const moved = stepPlayer(player, down ? { lookX: frameInput.lookX, lookY: frameInput.lookY } : frameInput, dt, level.layout);
   const sense = makeSense({

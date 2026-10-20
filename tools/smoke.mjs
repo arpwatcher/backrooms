@@ -95,6 +95,19 @@ try {
   const moving = await page.evaluate(() => window.__noclip.entities.some((e) => e.state !== "idle"));
   check(moving, "and they run their behaviour");
 
+  // every entity the director knows can be built and run in the real game
+  const all = await page.evaluate(async () => {
+    const kinds = new Set();
+    for (let depth = 3; depth < 12 && kinds.size < 3; depth++) {
+      window.__noclip.goToDepth(depth);
+      await new Promise((r) => setTimeout(r, 120));
+      for (const e of window.__noclip.entities) kinds.add(e.kind);
+    }
+    window.__noclip.goToDepth(3);
+    return [...kinds].sort();
+  });
+  check(all.length >= 3, `entities met on levels 3-11: ${all.join(", ")}`);
+
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],

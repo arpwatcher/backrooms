@@ -8,6 +8,7 @@ import { Rng } from "../src/core/rng.js";
 import { contact, spawn } from "../src/entities/core.js";
 import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
+import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -145,4 +146,43 @@ test("a broken or missing store gives an empty codex instead of an error", () =>
   assert.equal(loadCodex(undefined).size, 0);
   const codex = new Set();
   assert.equal(recordSurvival(codex, "hounds", { setItem: () => { throw new Error("quota"); } }), true);
+});
+
+test("still life sleeps until you come near, then scrapes for a while before it moves", () => {
+  const layout = open();
+  const e = spawn(stillLife, { x: 9, y: 9 });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(1) }), watching: () => false };
+  assert.equal(run(stillLife, e, sense, 3).length, 0, "far away it does nothing");
+  sense.player.x = c(5);
+  sense.player.z = c(5);
+  const start = { x: e.x, z: e.z };
+  const events = run(stillLife, e, sense, WAKE_TIME - 0.5);
+  assert.deepEqual([e.x, e.z], [start.x, start.z], "it does not move while waking");
+  assert.ok(events.filter((ev) => ev.sound === "scrape").length >= 3, "but you hear it");
+});
+
+test("still life cannot move while watched, and closes fast when it isn't", () => {
+  const layout = open();
+  const e = spawn(stillLife, { x: 8, y: 2 });
+  let looking = true;
+  const sense = { ...senseFor(layout, { x: c(2), z: c(2) }), watching: () => looking };
+  run(stillLife, e, sense, WAKE_TIME + 1);
+  const held = { x: e.x, z: e.z };
+  run(stillLife, e, sense, 3);
+  assert.deepEqual([e.x, e.z], [held.x, held.z]);
+  looking = false;
+  const events = run(stillLife, e, sense, 3);
+  assert.ok(events.some((ev) => ev.type === "contact"), "unwatched for three seconds it reaches you");
+});
+
+test("looking back at it after it moved makes it scrape, so you know it came", () => {
+  const layout = open();
+  const e = spawn(stillLife, { x: 8, y: 2 });
+  let looking = false;
+  const sense = { ...senseFor(layout, { x: c(1), z: c(2) }), watching: () => looking };
+  run(stillLife, e, sense, WAKE_TIME + 0.1);
+  run(stillLife, e, sense, 0.6);
+  looking = true;
+  const events = run(stillLife, e, sense, 0.2);
+  assert.ok(events.some((ev) => ev.sound === "scrape"));
 });
