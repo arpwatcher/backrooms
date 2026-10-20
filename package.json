@@ -9,5 +9,8 @@
     "smoke": "node tools/smoke.mjs",
     "serve": "http-server -p 8080 -c-1 ."
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
 }
