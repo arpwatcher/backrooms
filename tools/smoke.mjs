@@ -177,11 +177,29 @@ try {
     check((await page.evaluate(() => window.__noclip.run.depth)) === taskDepth + 1, "and then the exit lets you through");
   }
 
-  await page.evaluate(() => window.__noclip.goToDepth(3));
-  await page.evaluate(() => window.__noclip.touch(0));
+  const batteryDepth = await page.evaluate(() => {
+    for (let depth = 1; depth < 12; depth++) {
+      window.__noclip.goToDepth(depth);
+      if (window.__noclip.items.some((i) => i.kind === "battery")) return depth;
+    }
+    return null;
+  });
+  if (batteryDepth !== null) {
+    const cell = await page.evaluate(() => {
+      window.__noclip.flashlight.battery = 0.2;
+      return window.__noclip.items.find((i) => i.kind === "battery");
+    });
+    await page.evaluate(([x, z]) => window.__noclip.stand(x, z), [cell.x, cell.z]);
+    await frames();
+    const charge = await page.evaluate(() => window.__noclip.flashlight.battery);
+    check(charge > 0.7, `picking up a battery recharges the flashlight (${charge.toFixed(2)})`);
+  } else check(false, "a battery turns up somewhere in the first levels");
+
   const recordLine = await page.evaluate(() => document.getElementById("records").textContent);
   check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);
 
+  await page.evaluate(() => window.__noclip.goToDepth(3));
+  await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],
   }));

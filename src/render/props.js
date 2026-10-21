@@ -17,6 +17,22 @@ export function almondWater() {
   return group;
 }
 
+// a fat D-cell battery lying on its side
+export function battery() {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 12), new THREE.MeshLambertMaterial({ color: 0x2c2c2c, emissive: 0x111111 }));
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.05, 12), new THREE.MeshLambertMaterial({ color: 0xc89a2a, emissive: 0x3a2a08 }));
+  band.position.y = 0.035;
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 8), new THREE.MeshLambertMaterial({ color: 0xb8b8b8 }));
+  tip.position.y = 0.066;
+  const cell = new THREE.Group();
+  cell.add(body, band, tip);
+  cell.rotation.z = Math.PI / 2;
+  cell.position.y = 0.036;
+  group.add(cell);
+  return group;
+}
+
 function signTexture(text, color) {
   const c = document.createElement("canvas");
   c.width = 128;

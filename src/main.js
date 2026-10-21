@@ -4,12 +4,13 @@
 import * as THREE from "three";
 import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
-import { almondWater, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote } from "./render/props.js";
+import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote } from "./render/props.js";
+import { itemKinds, BATTERY_CHARGE } from "./game/items.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
 import { createAudio } from "./audio/sound.js";
 import { stepLucidity } from "./game/lucidity.js";
-import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength } from "./game/flashlight.js";
+import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recharge } from "./game/flashlight.js";
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createScreens } from "./ui/screens.js";
@@ -90,11 +91,13 @@ function loadLevel() {
   const effects = shift?.effects ?? {};
   const world = buildWorld(scene, layout, { ...archetype.look, ...effects.look });
   const paths = createPathfinder(layout);
-  const bottles = layout.items.map((cell) => {
-    const mesh = placeInCell(almondWater(), cell.x, cell.y);
+  const kinds = itemKinds(layout.items.length, run.depth, new Rng(`${levelSeed(run)}/item-kinds`));
+  const items = layout.items.map((cell, i) => {
+    const kind = kinds[i];
+    const mesh = placeInCell(kind === "battery" ? battery() : almondWater(), cell.x, cell.y);
     mesh.position.x += 0.4;
     world.group.add(mesh);
-    return { cell, mesh, taken: false };
+    return { cell, mesh, kind, taken: false };
   });
   const exits = layout.exits.map((cell) => {
     const door = placeInCell(exitDoor(), cell.x, cell.y, Math.PI / 4);
@@ -120,7 +123,7 @@ function loadLevel() {
     world.group.add(mesh);
     return { ...note, mesh, read: false };
   });
-  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
+  level = { layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
@@ -373,14 +376,19 @@ function frame() {
   const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
   player.lucidity = stepLucidity(player.lucidity, { light: lightAt(player.x, player.z), presences }, dt);
 
-  for (const bottle of level.bottles) {
-    if (bottle.taken) continue;
-    bottle.mesh.rotation.y += dt * 0.6;
-    if (Math.hypot(bottle.mesh.position.x - player.x, bottle.mesh.position.z - player.z) < 0.9) {
-      bottle.taken = true;
-      bottle.mesh.visible = false;
-      run.inventory.almondWater += 1;
-      hud.say("almond water", 1.5, time);
+  for (const item of level.items) {
+    if (item.taken) continue;
+    item.mesh.rotation.y += dt * 0.6;
+    if (Math.hypot(item.mesh.position.x - player.x, item.mesh.position.z - player.z) < 0.9) {
+      item.taken = true;
+      item.mesh.visible = false;
+      if (item.kind === "battery") {
+        recharge(flashlight, BATTERY_CHARGE);
+        hud.say("a battery. the light will last a while longer.", 2, time);
+      } else {
+        run.inventory.almondWater += 1;
+        hud.say("almond water", 1.5, time);
+      }
     }
   }
   if (frameInput.pressed.has("KeyE") && level.task) useTask(time);
@@ -467,6 +475,7 @@ window.__noclip = {
     const t = level.task;
     return t && { id: t.task.id, complete: t.complete, targets: t.targets.map((x) => ({ x: x.mesh.position.x, z: x.mesh.position.z, done: x.done })) };
   },
+  get items() { return level.items.map((i) => ({ kind: i.kind, x: i.mesh.position.x, z: i.mesh.position.z, taken: i.taken })); },
   get notes() { return level.notes.map((n) => ({ text: n.text, x: n.mesh.position.x, z: n.mesh.position.z, read: n.read })); },
   stand(x, z) {
     player.x = x;
