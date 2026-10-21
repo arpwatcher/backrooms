@@ -295,6 +295,13 @@ try {
   });
   check(cards >= 4, `the codex lists every entity (${cards} cards)`);
 
+  const deep = await browser.newPage({ viewport: { width: 480, height: 270 } });
+  await deep.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&depth=4`);
+  await deep.waitForFunction(() => window.__noclip && window.__noclip.frames > 1, null, { timeout: 30000 });
+  const startedAt = await deep.evaluate(() => window.__noclip.run.depth);
+  check(startedAt === 4, `?depth=4 starts the run on level 4 (${startedAt})`);
+  await deep.close();
+
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
   const voices = await page.evaluate(() => {

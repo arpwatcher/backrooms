@@ -67,6 +67,9 @@ fade.id = "fade";
 document.body.appendChild(fade);
 
 const run = createRun(params.get("seed") || `run-${Date.now().toString(36)}`);
+// ?depth=4 starts the run on that level (to try a level, or show it to someone)
+const startDepth = Number(params.get("depth"));
+if (Number.isInteger(startDepth) && startDepth > 0 && startDepth <= 500) run.depth = startDepth;
 const flashlight = createFlashlight();
 const input = createInput(canvas);
 const hud = createHud();

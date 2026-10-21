@@ -62,8 +62,9 @@ There is no build step. Serve the folder and open it:
 npm run serve        # then http://localhost:8080
 ```
 
-Add `?seed=anything` to the URL to play or share a specific run, and
-`&tier=lucid|uneasy|lost|noclip` to pick a difficulty.
+Add `?seed=anything` to the URL to play or share a specific run,
+`&tier=lucid|uneasy|lost|noclip` to pick a difficulty, and `&depth=4` to
+start on a given level.
 
 ## Tests
 
