@@ -303,7 +303,60 @@ export function facelingsMesh() {
   return group;
 }
 
+// bent double under the ceiling: long legs, a short folded torso, the back
+// of its head against the tiles and its face looking out, never down
+export function stiltsMesh() {
+  const group = new THREE.Group();
+  const suit = new THREE.MeshLambertMaterial({ color: 0x17161a });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xd8d2c6 });
+  const limb = (material, length, radius, x, y, z) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.8, length, 6), material);
+    mesh.position.y = -length / 2;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  };
+  const legs = [limb(suit, 1.75, 0.05, -0.12, 1.75, 0), limb(suit, 1.75, 0.05, 0.12, 1.75, 0)];
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.13, 0.8, 8), suit);
+  torso.position.set(0, 2.08, 0.12);
+  torso.rotation.x = 0.5;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), skin);
+  head.scale.set(0.85, 1.2, 0.9);
+  head.position.set(0, 2.5, 0.36);
+  head.rotation.x = 0.35;
+  // two dark hollows where the eyes should be
+  const socket = new THREE.MeshBasicMaterial({ color: 0x050403 });
+  for (const x of [-0.045, 0.045]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), socket);
+    eye.position.set(x, 0.02, 0.105);
+    head.add(eye);
+  }
+  const arms = [limb(suit, 1.45, 0.035, -0.24, 2.3, 0.28), limb(suit, 1.45, 0.035, 0.24, 2.3, 0.28)];
+  for (const arm of arms) {
+    const hand = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 3, 6), skin);
+    hand.position.y = -1.58;
+    arm.add(hand);
+  }
+  group.add(torso, head);
+  group.userData.animate = (time, entity) => {
+    const pace = entity.state === "stride" ? 5 : entity.state === "patrol" || entity.state === "search" ? 2 : 0;
+    const swing = Math.sin(time * pace + entity.id) * (pace ? 0.35 : 0);
+    legs[0].rotation.x = swing;
+    legs[1].rotation.x = -swing;
+    arms[0].rotation.x = -swing * 0.6 - 0.1;
+    arms[1].rotation.x = swing * 0.6 - 0.1;
+    // the body walks one way, the head looks wherever it is looking
+    const relative = (entity.head ?? 0) - (entity.facing ?? 0);
+    head.rotation.z = Math.sin(relative) * 0.6;
+    head.position.x = Math.sin(relative) * 0.25;
+  };
+  return group;
+}
+
 export const MESHES = {
+  stilts: stiltsMesh,
   facelings: facelingsMesh,
   smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh, partygoers: partygoersMesh,
 };

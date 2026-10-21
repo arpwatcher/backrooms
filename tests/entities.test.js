@@ -12,6 +12,7 @@ import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
 import { deathmoths } from "../src/entities/deathmoths.js";
 import { partygoers, inRoom } from "../src/entities/partygoers.js";
 import { facelings, STARE_LIMIT } from "../src/entities/facelings.js";
+import { stilts, NOTICE_TIME } from "../src/entities/stilts.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -348,4 +349,40 @@ test("hounds hear an exhausted player gasping, even standing still, but only up 
   assert.ok(!hounds.heard(far, sense), "12 m away, it doesn't");
   sense.player.exhausted = false;
   assert.ok(!hounds.heard(near, sense), "get your breath back and you're silent again");
+});
+
+test("stilts sees a standing player over the walls, in its gaze, but never a crouching one", () => {
+  const e = spawn(stilts, { x: 5, y: 5 }, { rng: new Rng("s"), head: 0, sweep: 1 });
+  const ahead = { x: e.x, z: e.z + 10, crouching: false };
+  assert.ok(stilts.sees(e, ahead), "standing in front of it");
+  assert.ok(!stilts.sees(e, { ...ahead, crouching: true }), "crouched in front of it");
+  assert.ok(!stilts.sees(e, { x: e.x, z: e.z - 10, crouching: false }), "behind it");
+  assert.ok(!stilts.sees(e, { x: e.x, z: e.z + 30, crouching: false }), "too far");
+});
+
+test("stilts stares for a moment, then strides to you; crouch and it loses you", () => {
+  const layout = open();
+  const e = spawn(stilts, { x: 1, y: 8 }, { rng: new Rng("s"), head: Math.PI, sweep: 1 });
+  const sense = senseFor(layout, { x: c(1), z: c(2), crouching: false });
+  const stare = run(stilts, e, sense, NOTICE_TIME - 0.2);
+  assert.equal(e.state, "notice");
+  assert.ok(!stare.some((ev) => ev.type === "contact"));
+  run(stilts, e, sense, 1);
+  assert.equal(e.state, "stride");
+  sense.player.crouching = true;
+  run(stilts, e, sense, 0.1);
+  assert.equal(e.state, "search", "it goes to where it last saw you, not to you");
+});
+
+test("stilts reaches a player who stays standing in its gaze", () => {
+  const layout = open();
+  const e = spawn(stilts, { x: 1, y: 7 }, { rng: new Rng("s"), head: Math.PI, sweep: 1 });
+  const sense = senseFor(layout, { x: c(1), z: c(2), crouching: false });
+  const events = run(stilts, e, sense, 8);
+  assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+test("stilts can't see you through a wall", () => {
+  const e = spawn(stilts, { x: 5, y: 5 }, { rng: new Rng("s"), head: 0, sweep: 1 });
+  assert.ok(!stilts.sees(e, { x: e.x, z: e.z + 10, crouching: false }, () => false));
 });

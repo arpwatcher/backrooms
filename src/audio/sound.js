@@ -174,6 +174,12 @@ export function createAudio() {
         osc.connect(g).connect(dest);
         osc.start(t);
         osc.stop(t + 0.5);
+      } else if (sound === "creak") {
+        // long joints, and ceiling tiles knocked in their frames overhead
+        burst({ duration: 0.5, frequency: 320, q: 9, type: "bandpass", level: 0.25 * volume, at: t, destination: dest });
+        for (let i = 0; i < 3; i++) {
+          burst({ duration: 0.04, frequency: 1100 + i * 140, q: 3, type: "bandpass", level: 0.22 * volume, at: t + 0.25 + i * 0.11, destination: dest });
+        }
       } else if (sound === "scrape") {
         // something heavy dragged a little way over carpet and stopped
         burst({ duration: 0.45, frequency: 260, q: 3, type: "bandpass", level: 0.6 * volume, at: t, destination: dest });
