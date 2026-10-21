@@ -39,3 +39,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #pause input[type=range] { width: 220px; accent-color: #c9b458; }
 #pause .row { display: flex; gap: 12px; margin-top: 22px; }
 #records { margin-top: -10px; margin-bottom: 18px; }
+#milestones { white-space: pre-line; margin-top: 0; line-height: 1.6; font-style: italic; }

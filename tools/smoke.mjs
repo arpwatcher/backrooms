@@ -257,6 +257,8 @@ try {
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],
   }));
   check(firstTouch.down && !firstTouch.dead && firstTouch.marks.length === 1, "first contact knocks you down and marks you");
+  const earnedLine = await page.evaluate(() => document.getElementById("milestones").textContent);
+  check(earnedLine.includes("survived your first contact"), "surviving it earns a milestone on the title");
   await page.evaluate(() => window.__noclip.touch(0));
   const death = await page.evaluate(() => ({
     dead: window.__noclip.dead, name: document.getElementById("death-name").textContent,

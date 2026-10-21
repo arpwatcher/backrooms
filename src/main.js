@@ -31,6 +31,8 @@ import { createPauseScreen } from "./ui/pause.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
 import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
+import { loadMilestones, checkMilestones, MILESTONES } from "./game/milestones.js";
+import { ENTITIES } from "./entities/index.js";
 import { facelingsMesh, smilerMesh } from "./render/entities.js";
 import { lineOfSight } from "./world/sight.js";
 import { checkpointFor } from "./game/run.js";
@@ -149,8 +151,23 @@ function loadLevel() {
   });
 }
 
+// milestones: checked against what just happened, shown quietly when earned
+const earned = loadMilestones();
+function milestone(event) {
+  for (const m of checkMilestones(earned, event)) {
+    setTimeout(() => hud.say(`- ${m.text} -`, 4, time), 2500);
+  }
+  showMilestones();
+}
+function showMilestones() {
+  const list = document.getElementById("milestones");
+  if (!list) return;
+  list.textContent = MILESTONES.filter((m) => earned.has(m.id)).map((m) => m.text).join("\n");
+}
+
 function onContact(entity, time) {
   const { fatal } = contact(marks, entity.kind, tier.contacts);
+  run.touches = (run.touches ?? 0) + 1;
   noteContact(tension, time);
   if (fatal) {
     run.deaths += 1;
@@ -169,7 +186,11 @@ function onContact(entity, time) {
   screens.hit();
   audio?.hit();
   level.encounter.retreat(entity, time);
-  if (recordSurvival(codex, entity.kind)) hud.say(`codex: ${entity.def.name} - ${entity.def.counter}`, 7, time);
+  milestone({ type: "survived" });
+  if (recordSurvival(codex, entity.kind)) {
+    hud.say(`codex: ${entity.def.name} - ${entity.def.counter}`, 7, time);
+    milestone({ type: "met", known: ENTITIES.filter((d) => codex.has(d.id)).length, total: ENTITIES.length });
+  }
   else hud.say(`${entity.def.name} marked you. it won't let go next time.`, 5, time);
 }
 
@@ -188,7 +209,10 @@ function useTask(time) {
     }
   });
   hud.say(task.task.progress(doneCount(task), task.targets.length), 3, time);
-  if (task.complete) for (const exit of level.exits) exit.door.userData.setLocked(false);
+  if (task.complete) {
+    for (const exit of level.exits) exit.door.userData.setLocked(false);
+    milestone({ type: "task", roster: level.plan.roster.map((d) => d.id) });
+  }
 }
 
 // the figures low lucidity puts at the edge of your vision: a dark shape of
@@ -317,6 +341,11 @@ function nextLevel() {
   if (transitioning) return;
   transitioning = true;
   fallingSince = time;
+  milestone({
+    type: "left", depth: run.depth, touchesThisRun: run.touches ?? 0, pace: level.pace,
+    roster: level.plan.roster.map((d) => d.id),
+    enteredParty: level.encounter.entities.some((e) => e.kind === "partygoers" && e.memory.invitedAt !== undefined),
+  });
   audio?.fall();
   fade.style.opacity = "1";
   setTimeout(() => {
@@ -369,6 +398,7 @@ function showRecords() {
   recordLine.textContent = describeRecords(records);
 }
 showRecords();
+showMilestones();
 
 const title = document.getElementById("title");
 document.getElementById("enter").addEventListener("click", () => {
