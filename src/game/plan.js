@@ -6,10 +6,11 @@
 // death, or straight from a shared seed.
 
 import { Rng } from "../core/rng.js";
-import { pickArchetype } from "../world/archetypes.js";
+import { pickArchetype, archetypeById } from "../world/archetypes.js";
 import { planLevel, paceFor, TIERS } from "./director.js";
-import { pickShift } from "./shifts.js";
-import { pickTask } from "./tasks.js";
+import { pickShift, SHIFTS } from "./shifts.js";
+import { pickTask, TASKS } from "./tasks.js";
+import { firstLevel } from "./firstLevels.js";
 import { ENTITIES } from "../entities/index.js";
 
 const cache = new Map();
@@ -21,7 +22,9 @@ export function levelPlan(runSeed, depth, tier = TIERS.uneasy, pool = ENTITIES) 
   for (let d = plans.length; d <= depth; d++) {
     const seed = `${runSeed}/L${d}`;
     const previous = plans[d - 1];
-    const archetype = pickArchetype(d, new Rng(`${seed}/archetype`), previous?.archetype.id ?? null);
+    // the first ten levels are composed by hand; after that, it's all rolled
+    const fixed = firstLevel(d);
+    const archetype = fixed ? archetypeById(fixed.archetype) : pickArchetype(d, new Rng(`${seed}/archetype`), previous?.archetype.id ?? null);
     const recent = plans.slice(Math.max(0, d - 3), d).map((p) => p.roster.map((e) => e.id));
     // a debut is never thinned out or silenced: it is how you learn the rule
     const debut = pool.some((def) => def.minDepth === d);
@@ -34,8 +37,8 @@ export function levelPlan(runSeed, depth, tier = TIERS.uneasy, pool = ENTITIES) 
       roster: director.roster,
       director,
       pace: pace.kind,
-      shift: pickShift(d, new Rng(`${seed}/shift`)),
-      task: pickTask(d, new Rng(`${seed}/task`)),
+      shift: fixed ? SHIFTS.find((x) => x.id === fixed.shift) ?? null : pickShift(d, new Rng(`${seed}/shift`)),
+      task: fixed ? TASKS.find((x) => x.id === fixed.task) ?? null : pickTask(d, new Rng(`${seed}/task`)),
     });
   }
   return plans[depth];

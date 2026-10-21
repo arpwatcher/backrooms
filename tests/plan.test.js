@@ -53,3 +53,30 @@ test("some deep levels are silent, and silent levels are empty", () => {
   }
   assert.ok(silent >= 2, `${silent} silent levels`);
 });
+
+test("the first ten levels are the composed ones, for every seed", async () => {
+  const { FIRST_LEVELS } = await import("../src/game/firstLevels.js");
+  assert.equal(FIRST_LEVELS.length, 10);
+  for (const seed of ["c1", "c2", "c3"]) {
+    for (const f of FIRST_LEVELS) {
+      const p = levelPlan(seed, f.depth);
+      assert.equal(p.archetype.id, f.archetype, `${seed} L${f.depth}`);
+      assert.equal(p.shift?.id ?? null, f.shift);
+      assert.equal(p.task?.id ?? null, f.task);
+    }
+  }
+});
+
+test("every composed level names a real archetype, shift and task", async () => {
+  const { FIRST_LEVELS } = await import("../src/game/firstLevels.js");
+  const { ARCHETYPES } = await import("../src/world/archetypes.js");
+  const { SHIFTS } = await import("../src/game/shifts.js");
+  const { TASKS } = await import("../src/game/tasks.js");
+  for (const f of FIRST_LEVELS) {
+    const a = ARCHETYPES.find((x) => x.id === f.archetype);
+    assert.ok(a, f.archetype);
+    assert.ok(a.minDepth <= f.depth, `${f.archetype} before its depth`);
+    if (f.shift) assert.ok(SHIFTS.some((x) => x.id === f.shift), f.shift);
+    if (f.task) assert.ok(TASKS.some((x) => x.id === f.task), f.task);
+  }
+});
