@@ -11,6 +11,7 @@ import { hounds } from "../src/entities/hounds.js";
 import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
 import { deathmoths } from "../src/entities/deathmoths.js";
 import { partygoers, inRoom } from "../src/entities/partygoers.js";
+import { facelings, STARE_LIMIT } from "../src/entities/facelings.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -298,4 +299,42 @@ test("the party room is dressed: balloons inside it, a sign on one of its walls"
     const y = s.side.dy === -1 ? s.y : s.y + 1;
     assert.ok(layout.north[y][s.x], "taped to a real wall");
   }
+});
+
+test("a faceling ignores you if you only glance at it", () => {
+  const layout = open();
+  const e = spawn(facelings, { x: 4, y: 2 }, { rng: new Rng("f"), stare: 0 });
+  let looking = false;
+  const sense = { ...senseFor(layout, { x: c(1), z: c(2) }), watching: () => looking };
+  const events = [];
+  for (let i = 0; i < 6; i++) {
+    looking = true;
+    events.push(...run(facelings, e, sense, 2));
+    looking = false;
+    events.push(...run(facelings, e, sense, 3));
+  }
+  assert.ok(!events.some((ev) => ev.type === "contact"));
+  assert.notEqual(e.state, "offended");
+});
+
+test("stare at a faceling too long and it warns you, then comes for you", () => {
+  const layout = open();
+  const e = spawn(facelings, { x: 4, y: 2 }, { rng: new Rng("f"), stare: 0 });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(2) }), watching: () => true };
+  const warned = run(facelings, e, sense, STARE_LIMIT - 0.1);
+  assert.ok(warned.some((ev) => ev.sound === "whine"), "it whines before it turns");
+  assert.ok(!warned.some((ev) => ev.type === "contact"));
+  const after = run(facelings, e, sense, 4);
+  assert.ok(after.some((ev) => ev.type === "contact"));
+});
+
+test("an offended faceling gives up once you've been out of sight long enough", () => {
+  const layout = generateLayout({ seed: "hide", width: 12, height: 12, wallRuns: 0, rooms: 0, pillarChance: 0 });
+  const e = spawn(facelings, { x: 10, y: 10 }, { rng: new Rng("f"), stare: 0 });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(1) }), watching: () => false };
+  e.state = "offended";
+  e.memory.lostAt = 0;
+  sense.canSee = () => false;
+  run(facelings, e, sense, 1);
+  assert.equal(e.state, "wander");
 });

@@ -156,6 +156,19 @@ export function createAudio() {
           osc.stop(at + 0.4);
         });
         for (let i = 0; i < 4; i++) burst({ duration: 0.09, frequency: 90, q: 1, type: "lowpass", level: 0.35 * volume, at: t + i * 0.42, destination: dest });
+      } else if (sound === "whine") {
+        // a thin rising tone, like a held breath through the nose
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(700 + volume * 500, t);
+        osc.frequency.linearRampToValueAtTime(900 + volume * 700, t + 0.45);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.08 * volume + 0.01, t + 0.1);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.48);
+        osc.connect(g).connect(dest);
+        osc.start(t);
+        osc.stop(t + 0.5);
       } else if (sound === "scrape") {
         // something heavy dragged a little way over carpet and stopped
         burst({ duration: 0.45, frequency: 260, q: 3, type: "bandpass", level: 0.6 * volume, at: t, destination: dest });

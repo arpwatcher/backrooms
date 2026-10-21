@@ -262,6 +262,48 @@ export function partygoersMesh() {
   return group;
 }
 
+// an office worker with nothing where the face should be
+export function facelingsMesh() {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshLambertMaterial({ color: 0xc9b3a0 });
+  const shirt = new THREE.MeshLambertMaterial({ color: 0xd8d6cc });
+  const trousers = new THREE.MeshLambertMaterial({ color: 0x2c2c33 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.42, 4, 10), shirt);
+  torso.scale.set(1.15, 1, 0.7);
+  torso.position.y = 1.28;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 12), skin);
+  head.scale.set(0.9, 1.15, 0.98);
+  head.position.y = 1.76;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 8), skin);
+  neck.position.y = 1.62;
+  group.add(torso, head, neck);
+  const limb = (material, length, x, y) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, 0);
+    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, length, 3, 8), material);
+    mesh.position.y = -length / 2 - 0.05;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  };
+  const arms = [limb(shirt, 0.56, -0.27, 1.5), limb(shirt, 0.56, 0.27, 1.5)];
+  const legs = [limb(trousers, 0.72, -0.1, 0.9), limb(trousers, 0.72, 0.1, 0.9)];
+  group.userData.animate = (time, entity) => {
+    const walking = entity.state === "wander" || entity.state === "offended";
+    const pace = entity.state === "offended" ? 11 : 4.5;
+    const swing = walking ? Math.sin(time * pace + entity.id) * (entity.state === "offended" ? 0.8 : 0.35) : 0;
+    legs[0].rotation.x = swing;
+    legs[1].rotation.x = -swing;
+    arms[0].rotation.x = -swing * 0.8;
+    arms[1].rotation.x = swing * 0.8;
+    // when it notices you looking, the blank face tilts, slowly, like it's listening
+    head.rotation.z = entity.state === "noticed" ? Math.min(0.5, (entity.stare ?? 0) * 0.2) : 0;
+    torso.rotation.x = entity.state === "offended" ? 0.3 : 0;
+  };
+  return group;
+}
+
 export const MESHES = {
+  facelings: facelingsMesh,
   smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh, partygoers: partygoersMesh,
 };

@@ -25,6 +25,8 @@ export const SYNERGIES = [
   { pair: ["deathmoths", "stillLife"], why: "you have to keep the mannequin in view with no light to see it by" },
   { pair: ["partygoers", "stillLife"], why: "backing away from the mannequin, eyes on it, you can back straight into the party" },
   { pair: ["partygoers", "hounds"], why: "the music covers the panting, so you only hear the pack once you are close to the party" },
+  { pair: ["facelings", "stillLife"], why: "one punishes your gaze and the other needs it - which figure is the mannequin?" },
+  { pair: ["facelings", "smiler"], why: "the beam you need for the grin lands on blank faces too" },
 ];
 
 // pairs whose counters contradict outright; meeting both is unfair, not scary
