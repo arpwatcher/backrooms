@@ -12,6 +12,7 @@ document is the target and the code is where things currently stand.
 | 3 | [Lucidity, death and items](03-lucidity-death-items.md) | the meters, how you die, Echo deaths, what you carry |
 | 4 | [Entities: twenty in full](04-entities.md) | each entity's tell, rule, counter, co-op twist and pairs |
 | 5 | [Level generation and archetypes](05-levels.md) | how a level is made, twenty archetypes in full and forty more |
+| 6 | [Rule shifts](06-rule-shifts.md) | forty-two ways a level can change the rules |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
