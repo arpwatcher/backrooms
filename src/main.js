@@ -23,6 +23,7 @@ import { placeTask, interact, doneCount } from "./game/tasks.js";
 import { TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { levelPlan } from "./game/plan.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
+import { createCodexScreen } from "./ui/codex.js";
 import { checkpointFor } from "./game/run.js";
 
 const params = new URLSearchParams(location.search);
@@ -60,6 +61,8 @@ const input = createInput(canvas);
 const hud = createHud();
 const screens = createScreens();
 const codex = loadCodex();
+const codexScreen = createCodexScreen(codex);
+document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
 let marks = new Map();
 let tier = TIERS[params.get("tier")] ?? TIERS[readTier()] ?? TIERS.uneasy;
 let tension = createTension();

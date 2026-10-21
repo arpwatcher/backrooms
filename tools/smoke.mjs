@@ -179,6 +179,14 @@ try {
   const woke = await page.evaluate(() => ({ dead: window.__noclip.dead, depth: window.__noclip.run.depth }));
   check(!woke.dead && woke.depth === 0, `waking up goes back to the checkpoint (level ${woke.depth})`);
 
+  const cards = await page.evaluate(() => {
+    document.getElementById("codex-open").click();
+    const n = document.querySelectorAll("#codex .card").length;
+    document.getElementById("codex-close").click();
+    return n;
+  });
+  check(cards >= 4, `the codex lists every entity (${cards} cards)`);
+
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
