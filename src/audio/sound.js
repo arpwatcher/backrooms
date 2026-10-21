@@ -82,6 +82,7 @@ export function createAudio() {
   }
 
   const burst = noiseBurst;
+  let voiceNode = null;
 
   return {
     ctx,
@@ -174,6 +175,31 @@ export function createAudio() {
         osc.connect(g).connect(dest);
         osc.start(t);
         osc.stop(t + 0.5);
+      } else if (sound === "cry") {
+        // a thin wavering wail, muffled as if through plasterboard
+        const osc = ctx.createOscillator();
+        osc.type = "sawtooth";
+        const wobble = ctx.createOscillator();
+        wobble.frequency.value = 6;
+        const depth = ctx.createGain();
+        depth.gain.value = 30;
+        wobble.connect(depth).connect(osc.frequency);
+        osc.frequency.setValueAtTime(430 * detune, t);
+        osc.frequency.linearRampToValueAtTime(560 * detune, t + 0.35);
+        osc.frequency.linearRampToValueAtTime(380 * detune, t + 0.9);
+        const muffle = ctx.createBiquadFilter();
+        muffle.type = "bandpass";
+        muffle.frequency.value = 900;
+        muffle.Q.value = 1.4;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.12 * volume + 0.005, t + 0.12);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+        osc.connect(muffle).connect(g).connect(dest);
+        osc.start(t);
+        wobble.start(t);
+        osc.stop(t + 1);
+        wobble.stop(t + 1);
       } else if (sound === "creak") {
         // long joints, and ceiling tiles knocked in their frames overhead
         burst({ duration: 0.5, frequency: 320, q: 9, type: "bandpass", level: 0.25 * volume, at: t, destination: dest });
@@ -184,6 +210,28 @@ export function createAudio() {
         // something heavy dragged a little way over carpet and stopped
         burst({ duration: 0.45, frequency: 260, q: 3, type: "bandpass", level: 0.6 * volume, at: t, destination: dest });
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
+      }
+    },
+    // your own voice, humming under your breath while V is held
+    voice(on) {
+      if (on && !voiceNode) {
+        const osc = ctx.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.value = 132 + Math.random() * 20;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 0.15);
+        const soft = ctx.createBiquadFilter();
+        soft.type = "lowpass";
+        soft.frequency.value = 700;
+        osc.connect(soft).connect(g).connect(master);
+        osc.start();
+        voiceNode = { osc, g };
+      } else if (!on && voiceNode) {
+        const { osc, g } = voiceNode;
+        g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.05);
+        osc.stop(ctx.currentTime + 0.3);
+        voiceNode = null;
       }
     },
     // your own breath after a sprint: in, out, faster the more spent you are

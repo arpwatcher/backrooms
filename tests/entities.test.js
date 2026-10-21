@@ -13,6 +13,7 @@ import { deathmoths } from "../src/entities/deathmoths.js";
 import { partygoers, inRoom } from "../src/entities/partygoers.js";
 import { facelings, STARE_LIMIT } from "../src/entities/facelings.js";
 import { stilts, NOTICE_TIME } from "../src/entities/stilts.js";
+import { hushbaby, CRY_AFTER, COME_AFTER } from "../src/entities/hushbaby.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -385,4 +386,45 @@ test("stilts reaches a player who stays standing in its gaze", () => {
 test("stilts can't see you through a wall", () => {
   const e = spawn(stilts, { x: 5, y: 5 }, { rng: new Rng("s"), head: 0, sweep: 1 });
   assert.ok(!stilts.sees(e, { x: e.x, z: e.z + 10, crouching: false }, () => false));
+});
+
+test("hushbaby stays settled while you keep making noise", () => {
+  const layout = open();
+  const e = spawn(hushbaby, { x: 6, y: 2 });
+  const sense = senseFor(layout, { x: c(1), z: c(2), noise: 0.3 });
+  const events = run(hushbaby, e, sense, 60);
+  assert.ok(!events.some((ev) => ev.type === "contact" || ev.sound === "cry"));
+  assert.equal(e.state, "settled");
+});
+
+test("go quiet and it cries for ten seconds, then comes; make a sound and it settles", () => {
+  const layout = open();
+  const e = spawn(hushbaby, { x: 6, y: 2 });
+  const sense = senseFor(layout, { x: c(1), z: c(2), noise: 0 });
+  const early = run(hushbaby, e, sense, CRY_AFTER - 0.5);
+  assert.equal(early.length, 0, "nothing for the first few seconds");
+  const crying = run(hushbaby, e, sense, COME_AFTER - CRY_AFTER);
+  assert.ok(crying.filter((ev) => ev.sound === "cry").length >= 4, "a long warning");
+  assert.ok(!crying.some((ev) => ev.type === "contact"));
+  run(hushbaby, e, sense, 1);
+  assert.equal(e.state, "coming");
+  sense.player.noise = 0.3;
+  run(hushbaby, e, sense, 0.1);
+  assert.equal(e.state, "settled");
+});
+
+test("left silent, it reaches you - even through walls", () => {
+  const layout = generateLayout({ seed: "walls", width: 12, height: 12 });
+  const e = spawn(hushbaby, { x: 6, y: 6 });
+  const sense = senseFor(layout, { x: c(1), z: c(1), noise: 0 });
+  const events = run(hushbaby, e, sense, COME_AFTER + 8);
+  assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+test("it can't count a silence it couldn't hear", () => {
+  const layout = open(20, 20);
+  const e = spawn(hushbaby, { x: 18, y: 18 });
+  const sense = senseFor(layout, { x: c(1), z: c(1), noise: 0 });
+  const events = run(hushbaby, e, sense, 40);
+  assert.equal(events.length, 0);
 });

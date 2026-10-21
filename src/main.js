@@ -413,6 +413,7 @@ function frame() {
   if (audio) {
     audio.listen(camera.position, player.yaw);
     if (moved.stepped) audio.footstep(player.running, player.crouching);
+    audio.voice(player.humming && !screens.dead);
     if ((player.stamina < 0.55 || player.exhausted) && time > (player.breathAt ?? 0)) {
       const effort = player.exhausted ? 1 : 1 - player.stamina / 0.55;
       audio.breath(effort);

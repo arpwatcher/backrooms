@@ -7,8 +7,9 @@ import { deathmoths } from "./deathmoths.js";
 import { partygoers } from "./partygoers.js";
 import { facelings } from "./facelings.js";
 import { stilts } from "./stilts.js";
+import { hushbaby } from "./hushbaby.js";
 
-export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts];
+export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts, hushbaby];
 
 export function entityById(id) {
   return ENTITIES.find((d) => d.id === id) ?? null;

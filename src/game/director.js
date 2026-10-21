@@ -31,8 +31,11 @@ export const SYNERGIES = [
   { pair: ["stilts", "stillLife"], why: "you have to crouch for one and keep your eyes up on the other" },
 ];
 
-// pairs whose counters contradict outright; meeting both is unfair, not scary
-export const CONFLICTS = [];
+// pairs whose counters contradict outright; meeting both is unfair, not
+// scary - only the noclip tier, which asked for it, ever gets them together
+export const CONFLICTS = [
+  { pair: ["hushbaby", "hounds"], why: "one needs you loud, the other needs you silent" },
+];
 
 const key = (a, b) => [a, b].sort().join("+");
 
@@ -69,7 +72,7 @@ export function planLevel({ depth, rng, pool, tier = TIERS.uneasy, recent = [], 
   let left = budget;
   for (;;) {
     const options = open.filter(
-      (d) => !roster.includes(d) && d.threat <= left + 0.25 && !roster.some((r) => conflicts(r.id, d.id)),
+      (d) => !roster.includes(d) && d.threat <= left + 0.25 && (tier.name === "noclip" || !roster.some((r) => conflicts(r.id, d.id))),
     );
     if (options.length === 0) break;
     const weighted = options.map((d) => {

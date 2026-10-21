@@ -355,7 +355,41 @@ export function stiltsMesh() {
   return group;
 }
 
+// small, pale, on all fours, with arms a little too long
+export function hushbabyMesh() {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshLambertMaterial({ color: 0xe6d6cc, emissive: 0x1a1210 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.3, 4, 10), skin);
+  body.rotation.x = Math.PI / 2;
+  body.position.set(0, 0.32, 0);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), skin);
+  head.position.set(0, 0.42, 0.3);
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.035, 10), new THREE.MeshBasicMaterial({ color: 0x1a0606 }));
+  mouth.position.set(0, -0.04, 0.145);
+  head.add(mouth);
+  group.add(body, head);
+  const limbs = [];
+  for (const [x, z, length] of [[-0.12, 0.18, 0.5], [0.12, 0.18, 0.5], [-0.11, -0.16, 0.36], [0.11, -0.16, 0.36]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 0.36, z);
+    const limb = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, length, 5), skin);
+    limb.position.y = -length / 2;
+    pivot.add(limb);
+    group.add(pivot);
+    limbs.push(pivot);
+  }
+  group.userData.animate = (time, entity) => {
+    // in the wall it is just a voice; you only see it when it comes out
+    group.visible = entity.state === "coming";
+    const pace = 14;
+    limbs.forEach((l, i) => (l.rotation.x = Math.sin(time * pace + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.7));
+    mouth.scale.setScalar(1 + Math.abs(Math.sin(time * 9)) * 0.8);
+  };
+  return group;
+}
+
 export const MESHES = {
+  hushbaby: hushbabyMesh,
   stilts: stiltsMesh,
   facelings: facelingsMesh,
   smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh, partygoers: partygoersMesh,

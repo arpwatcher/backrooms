@@ -113,10 +113,10 @@ try {
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();
-    for (let depth = 3; depth < 20; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
+    for (let depth = 3; depth < 24; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
     return [...kinds].sort();
   });
-  check(all.length >= 7, `entities met on levels 3-19: ${all.join(", ")}`);
+  check(all.length >= 8, `entities met on levels 3-23: ${all.join(", ")}`);
   const places = await page.evaluate(async () => {
     const ids = new Set();
     for (let depth = 0; depth < 16; depth++) ids.add(window.__noclip.preview(depth).archetype);
@@ -227,18 +227,20 @@ try {
   const voices = await page.evaluate(() => {
     const a = window.__noclip.audio;
     const played = [];
-    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak"]) {
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry"]) {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
     a.breath(0.7);
+    a.voice(true);
+    a.voice(false);
     a.clunk(1, 1.4, 1);
     a.rustle(1, 1.4, 1);
     a.hit();
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 12, "every entity voice and player sound plays without an error");
+  check(voices === 13, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);

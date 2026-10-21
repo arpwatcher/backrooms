@@ -119,3 +119,15 @@ test("a silent level has nobody in it, and a peak has more than a breather", () 
   }
   assert.ok(peak > breather, `peak ${peak} vs breather ${breather}`);
 });
+
+test("a conflicting pair never shares a level, except on noclip", () => {
+  const pool = [fake("hushbaby", 1, 1), fake("hounds", 1, 1), fake("x", 1, 1)];
+  let together = 0;
+  for (let i = 0; i < 200; i++) {
+    const ids = planLevel({ depth: 9, rng: new Rng(`c${i}`), pool, tier: TIERS.lost }).roster.map((d) => d.id);
+    assert.ok(!(ids.includes("hushbaby") && ids.includes("hounds")), ids.join());
+    const hard = planLevel({ depth: 9, rng: new Rng(`c${i}`), pool, tier: TIERS.noclip }).roster.map((d) => d.id);
+    if (hard.includes("hushbaby") && hard.includes("hounds")) together++;
+  }
+  assert.ok(together > 0, "noclip asked for it");
+});
