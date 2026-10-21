@@ -57,7 +57,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 2 | **Stilts** | the tall thin man in a suit | sees only what stands above waist height | built |
 | 3 | **Tannoy** | the siren-headed giant | walks to any sound it can repeat back to you | later |
 | 4 | **Crawlspace** | the pale long-limbed night thing | drops from missing ceiling tiles | later |
-| 5 | **The Attendant** | the janitor in every slasher | follows wet footprints | later |
+| 5 | **The Attendant** | the janitor in every slasher | follows wet footprints | built |
 | 6 | **Census Taker** | the "count" folklore and grim tallies | hunts whoever is alone when the count ends | later |
 | 7 | **The Guest** | the hotel that keeps you | if you sit, you stay | later |
 | 8 | **Hushbaby** | the crying in the wall | comes when it is quiet too long | built |

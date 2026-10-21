@@ -111,15 +111,19 @@ sessions, and **[later]** is designed only.
   (crouch for one, eyes up for the other), and Deadline (crouching is slow, so
   this is a cruel one).
 
-### 9. The Attendant [later]
+### 9. The Attendant [built]
 - **Class:** hazard. An original.
-- **Tell:** wet carpet that squelches under you, and the smell (shown as a
-  colour shift) of cleaning fluid.
+- **Tell:** a wet mop slapping on carpet within 18 m, the smell of cleaning
+  fluid, and your own shoes squelching once they're wet.
 - **Rule:** it follows every wet footprint you leave.
-- **Counter:** walk around wet patches, or wait for your shoes to dry (8 s on
-  dry carpet).
-- **Co-op:** shared footprints, so one careless player leads it to everyone.
-- **Pairs:** Hounds (going around wet patches is slow and loud).
+- **Counter:** walk around the puddles, or wait for your shoes to dry (8 s
+  after the last puddle). With no prints there's no trail. Prints dry out by
+  themselves after 40 s.
+- **Behaviour:** he mops the trail in order, oldest print first, and when the
+  trail ends at you, so does he.
+- **Co-op:** shared floor, so one careless player leads him to everyone.
+- **Pairs:** Hounds (going around is the long, loud way), Still Life (backing
+  away, you can't see where you step).
 
 ### 10. Deadline [later]
 - **Class:** herder. An original.
