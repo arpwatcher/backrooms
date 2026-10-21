@@ -179,6 +179,9 @@ try {
 
   await page.evaluate(() => window.__noclip.goToDepth(3));
   await page.evaluate(() => window.__noclip.touch(0));
+  const recordLine = await page.evaluate(() => document.getElementById("records").textContent);
+  check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);
+
   const firstTouch = await page.evaluate(() => ({
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],
   }));

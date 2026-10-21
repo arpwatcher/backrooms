@@ -38,3 +38,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #pause label { display: flex; gap: 14px; align-items: center; margin: 8px 0; font-size: 14px; letter-spacing: 0.1em; }
 #pause input[type=range] { width: 220px; accent-color: #c9b458; }
 #pause .row { display: flex; gap: 12px; margin-top: 22px; }
+#records { margin-top: -10px; margin-bottom: 18px; }

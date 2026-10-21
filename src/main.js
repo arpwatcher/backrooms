@@ -27,6 +27,7 @@ import { loadCodex, recordSurvival } from "./game/codex.js";
 import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
+import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { checkpointFor } from "./game/run.js";
 
 const params = new URLSearchParams(location.search);
@@ -225,6 +226,7 @@ function nextLevel(time) {
   fade.style.opacity = "1";
   setTimeout(() => {
     descend(run);
+    if (recordDepth(records, tier.name, run.depth)) showRecords();
     loadLevel();
     fade.style.opacity = "0";
     hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
@@ -263,6 +265,13 @@ for (const button of document.querySelectorAll("#tiers button")) {
   });
 }
 tierNote.textContent = TIER_NOTES[tier.name];
+
+const records = loadRecords();
+const recordLine = document.getElementById("records");
+function showRecords() {
+  recordLine.textContent = describeRecords(records);
+}
+showRecords();
 
 const title = document.getElementById("title");
 document.getElementById("enter").addEventListener("click", () => {
