@@ -175,6 +175,12 @@ export function createAudio() {
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
       }
     },
+    // your own breath after a sprint: in, out, faster the more spent you are
+    breath(effort) {
+      const t = ctx.currentTime;
+      burst({ duration: 0.32, frequency: 650, q: 0.9, type: "bandpass", level: 0.1 + effort * 0.2, at: t });
+      burst({ duration: 0.4, frequency: 480, q: 0.9, type: "bandpass", level: 0.12 + effort * 0.22, at: t + 0.38 });
+    },
     setVolume(volume) {
       master.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
     },

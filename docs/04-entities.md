@@ -35,7 +35,8 @@ sessions, and **[later]** is designed only.
   reach you.
 - **Rule:** they hunt by sound alone.
 - **Counter:** freeze or crouch-walk. They sniff the last place they heard
-  you for 3 s, then wander off.
+  you for 3 s, then wander off. Don't sprint until you're spent: an exhausted
+  player gasps, and they hear that within 5 m even while you stand still.
 - **Co-op:** they hear voice chat. A player calling out can save a friend or
   doom them.
 - **Pairs:** Smiler, Still Life, and above all the Hushbaby (the counters

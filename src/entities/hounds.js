@@ -6,7 +6,8 @@ import { spawn, distanceTo, moveAlongPath, moveToward, cellAt } from "./core.js"
 // place they heard you and move on. Their tell is the panting, and the claws
 // on wet carpet, long before you see them.
 
-export const HEARING = { run: 20, walk: 9, crouch: 2.5 };
+// pant: an exhausted player gasping for breath, even standing still
+export const HEARING = { run: 20, walk: 9, crouch: 2.5, pant: 5 };
 
 export const hounds = {
   id: "hounds",
@@ -38,7 +39,8 @@ export const hounds = {
 
   heard(e, sense) {
     const p = sense.player;
-    const range = p.running ? HEARING.run : p.crouching ? HEARING.crouch : p.noise > 0 ? HEARING.walk : 0;
+    const moving = p.running ? HEARING.run : p.crouching ? HEARING.crouch : p.noise > 0 ? HEARING.walk : 0;
+    const range = Math.max(moving, p.exhausted ? HEARING.pant : 0);
     return range > 0 && distanceTo(e, p) <= range;
   },
 

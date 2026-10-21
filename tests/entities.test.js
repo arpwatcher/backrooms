@@ -338,3 +338,14 @@ test("an offended faceling gives up once you've been out of sight long enough", 
   run(facelings, e, sense, 1);
   assert.equal(e.state, "wander");
 });
+
+test("hounds hear an exhausted player gasping, even standing still, but only up close", () => {
+  const layout = open();
+  const near = spawn(hounds, { x: 3, y: 2 }, { rng: new Rng("h") });
+  const far = spawn(hounds, { x: 6, y: 2 }, { rng: new Rng("h") });
+  const sense = senseFor(layout, { x: c(1), z: c(2), exhausted: true, noise: 0 });
+  assert.ok(hounds.heard(near, sense), "4.8 m away, it hears you panting");
+  assert.ok(!hounds.heard(far, sense), "12 m away, it doesn't");
+  sense.player.exhausted = false;
+  assert.ok(!hounds.heard(near, sense), "get your breath back and you're silent again");
+});

@@ -404,6 +404,11 @@ function frame() {
   if (audio) {
     audio.listen(camera.position, player.yaw);
     if (moved.stepped) audio.footstep(player.running, player.crouching);
+    if ((player.stamina < 0.55 || player.exhausted) && time > (player.breathAt ?? 0)) {
+      const effort = player.exhausted ? 1 : 1 - player.stamina / 0.55;
+      audio.breath(effort);
+      player.breathAt = time + 1.6 - effort * 0.75;
+    }
     for (const panel of ticks) {
       const p = panel.mesh.position;
       if (p.distanceToSquared(camera.position) < 100) audio.flickerTick(p.x, p.y, p.z);
