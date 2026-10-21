@@ -221,6 +221,21 @@ try {
 
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
+  const voices = await page.evaluate(() => {
+    const a = window.__noclip.audio;
+    const played = [];
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine"]) {
+      a.entity(sound, 3, 1.2, 3, 0.8);
+      played.push(sound);
+    }
+    a.breath(0.7);
+    a.clunk(1, 1.4, 1);
+    a.rustle(1, 1.4, 1);
+    a.hit();
+    a.setVolume(0.5);
+    return played.length + 5;
+  });
+  check(voices === 11, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
