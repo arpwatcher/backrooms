@@ -51,7 +51,7 @@ export function createAudio() {
   room.connect(roomFilter).connect(roomGain).connect(master);
   room.start();
 
-  function burst({ duration, frequency, q = 1, level, type = "lowpass", at = ctx.currentTime, destination = master }) {
+  function noiseBurst({ duration, frequency, q = 1, level, type = "lowpass", at = ctx.currentTime, destination = master }) {
     const src = ctx.createBufferSource();
     src.buffer = noiseBuffer;
     const filter = ctx.createBiquadFilter();
@@ -80,6 +80,8 @@ export function createAudio() {
     node.connect(master);
     return node;
   }
+
+  const burst = noiseBurst;
 
   return {
     ctx,
@@ -121,6 +123,9 @@ export function createAudio() {
     entity(sound, x, y, z, volume = 1) {
       const dest = panner(x, y, z, 1.6);
       const t = ctx.currentTime;
+      // every call a little different, so the ear never stops hearing it
+      const detune = 0.94 + Math.random() * 0.12;
+      const burst = (options) => noiseBurst({ ...options, frequency: options.frequency * detune });
       if (sound === "teeth") {
         for (let i = 0; i < 3; i++) {
           burst({ duration: 0.03, frequency: 4200 + i * 300, q: 10, type: "bandpass", level: 0.5 * volume, at: t + i * 0.09, destination: dest });
@@ -146,7 +151,7 @@ export function createAudio() {
           const at = t + i * 0.42;
           const osc = ctx.createOscillator();
           osc.type = "triangle";
-          osc.frequency.value = f * 0.985;
+          osc.frequency.value = f * 0.985 * detune;
           const g = ctx.createGain();
           g.gain.setValueAtTime(0.0001, at);
           g.gain.exponentialRampToValueAtTime(0.16 * volume, at + 0.02);
