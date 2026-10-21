@@ -63,7 +63,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 8 | **Hushbaby** | the crying in the wall | comes when it is quiet too long | built |
 | 9 | **Intercom** | the friendly voice that lies | one in three things it says is false | later |
 | 10 | **Ushers** | the uniformed figures in liminal places | close in when you walk away from where they point | later |
-| 11 | **Deadline** | the advancing darkness | advances at a steady pace and never stops | later |
+| 11 | **Deadline** | the advancing darkness | advances at a steady pace and never stops | built |
 | 12 | **The Projectionist** | the film that shows you | moves only in the frames when the projector flickers | later |
 
 ## Using the famous ones well

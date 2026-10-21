@@ -13,7 +13,7 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
 - **Generated levels.** Six kinds of place (lobby, pillar hall, cubicle
   maze, dim wing, damp floor, overtime), each from a seed. The same seed
   always gives the same run.
-- **Nine entities, one rule each.**
+- **Ten entities, one rule each.**
   - Smiler: it only moves in the dark.
   - Hounds: they hunt by sound.
   - Still Life: it only moves when nobody is looking.
@@ -23,6 +23,7 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - Stilts: it sees anything standing, and nothing crouched.
   - Hushbaby: it comes when you have been quiet too long.
   - The Attendant: he follows every wet footprint you leave.
+  - Deadline: the dark comes from where you came in, and never stops.
 - **A threat director.**
   - Something new is always met alone first.
   - Pairs that make each other worse turn up together.

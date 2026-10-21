@@ -125,14 +125,19 @@ sessions, and **[later]** is designed only.
 - **Pairs:** Hounds (going around is the long, loud way), Still Life (backing
   away, you can't see where you step).
 
-### 10. Deadline [later]
+### 10. Deadline [built]
 - **Class:** herder. An original.
-- **Tell:** the lights behind you go out, panel by panel, in a line, and a
-  low tone rises.
-- **Rule:** it advances at a steady pace from the start and never stops.
-- **Counter:** keep moving toward the exit.
+- **Tell:** 20 s after you arrive, the lights where you came in go out, then
+  the next ring, then the next, with a low climbing tone that quickens as it
+  gets close.
+- **Rule:** it comes from where you came in, at a steady pace, and never
+  stops.
+- **Counter:** keep moving toward the exit. At 0.42 cells per second (about
+  1 m/s) it is slower than walking.
+- **First touch:** pushes it back six cells. It doesn't go home.
 - **Co-op:** the slowest player sets everyone's pace.
-- **Pairs:** Still Life (you have to look back while you hurry).
+- **Pairs:** Still Life (look back while you hurry) and Stilts (crouching is
+  slow).
 
 ### 11. Ushers [later]
 - **Class:** herder, a pair. An original.

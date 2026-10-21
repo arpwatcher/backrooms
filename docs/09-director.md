@@ -19,7 +19,7 @@ co-op:       x (1 + 0.35 x (players - 1))                      [later]
 **Debut.** The first level where an entity becomes possible
 (its `minDepth`), it appears **alone**. You learn one rule at a time.
 Debuts: Hounds 1, Smiler 2, Still Life 3, Deathmoths 4, Partygoers 5,
-Facelings 6, Stilts 7, Hushbaby 11, the Attendant 12.
+Facelings 6, Stilts 7, Hushbaby 11, the Attendant 12, Deadline 13.
 
 **Variety.** Anything you met in the last three levels is less likely to come
 back. The weight drops the more recently you saw it.
@@ -86,8 +86,8 @@ in §4 and §8.
 | 9 | Facelings + Still Life | one punishes your gaze and the other needs it - which figure is the mannequin? | built |
 | 10 | Facelings + Smiler | the beam you need for the grin lands on blank faces too | built |
 | 11 | Hounds + Stilts | crouching hides you from both, but is slow | built |
-| 12 | Deadline + Still Life | you have to keep moving forward and keep looking back | later |
-| 13 | Deadline + Stilts | crouching is slow, and the dark is coming | later |
+| 12 | Deadline + Still Life | you have to keep moving forward and keep looking back | built |
+| 13 | Deadline + Stilts | crouching is slow, and the dark is coming | built |
 | 14 | Attendant + Hounds | going around wet patches is the long, loud way | built |
 | 15 | Census Taker + Clump | stay together, but don't | later (noclip only) |
 | 16 | Census Taker + Still Life | groups are safe from both, which is the point of it | later |
