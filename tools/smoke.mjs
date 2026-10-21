@@ -199,6 +199,13 @@ try {
   check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);
 
   await page.evaluate(() => window.__noclip.goToDepth(3));
+  await page.evaluate(() => (window.__noclip.player.lucidity = 0.05));
+  const phantom = await page
+    .waitForFunction(() => window.__noclip.phantom, null, { timeout: 20000 })
+    .then((h) => h.jsonValue(), () => null);
+  check(phantom !== null, `at low lucidity something shows at the edge of vision (${phantom?.kind})`);
+  await page.evaluate(() => (window.__noclip.player.lucidity = 1));
+
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],

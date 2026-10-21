@@ -29,6 +29,9 @@ import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
 import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
+import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
+import { facelingsMesh, smilerMesh } from "./render/entities.js";
+import { lineOfSight } from "./world/sight.js";
 import { checkpointFor } from "./game/run.js";
 
 const params = new URLSearchParams(location.search);
@@ -69,6 +72,8 @@ const codex = loadCodex();
 const codexScreen = createCodexScreen(codex);
 document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
 let marks = new Map();
+let phantoms = createPhantoms();
+const phantomRng = new Rng("phantoms");
 let tier = TIERS[params.get("tier")] ?? TIERS[readTier()] ?? TIERS.uneasy;
 let tension = createTension();
 let player = null;
@@ -123,6 +128,8 @@ function loadLevel() {
     world.group.add(mesh);
     return { ...note, mesh, read: false };
   });
+  phantoms = createPhantoms();
+  for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
   level = { layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
@@ -170,6 +177,34 @@ function useTask(time) {
   });
   hud.say(task.task.progress(doneCount(task), task.targets.length), 3, time);
   if (task.complete) for (const exit of level.exits) exit.door.userData.setLocked(false);
+}
+
+// the figures low lucidity puts at the edge of your vision: a dark shape of
+// a person, or a grin. One at a time, never straight ahead.
+const phantomMeshes = { figure: facelingsMesh(), grin: smilerMesh() };
+for (const mesh of Object.values(phantomMeshes)) {
+  mesh.visible = false;
+  scene.add(mesh);
+}
+phantomMeshes.figure.traverse((o) => o.material?.color?.setHex(0x0d0b07));
+function updatePhantoms(time) {
+  const view = { x: player.x, z: player.z, yaw: player.yaw };
+  const place = (angle, distance) => {
+    const x = player.x - Math.sin(angle) * distance;
+    const z = player.z - Math.cos(angle) * distance;
+    const inside = x > 0.5 && z > 0.5 && x < level.layout.width * CELL - 0.5 && z < level.layout.height * CELL - 0.5;
+    return inside && lineOfSight(level.layout, player.x, player.z, x, z) ? { x, z } : null;
+  };
+  const change = stepPhantoms(phantoms, { lucidity: player.lucidity, time, view, place, rng: phantomRng });
+  if (change?.vanished) phantomMeshes[change.vanished.kind].visible = false;
+  if (change?.appeared) {
+    const { x, z, kind } = change.appeared;
+    const mesh = phantomMeshes[kind];
+    mesh.position.set(x, 0, z);
+    mesh.rotation.y = Math.atan2(player.x - x, player.z - z);
+    mesh.visible = true;
+    if (kind === "grin") mesh.userData.animate(time, { id: 0, state: "wait" }, "dark");
+  }
 }
 
 const lookDirection = new THREE.Vector3();
@@ -372,6 +407,7 @@ function frame() {
     hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
   if (level.pace === "silence") phantomTells(time);
+  updatePhantoms(time);
   stepFlashlight(flashlight, dt);
   const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
   player.lucidity = stepLucidity(player.lucidity, { light: lightAt(player.x, player.z), presences }, dt);
@@ -476,6 +512,7 @@ window.__noclip = {
     return t && { id: t.task.id, complete: t.complete, targets: t.targets.map((x) => ({ x: x.mesh.position.x, z: x.mesh.position.z, done: x.done })) };
   },
   get items() { return level.items.map((i) => ({ kind: i.kind, x: i.mesh.position.x, z: i.mesh.position.z, taken: i.taken })); },
+  get phantom() { return phantoms.current; },
   get notes() { return level.notes.map((n) => ({ text: n.text, x: n.mesh.position.x, z: n.mesh.position.z, read: n.read })); },
   stand(x, z) {
     player.x = x;
