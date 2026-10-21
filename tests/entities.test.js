@@ -14,6 +14,7 @@ import { partygoers, inRoom } from "../src/entities/partygoers.js";
 import { facelings, STARE_LIMIT } from "../src/entities/facelings.js";
 import { stilts, NOTICE_TIME } from "../src/entities/stilts.js";
 import { hushbaby, CRY_AFTER, COME_AFTER } from "../src/entities/hushbaby.js";
+import { attendant } from "../src/entities/attendant.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -427,4 +428,27 @@ test("it can't count a silence it couldn't hear", () => {
   const sense = senseFor(layout, { x: c(1), z: c(1), noise: 0 });
   const events = run(hushbaby, e, sense, 40);
   assert.equal(events.length, 0);
+});
+
+test("the attendant mops about until there's a trail, then follows it in order", () => {
+  const layout = open();
+  const e = spawn(attendant, { x: 8, y: 2 }, { rng: new Rng("a"), followed: -Infinity });
+  const sense = { ...senseFor(layout, { x: c(1), z: c(8) }), prints: [] };
+  run(attendant, e, sense, 3);
+  assert.equal(e.state, "mop");
+  sense.prints = [{ x: 7, y: 2, t: 1 }, { x: 6, y: 2, t: 2 }, { x: 5, y: 2, t: 3 }];
+  run(attendant, e, sense, 0.2);
+  assert.equal(e.state, "follow");
+  run(attendant, e, sense, 6);
+  assert.equal(e.followed, 3, "every print mopped, oldest first");
+  assert.equal(e.state, "mop", "and at the end of the trail, nothing - you'd walked on dry");
+});
+
+test("a trail that leads right to you brings him right to you", () => {
+  const layout = open();
+  const e = spawn(attendant, { x: 6, y: 2 }, { rng: new Rng("a"), followed: -Infinity });
+  const prints = [5, 4, 3, 2].map((x, i) => ({ x, y: 2, t: i + 1 }));
+  const sense = { ...senseFor(layout, { x: c(2), z: c(2) }), prints };
+  const events = run(attendant, e, sense, 8);
+  assert.ok(events.some((ev) => ev.type === "contact"));
 });

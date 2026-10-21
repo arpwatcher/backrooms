@@ -33,6 +33,29 @@ export function battery() {
   return group;
 }
 
+// a dark, glossy patch of soaked carpet
+export function puddle() {
+  const mesh = new THREE.Mesh(
+    new THREE.CircleGeometry(0.9, 18),
+    new THREE.MeshPhongMaterial({ color: 0x2a2614, shininess: 90, specular: 0x666650, transparent: true, opacity: 0.75 }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.012;
+  mesh.scale.set(1, 0.7 + Math.random() * 0.5, 1);
+  return mesh;
+}
+
+// wet shoe prints: a pool of small dark ovals moved around as prints appear
+export function printPool(size = 120) {
+  const geometry = new THREE.CircleGeometry(0.07, 8);
+  geometry.scale(1, 1.9, 1);
+  const material = new THREE.MeshPhongMaterial({ color: 0x1d1a0d, transparent: true, opacity: 0.7, shininess: 60 });
+  const mesh = new THREE.InstancedMesh(geometry, material, size);
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
 function signTexture(text, color) {
   const c = document.createElement("canvas");
   c.width = 128;

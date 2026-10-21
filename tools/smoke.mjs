@@ -113,10 +113,10 @@ try {
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();
-    for (let depth = 3; depth < 24; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
+    for (let depth = 3; depth < 28; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
     return [...kinds].sort();
   });
-  check(all.length >= 8, `entities met on levels 3-23: ${all.join(", ")}`);
+  check(all.length >= 9, `entities met on levels 3-27: ${all.join(", ")}`);
   const places = await page.evaluate(async () => {
     const ids = new Set();
     for (let depth = 0; depth < 16; depth++) ids.add(window.__noclip.preview(depth).archetype);
@@ -195,6 +195,35 @@ try {
     check(charge > 0.7, `picking up a battery recharges the flashlight (${charge.toFixed(2)})`);
   } else check(false, "a battery turns up somewhere in the first levels");
 
+  // level 6 is the damp floor: puddles, and wet shoes leave prints
+  await page.evaluate(() => window.__noclip.goToDepth(6));
+  const wet = await page.evaluate(() => window.__noclip.tracks);
+  check(wet.puddles > 0, `the damp floor has puddles (${wet.puddles} wet cells)`);
+  if (wet.first) {
+    const [px, py] = wet.first;
+    await page.evaluate(([x, z]) => window.__noclip.stand(x, z), [(px + 0.5) * 2.4, (py + 0.5) * 2.4]);
+    await frames();
+    // a dry neighbour you can walk to without crossing a wall
+    const step = await page.evaluate(([px, py]) => {
+      const n = window.__noclip;
+      const { width, height, north, west } = n.layout;
+      const open = { "1,0": !west[py]?.[px + 1], "-1,0": !west[py]?.[px], "0,1": !north[py + 1]?.[px], "0,-1": !north[py]?.[px] };
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = px + dx;
+        const y = py + dy;
+        if (x < 0 || y < 0 || x >= width || y >= height || n.wetAt(x, y) || !open[`${dx},${dy}`]) continue;
+        return [(x + 0.5) * 2.4, (y + 0.5) * 2.4];
+      }
+      return null;
+    }, [px, py]);
+    if (step) {
+      await page.evaluate(([x, z]) => window.__noclip.stand(x, z), step);
+      await frames();
+      const after = await page.evaluate(() => window.__noclip.tracks.prints);
+      check(after >= 1, `stepping out of a puddle leaves a wet print (${after})`);
+    } else check(false, "a puddle has a dry cell next to it");
+  }
+
   const recordLine = await page.evaluate(() => document.getElementById("records").textContent);
   check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);
 
@@ -252,12 +281,13 @@ try {
   const voices = await page.evaluate(() => {
     const a = window.__noclip.audio;
     const played = [];
-    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry"]) {
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop"]) {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
     for (const kind of ["slam", "ring", "steps", "vent"]) a.ambient(kind, 20, 1.5, 20);
     a.fall();
+    a.squelch();
     a.breath(0.7);
     a.voice(true);
     a.voice(false);
@@ -267,7 +297,7 @@ try {
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 13, "every entity voice and player sound plays without an error");
+  check(voices === 14, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);

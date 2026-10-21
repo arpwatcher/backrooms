@@ -388,7 +388,45 @@ export function hushbabyMesh() {
   return group;
 }
 
+// a janitor in grey overalls and a cap, bent over a mop, a bucket beside him
+export function attendantMesh() {
+  const group = new THREE.Group();
+  const overalls = new THREE.MeshLambertMaterial({ color: 0x55595a });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xb59a86 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 4, 10), overalls);
+  body.position.set(0, 1.15, 0.05);
+  body.rotation.x = 0.35;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), skin);
+  head.position.set(0, 1.62, 0.25);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.07, 12), new THREE.MeshLambertMaterial({ color: 0x2b3a55 }));
+  cap.position.set(0, 1.72, 0.25);
+  const legs = [-0.09, 0.09].map((x) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.8, 6), overalls);
+    leg.position.set(x, 0.4, 0);
+    return leg;
+  });
+  const mop = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.4, 5), new THREE.MeshLambertMaterial({ color: 0x8a6a3a }));
+  stick.position.y = 0.7;
+  const strands = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x9a9480 }));
+  strands.position.y = 0.05;
+  mop.add(stick, strands);
+  mop.position.set(0.15, 0, 0.55);
+  mop.rotation.x = -0.45;
+  const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.3, 12), new THREE.MeshLambertMaterial({ color: 0xb8a020 }));
+  bucket.position.set(-0.4, 0.15, 0.2);
+  group.add(body, head, cap, ...legs, mop, bucket);
+  group.userData.animate = (time, entity) => {
+    const pace = entity.state === "follow" ? 6 : 2.2;
+    mop.position.x = 0.15 + Math.sin(time * pace + entity.id) * 0.25;
+    mop.rotation.z = Math.sin(time * pace + entity.id) * 0.3;
+    head.rotation.y = Math.sin(time * 0.4) * 0.3;
+  };
+  return group;
+}
+
 export const MESHES = {
+  attendant: attendantMesh,
   hushbaby: hushbabyMesh,
   stilts: stiltsMesh,
   facelings: facelingsMesh,

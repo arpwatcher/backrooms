@@ -200,6 +200,10 @@ export function createAudio() {
         wobble.start(t);
         osc.stop(t + 1);
         wobble.stop(t + 1);
+      } else if (sound === "mop") {
+        // a wet mop slapped down and dragged
+        burst({ duration: 0.12, frequency: 260, level: 0.7 * volume, at: t, destination: dest });
+        burst({ duration: 0.45, frequency: 900, q: 0.7, type: "bandpass", level: 0.22 * volume, at: t + 0.08, destination: dest });
       } else if (sound === "creak") {
         // long joints, and ceiling tiles knocked in their frames overhead
         burst({ duration: 0.5, frequency: 320, q: 9, type: "bandpass", level: 0.25 * volume, at: t, destination: dest });
@@ -292,6 +296,11 @@ export function createAudio() {
         osc.stop(ctx.currentTime + 0.3);
         voiceNode = null;
       }
+    },
+    // your own wet shoes
+    squelch() {
+      const t = ctx.currentTime;
+      burst({ duration: 0.09, frequency: 380, q: 1.5, type: "bandpass", level: 0.25, at: t + 0.02 });
     },
     // your own breath after a sprint: in, out, faster the more spent you are
     breath(effort) {

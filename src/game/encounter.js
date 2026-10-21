@@ -73,13 +73,14 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) 
 // a little inside the real edge of the screen, so "I could see it" is true
 export const WATCH_HALF_ANGLE = 0.8;
 
-export function makeSense({ player, flashlight, camera, layout, paths, lightAt, time, darkCells: dark }) {
+export function makeSense({ player, flashlight, camera, layout, paths, lightAt, time, darkCells: dark, prints = [] }) {
   const forward = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
   return {
     player,
     paths,
     time,
     darkCells: dark,
+    prints,
     lightAt,
     flashlightOn: flashlight.on && flashlight.battery > 0,
     canSee(entity, range) {

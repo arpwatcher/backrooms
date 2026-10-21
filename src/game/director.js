@@ -29,6 +29,8 @@ export const SYNERGIES = [
   { pair: ["facelings", "smiler"], why: "the beam you need for the grin lands on blank faces too" },
   { pair: ["stilts", "hounds"], why: "crouching hides you from both - and is the slowest way to get anywhere" },
   { pair: ["stilts", "stillLife"], why: "you have to crouch for one and keep your eyes up on the other" },
+  { pair: ["attendant", "hounds"], why: "going around the puddles is the long way, and the long way is loud" },
+  { pair: ["attendant", "stillLife"], why: "backing away from the mannequin, you can't see where you're stepping" },
 ];
 
 // pairs whose counters contradict outright; meeting both is unfair, not

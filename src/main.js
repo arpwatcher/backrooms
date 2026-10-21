@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
-import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote } from "./render/props.js";
+import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool } from "./render/props.js";
+import { puddleCells, createTracks, stepTracks, shoesWet } from "./game/wet.js";
 import { itemKinds, BATTERY_CHARGE } from "./game/items.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
@@ -128,9 +129,20 @@ function loadLevel() {
     world.group.add(mesh);
     return { ...note, mesh, read: false };
   });
+  // wet floors: the damp archetype, a soaked level, or someone who mops
+  const wetFloor = archetype.id === "damp" || shift?.id === "soaked" || roster.some((d) => d.layout?.puddles);
+  const puddles = wetFloor ? puddleCells(layout, new Rng(`${levelSeed(run)}/puddles`)) : [];
+  for (const p of puddles) {
+    const mesh = puddle();
+    mesh.position.x = (p.x + 0.5) * CELL;
+    mesh.position.z = (p.y + 0.5) * CELL;
+    world.group.add(mesh);
+  }
+  const prints = printPool();
+  world.group.add(prints);
   phantoms = createPhantoms();
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
-  level = { layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
+  level = { tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
@@ -234,6 +246,24 @@ function applyShiftToLights(time) {
       panel.mesh.material.color.setHex(panel.level > 0.5 ? panel.on : 0x4a4430);
     }
   }
+}
+
+// wet shoes leave prints; show the live ones on the carpet
+const printMatrix = new THREE.Matrix4();
+const printTurn = new THREE.Quaternion();
+const printFlat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+function stepPrints(time) {
+  const cell = { x: Math.floor(player.x / CELL), y: Math.floor(player.z / CELL) };
+  const fresh = stepTracks(level.tracks, cell, time);
+  if (fresh) fresh.yaw = player.yaw;
+  const live = level.tracks.prints.slice(-level.prints.instanceMatrix.count);
+  level.prints.count = live.length;
+  live.forEach((p, i) => {
+    printTurn.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw ?? 0).multiply(printFlat);
+    printMatrix.compose(new THREE.Vector3((p.x + 0.5) * CELL + (i % 2 ? 0.12 : -0.12), 0.014, (p.y + 0.5) * CELL), printTurn, new THREE.Vector3(1, 1, 1));
+    level.prints.setMatrixAt(i, printMatrix);
+  });
+  level.prints.instanceMatrix.needsUpdate = true;
 }
 
 // every level: now and then the building makes a sound somewhere far off
@@ -406,7 +436,7 @@ function frame() {
   const down = (player.downUntil ?? 0) > time || screens.dead;
   const moved = stepPlayer(player, down ? { lookX: frameInput.lookX, lookY: frameInput.lookY } : frameInput, dt, level.layout);
   const sense = makeSense({
-    player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells,
+    player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells, prints: level.tracks.prints,
   });
   if (!screens.dead) {
     for (const event of level.encounter.update(sense, dt)) {
@@ -424,6 +454,7 @@ function frame() {
     hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
   if (level.pace === "silence") phantomTells(time);
+  stepPrints(time);
   ambience(time);
   updatePhantoms(time);
   stepFlashlight(flashlight, dt);
@@ -475,6 +506,7 @@ function frame() {
   if (audio) {
     audio.listen(camera.position, player.yaw);
     if (moved.stepped) audio.footstep(player.running, player.crouching);
+    if (moved.stepped && shoesWet(level.tracks, time)) audio.squelch();
     audio.voice(player.humming && !screens.dead);
     if ((player.stamina < 0.55 || player.exhausted) && time > (player.breathAt ?? 0)) {
       const effort = player.exhausted ? 1 : 1 - player.stamina / 0.55;
@@ -531,6 +563,11 @@ window.__noclip = {
   },
   get items() { return level.items.map((i) => ({ kind: i.kind, x: i.mesh.position.x, z: i.mesh.position.z, taken: i.taken })); },
   get phantom() { return phantoms.current; },
+  get tracks() {
+    const [first] = level.tracks.wet;
+    return { puddles: level.tracks.wet.size, first: first?.split(",").map(Number), prints: level.tracks.prints.length };
+  },
+  wetAt: (x, y) => level.tracks.wet.has(`${x},${y}`),
   get notes() { return level.notes.map((n) => ({ text: n.text, x: n.mesh.position.x, z: n.mesh.position.z, read: n.read })); },
   stand(x, z) {
     player.x = x;
