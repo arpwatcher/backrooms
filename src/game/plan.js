@@ -7,7 +7,7 @@
 
 import { Rng } from "../core/rng.js";
 import { pickArchetype } from "../world/archetypes.js";
-import { planLevel, TIERS } from "./director.js";
+import { planLevel, paceFor, TIERS } from "./director.js";
 import { pickShift } from "./shifts.js";
 import { pickTask } from "./tasks.js";
 import { ENTITIES } from "../entities/index.js";
@@ -23,13 +23,17 @@ export function levelPlan(runSeed, depth, tier = TIERS.uneasy, pool = ENTITIES) 
     const previous = plans[d - 1];
     const archetype = pickArchetype(d, new Rng(`${seed}/archetype`), previous?.archetype.id ?? null);
     const recent = plans.slice(Math.max(0, d - 3), d).map((p) => p.roster.map((e) => e.id));
-    const director = planLevel({ depth: d, rng: new Rng(`${seed}/director`), pool, tier, recent });
+    // a debut is never thinned out or silenced: it is how you learn the rule
+    const debut = pool.some((def) => def.minDepth === d);
+    const pace = debut ? { scale: 1, kind: "normal" } : paceFor(d, plans, new Rng(`${seed}/pace`));
+    const director = planLevel({ depth: d, rng: new Rng(`${seed}/director`), pool, tier, recent, scale: pace.scale });
     plans.push({
       depth: d,
       seed,
       archetype,
       roster: director.roster,
       director,
+      pace: pace.kind,
       shift: pickShift(d, new Rng(`${seed}/shift`)),
       task: pickTask(d, new Rng(`${seed}/task`)),
     });

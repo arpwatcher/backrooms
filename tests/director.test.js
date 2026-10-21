@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Rng } from "../src/core/rng.js";
 import {
-  planLevel, budgetFor, TIERS, createTension, stepTension, noteContact, inMercy, synergyOf,
+  planLevel, budgetFor, TIERS, createTension, stepTension, noteContact, inMercy, synergyOf, paceFor, PACE,
 } from "../src/game/director.js";
 import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
@@ -88,4 +88,34 @@ test("two contacts within a minute also earn mercy", () => {
 test("easier tiers get mercy sooner", () => {
   assert.ok(TIERS.lucid.mercyAfter < TIERS.uneasy.mercyAfter);
   assert.ok(TIERS.uneasy.mercyAfter < TIERS.noclip.mercyAfter);
+});
+
+test("pacing: peaks before checkpoints, a breather after two crowded levels, sometimes silence", () => {
+  const rng = () => new Rng("pace");
+  assert.equal(paceFor(2, [], rng()).kind, "normal", "nothing fancy early on");
+  assert.equal(paceFor(9, [], rng()).kind, "peak");
+  assert.equal(paceFor(14, [], rng()).kind, "peak");
+  const crowd = { roster: ["a", "b"], pace: "normal" };
+  const kinds = new Set();
+  for (let i = 0; i < 40; i++) kinds.add(paceFor(7, [crowd, crowd], new Rng(`b${i}`)).kind);
+  assert.ok(kinds.has("breather") && !kinds.has("normal"), [...kinds].join());
+  for (let i = 0; i < 40; i++) {
+    assert.notEqual(paceFor(7, [crowd, { ...crowd, pace: "breather" }], new Rng(`n${i}`)).kind, "breather", "no breather after a breather");
+  }
+  let silent = 0;
+  const calm = { roster: ["a"], pace: "normal" };
+  for (let i = 0; i < 1200; i++) if (paceFor(7, [calm, calm], new Rng(`s${i}`)).kind === "silence") silent++;
+  assert.ok(silent > 50 && silent < 160, `${silent} silent of 1200`);
+});
+
+test("a silent level has nobody in it, and a peak has more than a breather", () => {
+  const pool = [fake("a", 1, 1), fake("b", 1, 1), fake("c", 1, 1), fake("d", 1, 1), fake("f", 1, 1)];
+  assert.equal(planLevel({ depth: 8, rng: new Rng("x"), pool, scale: 0 }).roster.length, 0);
+  let peak = 0;
+  let breather = 0;
+  for (let i = 0; i < 50; i++) {
+    peak += planLevel({ depth: 8, rng: new Rng(`p${i}`), pool, scale: PACE.peak }).roster.length;
+    breather += planLevel({ depth: 8, rng: new Rng(`p${i}`), pool, scale: PACE.breather }).roster.length;
+  }
+  assert.ok(peak > breather, `peak ${peak} vs breather ${breather}`);
 });

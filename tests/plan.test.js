@@ -31,3 +31,25 @@ test("tiers plan separately: the hardest tier never meets fewer things", () => {
   }
   assert.ok(hard > easy, `noclip ${hard} vs lucid ${easy}`);
 });
+
+test("every entity still debuts alone on its own level, whatever the pacing", async () => {
+  const { ENTITIES } = await import("../src/entities/index.js");
+  for (const seed of ["debut-a", "debut-b", "debut-c"]) {
+    for (const def of ENTITIES) {
+      const p = levelPlan(seed, def.minDepth);
+      assert.deepEqual(p.roster.map((e) => e.id), [def.id], `${seed} level ${def.minDepth}`);
+    }
+  }
+});
+
+test("some deep levels are silent, and silent levels are empty", () => {
+  let silent = 0;
+  for (let d = 7; d < 120; d++) {
+    const p = levelPlan("quiet-run", d);
+    if (p.pace === "silence") {
+      silent++;
+      assert.equal(p.roster.length, 0);
+    }
+  }
+  assert.ok(silent >= 2, `${silent} silent levels`);
+});

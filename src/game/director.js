@@ -49,8 +49,9 @@ export function budgetFor(depth, tier = TIERS.uneasy) {
 
 // pool: entity defs with { id, threat, minDepth }
 // recent: rosters (arrays of ids) of the last few levels, newest last
-export function planLevel({ depth, rng, pool, tier = TIERS.uneasy, recent = [] }) {
-  const budget = budgetFor(depth, tier);
+// scale: the pacing multiplier for this level (breathers, peaks)
+export function planLevel({ depth, rng, pool, tier = TIERS.uneasy, recent = [], scale = 1 }) {
+  const budget = budgetFor(depth, tier) * scale;
   const open = pool.filter((d) => d.minDepth <= depth);
   if (budget <= 0 || open.length === 0) return { roster: [], budget, synergy: null, reason: "quiet" };
 
@@ -118,4 +119,20 @@ export function noteContact(t, time) {
 
 export function inMercy(t, time) {
   return time < t.mercyUntil;
+}
+
+// Pacing across levels: a breather after two crowded levels, a peak just
+// before each checkpoint, and now and then a level with nobody in it at all
+// (the director still plays the tells - the player doesn't know that).
+export const PACE = { breather: 0.6, peak: 1.3, silenceChance: 1 / 12 };
+
+// previous: the plans of earlier levels, oldest first ({ roster, pace })
+export function paceFor(depth, previous, rng) {
+  if (depth < 4) return { scale: 1, kind: "normal" };
+  if (depth % 5 === 4) return { scale: PACE.peak, kind: "peak" };
+  if (rng.chance(PACE.silenceChance)) return { scale: 0, kind: "silence" };
+  const [a, b] = previous.slice(-2);
+  const crowded = (p) => p && p.roster.length >= 2 && p.pace !== "breather";
+  if (crowded(a) && crowded(b)) return { scale: PACE.breather, kind: "breather" };
+  return { scale: 1, kind: "normal" };
 }

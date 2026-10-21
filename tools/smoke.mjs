@@ -114,6 +114,12 @@ try {
     return [...ids];
   });
   check(places.length >= 4, `levels 0-15 visit different kinds of place: ${places.join(", ")}`);
+  const paces = await page.evaluate(() => {
+    const kinds = new Set();
+    for (let depth = 0; depth < 80; depth++) kinds.add(window.__noclip.preview(depth).pace);
+    return [...kinds].sort();
+  });
+  check(["breather", "peak", "silence"].every((k) => paces.includes(k)), `the run has peaks, breathers and silences (${paces.join(", ")})`);
   const shifts = await page.evaluate(() => {
     const found = {};
     for (let depth = 0; depth < 40; depth++) {

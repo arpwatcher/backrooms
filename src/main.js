@@ -80,7 +80,7 @@ function loadLevel() {
     });
   }
   if (level?.encounter) level.encounter.dispose();
-  const { director: plan, roster, archetype, shift, task: picked } = levelPlan(run.seed, run.depth, tier);
+  const { director: plan, roster, archetype, shift, task: picked, pace } = levelPlan(run.seed, run.depth, tier);
   const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
   const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
   const effects = shift?.effects ?? {};
@@ -111,7 +111,7 @@ function loadLevel() {
     }
     for (const exit of exits) exit.door.userData.setLocked(true);
   }
-  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, trail: createTrail() };
+  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, pace, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
@@ -187,6 +187,18 @@ function applyShiftToLights(time) {
       panel.mesh.material.color.setHex(panel.level > 0.5 ? panel.on : 0x4a4430);
     }
   }
+}
+
+// a silent level: nothing lives here, but every so often you hear something
+// that would. Nothing comes. The player doesn't know that.
+const PHANTOMS = ["teeth", "panting", "scrape", "flutter", "party"];
+function phantomTells(time) {
+  if (time < (level.phantomAt ??= time + 15 + Math.random() * 20)) return;
+  level.phantomAt = time + 20 + Math.random() * 25;
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 12 + Math.random() * 8;
+  const sound = PHANTOMS[Math.floor(Math.random() * PHANTOMS.length)];
+  audio?.entity(sound, player.x + Math.cos(angle) * distance, 1.2, player.z + Math.sin(angle) * distance, 0.6);
 }
 
 function lightAt(x, z) {
@@ -304,6 +316,7 @@ function frame() {
     setTimeout(() => audio?.setHum(1, 6), tier.mercyFor * 1000);
     hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
+  if (level.pace === "silence") phantomTells(time);
   stepFlashlight(flashlight, dt);
   const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
   player.lucidity = stepLucidity(player.lucidity, { light: lightAt(player.x, player.z), presences }, dt);
@@ -382,7 +395,7 @@ window.__noclip = {
   // what a level will be, without building it
   preview(depth) {
     const p = levelPlan(run.seed, depth, tier);
-    return { archetype: p.archetype.id, roster: p.roster.map((d) => d.id), shift: p.shift?.id ?? null, task: p.task?.id ?? null };
+    return { archetype: p.archetype.id, roster: p.roster.map((d) => d.id), shift: p.shift?.id ?? null, task: p.task?.id ?? null, pace: p.pace };
   },
   get shift() { return level.shift?.id ?? null; },
   get task() {
