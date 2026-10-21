@@ -17,6 +17,8 @@ document is the target and the code is where things currently stand.
 | 8 | [The famous ones, and homages](08-famous-entities.md) | thirty-two from Backrooms folklore and twelve homages with original names |
 | 9 | [The threat director and synergies](09-director.md) | budgets, debuts, variety, tension and mercy; thirty-two pairings |
 | 10 | [The entity generator](10-entity-generator.md) | tables that make new entities, and thirty samples |
+| 11 | [Pacing and anti-fatigue](11-pacing.md) | keeping fear fresh within a level, a session, and many runs |
+| 12 | [Audio-visual bible](12-av-bible.md) | palette, light, fog, every entity's voice, mixing and UI |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
