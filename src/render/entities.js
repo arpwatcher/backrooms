@@ -425,7 +425,26 @@ export function attendantMesh() {
   return group;
 }
 
+// the edge of the dark: a column of black that the light doesn't reach into
+export function deadlineMesh() {
+  const group = new THREE.Group();
+  for (const [radius, opacity] of [[1.25, 0.35], [0.95, 0.6], [0.6, 0.9]]) {
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, 2.7, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    shell.position.y = 1.35;
+    group.add(shell);
+  }
+  group.userData.animate = (time, entity) => {
+    group.visible = entity.state === "coming";
+    group.children.forEach((shell, i) => shell.scale.setScalar(1 + Math.sin(time * (1.3 + i * 0.4)) * 0.06));
+  };
+  return group;
+}
+
 export const MESHES = {
+  deadline: deadlineMesh,
   attendant: attendantMesh,
   hushbaby: hushbabyMesh,
   stilts: stiltsMesh,

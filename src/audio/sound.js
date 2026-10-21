@@ -200,6 +200,21 @@ export function createAudio() {
         wobble.start(t);
         osc.stop(t + 1);
         wobble.stop(t + 1);
+      } else if (sound === "tone") {
+        // a low climbing tone, two notes beating against each other
+        for (const f of [55, 57.5]) {
+          const osc = ctx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(f * detune, t);
+          osc.frequency.linearRampToValueAtTime(f * 1.12 * detune, t + 1.6);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.22 * volume + 0.01, t + 0.5);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+          osc.connect(g).connect(dest);
+          osc.start(t);
+          osc.stop(t + 1.85);
+        }
       } else if (sound === "mop") {
         // a wet mop slapped down and dragged
         burst({ duration: 0.12, frequency: 260, level: 0.7 * volume, at: t, destination: dest });

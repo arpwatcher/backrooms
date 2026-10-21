@@ -248,6 +248,18 @@ function applyShiftToLights(time) {
   }
 }
 
+// Deadline's dark: every panel up to its front goes out, with a tick
+function darkenTo(dist, front) {
+  for (const panel of level.world.panels) {
+    if (panel.state === "dead" || (dist[panel.y]?.[panel.x] ?? Infinity) > front) continue;
+    panel.state = "dead";
+    panel.level = 0;
+    panel.mesh.material.color.setHex(0x3a3628);
+    const p = panel.mesh.position;
+    if (p.distanceToSquared(camera.position) < 400) audio?.flickerTick(p.x, p.y, p.z);
+  }
+}
+
 // wet shoes leave prints; show the live ones on the carpet
 const printMatrix = new THREE.Matrix4();
 const printTurn = new THREE.Quaternion();
@@ -443,6 +455,7 @@ function frame() {
       if (event.type === "sound") audio?.entity(event.sound, event.x, 1.2, event.z, event.volume);
       else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
       else if (event.type === "contact" && !down) onContact(event.entity, time);
+      else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
     }
   }
   const nearest = Math.min(...level.encounter.entities.map((e) => Math.hypot(e.x - player.x, e.z - player.z)));
@@ -563,6 +576,7 @@ window.__noclip = {
   },
   get items() { return level.items.map((i) => ({ kind: i.kind, x: i.mesh.position.x, z: i.mesh.position.z, taken: i.taken })); },
   get phantom() { return phantoms.current; },
+  get litPanels() { return level.world.panels.filter((p) => p.state !== "dead").length; },
   get tracks() {
     const [first] = level.tracks.wet;
     return { puddles: level.tracks.wet.size, first: first?.split(",").map(Number), prints: level.tracks.prints.length };

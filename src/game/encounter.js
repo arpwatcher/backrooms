@@ -50,6 +50,11 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) 
     // after a first contact the thing backs off to where it started, so the
     // player gets a moment to stand up and think about what they did wrong
     retreat(entity, time) {
+      if (entity.def.retreat) {
+        entity.def.retreat(entity);
+        entity.stunnedUntil = time + 4;
+        return;
+      }
       entity.x = (entity.spawnCell.x + 0.5) * CELL;
       entity.z = (entity.spawnCell.y + 0.5) * CELL;
       entity.state = "wait";

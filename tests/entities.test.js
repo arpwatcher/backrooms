@@ -15,6 +15,7 @@ import { facelings, STARE_LIMIT } from "../src/entities/facelings.js";
 import { stilts, NOTICE_TIME } from "../src/entities/stilts.js";
 import { hushbaby, CRY_AFTER, COME_AFTER } from "../src/entities/hushbaby.js";
 import { attendant } from "../src/entities/attendant.js";
+import { deadline, START_DELAY as DEADLINE_DELAY } from "../src/entities/deadline.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -451,4 +452,29 @@ test("a trail that leads right to you brings him right to you", () => {
   const sense = { ...senseFor(layout, { x: c(2), z: c(2) }), prints };
   const events = run(attendant, e, sense, 8);
   assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+test("deadline waits, then darkens the level ring by ring from where you came in", () => {
+  const layout = open(12, 12);
+  const [e] = deadline.spawn(layout);
+  const far = layout.start.x > 6 ? 0 : 11;
+  const sense = senseFor(layout, { x: c(far), z: c(far) });
+  const waiting = run(deadline, e, sense, DEADLINE_DELAY - 0.5);
+  assert.ok(!waiting.some((ev) => ev.type === "darken"), "nothing for the first twenty seconds");
+  const going = run(deadline, e, sense, 10);
+  const rings = going.filter((ev) => ev.type === "darken").map((ev) => ev.front);
+  assert.ok(rings.length >= 3);
+  assert.deepEqual(rings, [...rings].sort((a, b) => a - b), "always forward");
+  assert.ok(going.some((ev) => ev.sound === "tone"));
+});
+
+test("stand still long enough and the dark reaches you; the first touch pushes it back", () => {
+  const layout = open(8, 8);
+  const [e] = deadline.spawn(layout);
+  const sense = senseFor(layout, { x: c(layout.start.x === 0 ? 3 : 4), z: c(layout.start.y === 0 ? 3 : 4) });
+  const events = run(deadline, e, sense, DEADLINE_DELAY + 30);
+  assert.ok(events.some((ev) => ev.type === "contact"));
+  const before = e.front;
+  deadline.retreat(e);
+  assert.equal(e.front, before - 6);
 });

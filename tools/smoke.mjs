@@ -113,10 +113,10 @@ try {
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();
-    for (let depth = 3; depth < 28; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
+    for (let depth = 3; depth < 30; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
     return [...kinds].sort();
   });
-  check(all.length >= 9, `entities met on levels 3-27: ${all.join(", ")}`);
+  check(all.length >= 10, `entities met on levels 3-29: ${all.join(", ")}`);
   const places = await page.evaluate(async () => {
     const ids = new Set();
     for (let depth = 0; depth < 16; depth++) ids.add(window.__noclip.preview(depth).archetype);
@@ -224,6 +224,23 @@ try {
     } else check(false, "a puddle has a dry cell next to it");
   }
 
+  // deadline's debut: push its front forward and the lights behind it die
+  const deadlineDepth = await page.evaluate(() => {
+    for (let depth = 10; depth < 30; depth++) if (window.__noclip.preview(depth).roster.includes("deadline")) return depth;
+    return null;
+  });
+  if (deadlineDepth !== null) {
+    await page.evaluate((d) => window.__noclip.goToDepth(d), deadlineDepth);
+    const lit = await page.evaluate(() => {
+      const e = window.__noclip.entities.find((x) => x.kind === "deadline");
+      e.front = 12;
+      return window.__noclip.litPanels;
+    });
+    await frames();
+    const after = await page.evaluate(() => window.__noclip.litPanels);
+    check(after < lit, `deadline puts the lights out behind it (${lit} -> ${after} lit panels)`);
+  } else check(false, "deadline turns up by level 29");
+
   const recordLine = await page.evaluate(() => document.getElementById("records").textContent);
   check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);
 
@@ -281,7 +298,7 @@ try {
   const voices = await page.evaluate(() => {
     const a = window.__noclip.audio;
     const played = [];
-    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop"]) {
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop", "tone"]) {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
@@ -297,7 +314,7 @@ try {
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 14, "every entity voice and player sound plays without an error");
+  check(voices === 15, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
