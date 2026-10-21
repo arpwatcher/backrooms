@@ -15,6 +15,7 @@ document is the target and the code is where things currently stand.
 | 6 | [Rule shifts](06-rule-shifts.md) | forty-two ways a level can change the rules |
 | 7 | [Tasks](07-tasks.md) | forty things a level can ask of you before it lets you leave |
 | 8 | [The famous ones, and homages](08-famous-entities.md) | thirty-two from Backrooms folklore and twelve homages with original names |
+| 9 | [The threat director and synergies](09-director.md) | budgets, debuts, variety, tension and mercy; thirty-two pairings |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
