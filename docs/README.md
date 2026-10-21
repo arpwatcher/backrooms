@@ -19,6 +19,7 @@ document is the target and the code is where things currently stand.
 | 10 | [The entity generator](10-entity-generator.md) | tables that make new entities, and thirty samples |
 | 11 | [Pacing and anti-fatigue](11-pacing.md) | keeping fear fresh within a level, a session, and many runs |
 | 12 | [Audio-visual bible](12-av-bible.md) | palette, light, fog, every entity's voice, mixing and UI |
+| 13 | [The first ten levels](13-first-ten-levels.md) | the composed opening: one new rule per level, each on the right stage |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
