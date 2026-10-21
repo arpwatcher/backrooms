@@ -19,7 +19,7 @@ co-op:       x (1 + 0.35 x (players - 1))                      [later]
 **Debut.** The first level where an entity becomes possible
 (its `minDepth`), it appears **alone**. You learn one rule at a time.
 Debuts: Hounds 1, Smiler 2, Still Life 3, Deathmoths 4, Partygoers 5,
-Facelings 6, Stilts 7.
+Facelings 6, Stilts 7, Hushbaby 11.
 
 **Variety.** Anything you met in the last three levels is less likely to come
 back. The weight drops the more recently you saw it.
@@ -96,7 +96,7 @@ in §4 and §8.
 | 19 | Howler + Hounds | two different ways to be heard | later |
 | 20 | Crawlspace + Deadline | you can't stop, but you have to look up | later |
 | 21 | Tannoy + Hushbaby | conflict - never paired | conflict |
-| 22 | Hounds + Hushbaby | conflict - never paired | conflict |
+| 22 | Hounds + Hushbaby | conflict - never paired below noclip | built (conflict) |
 | 23 | Facelings + Skin-stealer | every figure is suspect | later |
 | 24 | Smiler + Window | the window is the only light, and standing in front of it is the one thing you can't do | later |
 | 25 | Deathmoths + Scratchers | every light that turns on brings one thing and the other | later |

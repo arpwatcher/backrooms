@@ -60,7 +60,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 5 | **The Attendant** | the janitor in every slasher | follows wet footprints | later |
 | 6 | **Census Taker** | the "count" folklore and grim tallies | hunts whoever is alone when the count ends | later |
 | 7 | **The Guest** | the hotel that keeps you | if you sit, you stay | later |
-| 8 | **Hushbaby** | the crying in the wall | comes when it is quiet too long | later |
+| 8 | **Hushbaby** | the crying in the wall | comes when it is quiet too long | built |
 | 9 | **Intercom** | the friendly voice that lies | one in three things it says is false | later |
 | 10 | **Ushers** | the uniformed figures in liminal places | close in when you walk away from where they point | later |
 | 11 | **Deadline** | the advancing darkness | advances at a steady pace and never stops | later |

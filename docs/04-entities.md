@@ -86,15 +86,16 @@ sessions, and **[later]** is designed only.
   friend?
 - **Pairs:** Still Life (one wants your gaze, one punishes it).
 
-### 7. Hushbaby [later]
+### 7. Hushbaby [built]
 - **Class:** lurer. An original.
-- **Tell:** an infant crying from inside a wall, getting louder whenever you're
-  quiet for long.
-- **Rule:** it comes when it has been silent too long, so you have to keep
-  making noise.
-- **Counter:** hum, speak (V), or walk loudly. Any player sound resets it.
+- **Tell:** an infant crying from inside a wall. It starts after 8 s of
+  silence within 24 m and swells for 10 s before anything happens.
+- **Rule:** it comes when you have been quiet too long.
+- **Counter:** make any sound. Walking, or humming (hold V), settles it back
+  into the wall.
 - **Co-op:** easy with friends who talk, and miserable alone.
-- **Conflicts with:** Hounds. The director never pairs them.
+- **Conflicts with:** Hounds. The director never pairs them below the noclip
+  tier **[built]**.
 
 ### 8. Stilts [built]
 - **Class:** watcher. A homage to a tall thin figure in a suit.
