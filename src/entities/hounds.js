@@ -18,7 +18,7 @@ export const hounds = {
   hunting: (e) => e.state === "hunt",
   tell: "panting and claws ticking on damp carpet, getting louder",
   counter: "stop making noise - stand still or crouch-walk and they lose your trail",
-  rule: "they hunt by sound alone; anything louder than a crouch tells them where you are",
+  rule: "they hunt by sound alone - anything louder than a crouch gives you away",
   lore: "A pack that hunts the noise you make. They can barely see. You will hear them long before that matters.",
   speed: 4.2,
   wanderSpeed: 1.6,
