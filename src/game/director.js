@@ -23,6 +23,8 @@ export const SYNERGIES = [
   { pair: ["deathmoths", "smiler"], why: "the beam keeps the grin back and calls the swarm; only the panels are safe from both" },
   { pair: ["deathmoths", "hounds"], why: "lights off means moving blind, and blind means bumping, and bumping is loud" },
   { pair: ["deathmoths", "stillLife"], why: "you have to keep the mannequin in view with no light to see it by" },
+  { pair: ["partygoers", "stillLife"], why: "backing away from the mannequin, eyes on it, you can back straight into the party" },
+  { pair: ["partygoers", "hounds"], why: "the music covers the panting, so you only hear the pack once you are close to the party" },
 ];
 
 // pairs whose counters contradict outright; meeting both is unfair, not scary

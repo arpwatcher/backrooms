@@ -107,7 +107,7 @@ try {
     for (let depth = 3; depth < 16; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
     return [...kinds].sort();
   });
-  check(all.length >= 4, `entities met on levels 3-15: ${all.join(", ")}`);
+  check(all.length >= 5, `entities met on levels 3-15: ${all.join(", ")}`);
   const places = await page.evaluate(async () => {
     const ids = new Set();
     for (let depth = 0; depth < 16; depth++) ids.add(window.__noclip.preview(depth).archetype);

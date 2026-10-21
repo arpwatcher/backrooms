@@ -197,4 +197,71 @@ export function deathmothsMesh() {
   return group;
 }
 
-export const MESHES = { smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh };
+function partyFaceTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#e8cf3a";
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = "#1a1408";
+  g.fillRect(20, 16, 6, 12);
+  g.fillRect(38, 16, 6, 12);
+  g.lineWidth = 5;
+  g.strokeStyle = "#1a1408";
+  g.beginPath();
+  g.arc(32, 30, 18, 0.25 * Math.PI, 0.75 * Math.PI);
+  g.stroke();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+let partyFace = null;
+
+// a tall, soft, yellow guest with a printed-on face and a balloon on a string
+export function partygoersMesh() {
+  partyFace ??= partyFaceTexture();
+  const group = new THREE.Group();
+  const skin = new THREE.MeshLambertMaterial({ color: 0xd9be35 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.0, 4, 10), skin);
+  body.position.y = 1.0;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), [skin]);
+  head.position.y = 1.88;
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.17, 20), new THREE.MeshLambertMaterial({ map: partyFace }));
+  face.position.set(0, 1.9, 0.19);
+  const arm = (x) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 1.45, 0);
+    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.62, 3, 6), skin);
+    mesh.position.y = -0.36;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  };
+  const left = arm(-0.3);
+  const right = arm(0.3);
+  const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshLambertMaterial({ color: 0xc8202a, emissive: 0x300508 }));
+  balloon.scale.y = 1.2;
+  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.55, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
+  group.add(body, head, face, balloon, string);
+  group.userData.animate = (time, entity) => {
+    const sway = Math.sin(time * 1.7 + entity.id);
+    const chasing = entity.state === "chase";
+    body.rotation.x = chasing ? 0.25 : 0;
+    // waving at the new guest
+    left.rotation.z = entity.state === "greet" ? -2.4 + Math.sin(time * 10) * 0.4 : -0.1 + sway * 0.05;
+    right.rotation.z = 0.1 - sway * 0.05;
+    right.rotation.x = chasing ? -1.2 : 0;
+    const bob = Math.sin(time * 2.1 + entity.id) * 0.06;
+    balloon.position.set(0.45, 2.55 + bob, 0);
+    // from the hand up to the balloon
+    string.position.set(0.375, 1.55 + bob / 2, 0);
+    string.rotation.z = -0.1;
+    head.rotation.z = Math.sin(time * 0.6 + entity.id) * 0.15;
+    face.rotation.z = head.rotation.z;
+  };
+  return group;
+}
+
+export const MESHES = {
+  smiler: smilerMesh, hounds: houndMesh, stillLife: stillLifeMesh, deathmoths: deathmothsMesh, partygoers: partygoersMesh,
+};

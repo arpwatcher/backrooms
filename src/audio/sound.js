@@ -135,6 +135,27 @@ export function createAudio() {
         for (let i = 0; i < 9; i++) {
           burst({ duration: 0.025, frequency: 2200 + ((i * 431) % 1800), q: 1.2, type: "bandpass", level: 0.22 * volume, at: t + i * 0.045 + (i % 3) * 0.01, destination: dest });
         }
+      } else if (sound === "party") {
+        // a cheerful little tune through a wall, a beat too slow
+        const muffle = ctx.createBiquadFilter();
+        muffle.type = "lowpass";
+        muffle.frequency.value = 700;
+        muffle.connect(dest);
+        const notes = [523.25, 659.25, 783.99, 659.25];
+        notes.forEach((f, i) => {
+          const at = t + i * 0.42;
+          const osc = ctx.createOscillator();
+          osc.type = "triangle";
+          osc.frequency.value = f * 0.985;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, at);
+          g.gain.exponentialRampToValueAtTime(0.16 * volume, at + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.38);
+          osc.connect(g).connect(muffle);
+          osc.start(at);
+          osc.stop(at + 0.4);
+        });
+        for (let i = 0; i < 4; i++) burst({ duration: 0.09, frequency: 90, q: 1, type: "lowpass", level: 0.35 * volume, at: t + i * 0.42, destination: dest });
       } else if (sound === "scrape") {
         // something heavy dragged a little way over carpet and stopped
         burst({ duration: 0.45, frequency: 260, q: 3, type: "bandpass", level: 0.6 * volume, at: t, destination: dest });

@@ -10,6 +10,7 @@ import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
 import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
 import { deathmoths } from "../src/entities/deathmoths.js";
+import { partygoers, inRoom } from "../src/entities/partygoers.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -233,4 +234,53 @@ test("each hound in a pack wanders its own way", () => {
   }
   const spots = new Set(pack.map((h) => `${h.x.toFixed(2)},${h.z.toFixed(2)}`));
   assert.equal(spots.size, pack.length);
+});
+
+function partyArena() {
+  const layout = open(14, 14);
+  const room = { x: 9, y: 9, w: 3, h: 3 };
+  const rng = new Rng("party");
+  const guests = [0, 1].map((i) => spawn(partygoers, { x: 10, y: 10 }, { room, host: i === 0, rng: rng.fork(`g${i}`) }));
+  return { layout, room, guests };
+}
+
+test("partygoers stay at their party while you stay away, and you can hear it", () => {
+  const { layout, room, guests } = partyArena();
+  const sense = senseFor(layout, { x: c(3), z: c(3) });
+  const events = [];
+  for (let t = 0; t < 15; t += 0.05) {
+    sense.time = t;
+    for (const g of guests) events.push(...partygoers.update(g, sense, 0.05));
+  }
+  assert.ok(events.some((ev) => ev.sound === "party"));
+  assert.ok(!events.some((ev) => ev.type === "contact"));
+  for (const g of guests) assert.ok(inRoom(room, g.x, g.z, CELL), "still in the room");
+});
+
+test("walk into the party and they greet you, then come for you", () => {
+  const { layout, guests } = partyArena();
+  const sense = senseFor(layout, { x: c(9), z: c(9) });
+  const events = [];
+  for (let t = 0; t < 6; t += 0.05) {
+    sense.time = t;
+    for (const g of guests) events.push(...partygoers.update(g, sense, 0.05));
+    if (t < 0.5) assert.ok(guests.every((g) => g.state === "greet" || g.state === "mingle"));
+  }
+  assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+test("get far enough from the party and they give up and go back", () => {
+  const { layout, room, guests } = partyArena();
+  const sense = senseFor(layout, { x: c(9), z: c(9) });
+  for (let t = 0; t < 1.5; t += 0.05) {
+    sense.time = t;
+    for (const g of guests) partygoers.update(g, sense, 0.05);
+  }
+  sense.player.x = c(0);
+  sense.player.z = c(0);
+  for (let t = 1.5; t < 25; t += 0.05) {
+    sense.time = t;
+    for (const g of guests) partygoers.update(g, sense, 0.05);
+  }
+  for (const g of guests) assert.ok(inRoom(room, g.x, g.z, CELL), `back at the party (${g.state})`);
 });
