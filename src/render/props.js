@@ -86,6 +86,41 @@ export function breakerBox() {
   return group;
 }
 
+// a party balloon resting against the ceiling, string hanging down
+export function balloon(color = 0xc8202a) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.15 }));
+  body.scale.y = 1.2;
+  body.position.y = WALL_HEIGHT - 0.27;
+  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.3, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
+  string.position.y = WALL_HEIGHT - 1.15;
+  group.add(body, string);
+  return group;
+}
+
+// a sheet of paper taped to a wall, with something written on it
+export function paperSign(text) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#efe9d8";
+  ctx.fillRect(0, 0, 128, 96);
+  ctx.fillStyle = "#1c1810";
+  ctx.font = "bold 54px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 64, 50);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.32), new THREE.MeshLambertMaterial({ map: texture }));
+  sheet.position.set(0, 1.5, -0.06);
+  sheet.rotation.z = 0.04;
+  const group = new THREE.Group();
+  group.add(sheet);
+  return group;
+}
+
 // mounts something flat against the wall on one side of a cell
 export function placeOnWall(object, x, y, side) {
   object.position.set((x + 0.5 + side.dx * 0.44) * CELL, 0, (y + 0.5 + side.dy * 0.44) * CELL);

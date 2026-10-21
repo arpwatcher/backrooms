@@ -284,3 +284,18 @@ test("get far enough from the party and they give up and go back", () => {
   }
   for (const g of guests) assert.ok(inRoom(room, g.x, g.z, CELL), `back at the party (${g.state})`);
 });
+
+test("the party room is dressed: balloons inside it, a sign on one of its walls", () => {
+  const layout = generateLayout({ seed: "dressed" });
+  const guests = partygoers.spawn(layout, new Rng("dressed"));
+  const props = partygoers.props(guests, layout, new Rng("dressed-props"));
+  const room = guests[0].room;
+  const balloons = props.filter((p) => p.kind === "balloon");
+  assert.ok(balloons.length >= 4);
+  for (const b of balloons) assert.ok(inRoom(room, b.x, b.z), "balloon inside the room");
+  for (const s of props.filter((p) => p.kind === "sign")) {
+    assert.equal(s.text, "=)");
+    const y = s.side.dy === -1 ? s.y : s.y + 1;
+    assert.ok(layout.north[y][s.x], "taped to a real wall");
+  }
+});

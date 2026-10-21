@@ -49,6 +49,30 @@ export const partygoers = {
     );
   },
 
+  // what the room looks like before you ever see a guest: balloons against
+  // the ceiling, and a sign on one wall
+  props(guests, layout, rng) {
+    const room = guests[0]?.room;
+    if (!room) return [];
+    const props = [];
+    const count = rng.int(4, 7);
+    for (let i = 0; i < count; i++) {
+      props.push({
+        kind: "balloon",
+        x: (room.x + rng.range(0.2, room.w - 0.2)) * CELL,
+        z: (room.y + rng.range(0.2, room.h - 0.2)) * CELL,
+        color: rng.pick([0xc8202a, 0xd8c020, 0x2a6ac8, 0xd060a0]),
+      });
+    }
+    const walls = [];
+    for (let x = room.x; x < room.x + room.w; x++) {
+      if (layout.north[room.y][x]) walls.push({ x, y: room.y, side: { dx: 0, dy: -1 } });
+      if (layout.north[room.y + room.h][x]) walls.push({ x, y: room.y + room.h - 1, side: { dx: 0, dy: 1 } });
+    }
+    if (walls.length) props.push({ kind: "sign", text: "=)", ...rng.pick(walls) });
+    return props;
+  },
+
   update(e, sense, dt) {
     const cellSize = CELL;
     const events = [];

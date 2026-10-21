@@ -2,16 +2,28 @@
 // turning what they do into events for the game (sounds, contact, drains).
 
 import { MESHES } from "../render/entities.js";
+import { balloon, paperSign, placeOnWall } from "../render/props.js";
 import { cellAt } from "../entities/core.js";
 import { lineOfSight } from "../world/sight.js";
 import { darkCells } from "../world/layout.js";
 import { CELL } from "../world/units.js";
 
+function propMesh(prop) {
+  if (prop.kind === "balloon") {
+    const mesh = balloon(prop.color);
+    mesh.position.set(prop.x, 0, prop.z);
+    return mesh;
+  }
+  return placeOnWall(paperSign(prop.text), prop.x, prop.y, prop.side);
+}
+
 export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) {
   const dark = darkCells(layout);
   const entities = [];
   for (const def of roster) {
-    for (const entity of def.spawn(layout, rng.fork(def.id), { darkCells: dark })) {
+    const spawned = def.spawn(layout, rng.fork(def.id), { darkCells: dark });
+    for (const prop of def.props?.(spawned, layout, rng.fork(`${def.id}-props`)) ?? []) scene.add(propMesh(prop));
+    for (const entity of spawned) {
       entity.spawnCell = cellAt(entity.x, entity.z);
       entity.mesh = MESHES[def.id]();
       entity.mesh.position.set(entity.x, 0, entity.z);
