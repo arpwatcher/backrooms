@@ -252,6 +252,25 @@ export function createAudio() {
         for (let i = 0; i < 7; i++) burst({ duration: 0.05, frequency: 700 + (i % 3) * 200, q: 3, type: "bandpass", level: 0.25, at: t + i * 0.07, destination: dest });
       }
     },
+    // falling through the floor of the level: a rushing sweep downward
+    fall() {
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer;
+      src.loop = true;
+      const sweep = ctx.createBiquadFilter();
+      sweep.type = "bandpass";
+      sweep.Q.value = 2;
+      sweep.frequency.setValueAtTime(2400, t);
+      sweep.frequency.exponentialRampToValueAtTime(120, t + 1.2);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.3);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+      src.connect(sweep).connect(g).connect(master);
+      src.start(t);
+      src.stop(t + 1.35);
+    },
     // your own voice, humming under your breath while V is held
     voice(on) {
       if (on && !voiceNode) {

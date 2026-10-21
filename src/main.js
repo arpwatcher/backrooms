@@ -269,21 +269,27 @@ function lightAt(x, z) {
   return flashlight.on ? "dim" : "dark";
 }
 
-function nextLevel(time) {
+// walking into an exit: the world stretches away from you, you fall, and you
+// land somewhere else. (callbacks read the live game clock, not a copy)
+function nextLevel() {
   if (transitioning) return;
   transitioning = true;
+  fallingSince = time;
+  audio?.fall();
   fade.style.opacity = "1";
   setTimeout(() => {
     descend(run);
     if (recordDepth(records, tier.name, run.depth)) showRecords();
     loadLevel();
     fade.style.opacity = "0";
+    fallingSince = null;
     hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
     const notes = [level.shift?.note, level.task?.task.note].filter(Boolean);
     notes.forEach((note, i) => setTimeout(() => hud.say(note, 6, time), 4200 + i * 6500));
     transitioning = false;
   }, 950);
 }
+let fallingSince = null;
 
 loadLevel();
 
@@ -451,7 +457,7 @@ function frame() {
     if (level.task && !level.task.complete) {
       if (time > (level.lockedSaidAt ?? -10) + 4) hud.say("it won't open. the sign is dead.", 2.5, time);
       level.lockedSaidAt = time;
-    } else nextLevel(time);
+    } else nextLevel();
   }
 
   bob += moved.travelled * (player.running ? 5.2 : 6.4);
@@ -460,7 +466,7 @@ function frame() {
   camera.rotation.set(player.pitch, player.yaw, down ? 0.5 : 0);
   // low lucidity: the room breathes
   const unease = Math.max(0, 0.6 - player.lucidity);
-  camera.fov = 72 + Math.sin(time * 0.7) * unease * 9;
+  camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
   camera.updateProjectionMatrix();
   beam.intensity = beamStrength(flashlight, time) * 26;
 
