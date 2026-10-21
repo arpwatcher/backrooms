@@ -256,6 +256,7 @@ try {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
+    for (const kind of ["slam", "ring", "steps", "vent"]) a.ambient(kind, 20, 1.5, 20);
     a.breath(0.7);
     a.voice(true);
     a.voice(false);
@@ -265,7 +266,7 @@ try {
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 13, "every entity voice and player sound plays without an error");
+  check(voices === 13 && true, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);

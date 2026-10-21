@@ -212,6 +212,46 @@ export function createAudio() {
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
       }
     },
+    // the building: far-off things that make the place feel lived in, by
+    // someone. None of them mean anything. Probably.
+    ambient(kind, x, y, z) {
+      const dest = panner(x, y, z, 0.9);
+      const t = ctx.currentTime;
+      if (kind === "slam") {
+        burst({ duration: 0.35, frequency: 110, level: 0.9, at: t, destination: dest });
+        burst({ duration: 0.08, frequency: 900, q: 2, type: "bandpass", level: 0.35, at: t, destination: dest });
+      } else if (kind === "ring") {
+        // one ring of an old desk phone, then nothing
+        for (const at of [t, t + 0.05 * 7]) {
+          const osc = ctx.createOscillator();
+          osc.type = "square";
+          osc.frequency.value = 440;
+          const trem = ctx.createOscillator();
+          trem.frequency.value = 20;
+          const tg = ctx.createGain();
+          tg.gain.value = 0.5;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, at);
+          g.gain.exponentialRampToValueAtTime(0.05, at + 0.02);
+          g.gain.setValueAtTime(0.05, at + 0.3);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
+          trem.connect(tg).connect(g.gain);
+          const soft = ctx.createBiquadFilter();
+          soft.type = "lowpass";
+          soft.frequency.value = 1800;
+          osc.connect(soft).connect(g).connect(dest);
+          osc.start(at);
+          trem.start(at);
+          osc.stop(at + 0.36);
+          trem.stop(at + 0.36);
+        }
+      } else if (kind === "steps") {
+        // someone walking, a long way off, who stops when you do
+        for (let i = 0; i < 6; i++) burst({ duration: 0.12, frequency: 420, level: 0.4, at: t + i * 0.55, destination: dest });
+      } else if (kind === "vent") {
+        for (let i = 0; i < 7; i++) burst({ duration: 0.05, frequency: 700 + (i % 3) * 200, q: 3, type: "bandpass", level: 0.25, at: t + i * 0.07, destination: dest });
+      }
+    },
     // your own voice, humming under your breath while V is held
     voice(on) {
       if (on && !voiceNode) {

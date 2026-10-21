@@ -236,6 +236,17 @@ function applyShiftToLights(time) {
   }
 }
 
+// every level: now and then the building makes a sound somewhere far off
+const AMBIENT = ["slam", "ring", "steps", "vent"];
+function ambience(time) {
+  if (time < (level.ambientAt ??= time + 20 + Math.random() * 25)) return;
+  level.ambientAt = time + 30 + Math.random() * 45;
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 18 + Math.random() * 14;
+  const kind = AMBIENT[Math.floor(Math.random() * AMBIENT.length)];
+  audio?.ambient(kind, player.x + Math.cos(angle) * distance, 1.5, player.z + Math.sin(angle) * distance);
+}
+
 // a silent level: nothing lives here, but every so often you hear something
 // that would. Nothing comes. The player doesn't know that.
 const PHANTOMS = ["teeth", "panting", "scrape", "flutter", "party"];
@@ -407,6 +418,7 @@ function frame() {
     hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
   if (level.pace === "silence") phantomTells(time);
+  ambience(time);
   updatePhantoms(time);
   stepFlashlight(flashlight, dt);
   const presences = level.encounter.entities.map((e) => ({ distance: Math.hypot(e.x - player.x, e.z - player.z) }));
