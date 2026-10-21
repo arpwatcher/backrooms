@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
-import { almondWater, exitDoor, placeInCell } from "./render/props.js";
+import { almondWater, exitDoor, placeInCell, breakerBox, placeOnWall } from "./render/props.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
 import { createAudio } from "./audio/sound.js";
@@ -18,10 +18,10 @@ import { Rng } from "./core/rng.js";
 import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
 import { contact } from "./entities/core.js";
-import { ENTITIES } from "./entities/index.js";
-import { archetypeFor } from "./world/archetypes.js";
-import { pickShift, createTrail, stepTrail } from "./game/shifts.js";
-import { planLevel, TIERS, createTension, stepTension, noteContact } from "./game/director.js";
+import { createTrail, stepTrail } from "./game/shifts.js";
+import { placeTask, interact, doneCount } from "./game/tasks.js";
+import { TIERS, createTension, stepTension, noteContact } from "./game/director.js";
+import { levelPlan } from "./game/plan.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { checkpointFor } from "./game/run.js";
 
@@ -63,7 +63,6 @@ const codex = loadCodex();
 let marks = new Map();
 let tier = TIERS[params.get("tier")] ?? TIERS[readTier()] ?? TIERS.uneasy;
 let tension = createTension();
-const recent = [];
 let player = null;
 let level = null;
 let audio = null;
@@ -78,14 +77,9 @@ function loadLevel() {
     });
   }
   if (level?.encounter) level.encounter.dispose();
-  const plan = planLevel({ depth: run.depth, rng: new Rng(`${levelSeed(run)}/director`), pool: ENTITIES, tier, recent });
-  const roster = plan.roster;
-  recent.push(roster.map((d) => d.id));
-  if (recent.length > 3) recent.shift();
-  const archetype = archetypeFor(run.depth, (d) => new Rng(`${levelSeed(run, d)}/archetype`));
+  const { director: plan, roster, archetype, shift, task: picked } = levelPlan(run.seed, run.depth, tier);
   const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
   const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
-  const shift = pickShift(run.depth, new Rng(`${levelSeed(run)}/shift`));
   const effects = shift?.effects ?? {};
   const world = buildWorld(scene, layout, { ...archetype.look, ...effects.look });
   const paths = createPathfinder(layout);
@@ -106,7 +100,15 @@ function loadLevel() {
   player.lucidity = lucidity;
   marks = new Map();
   tension = createTension();
-  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, trail: createTrail() };
+  const task = picked ? placeTask(picked, layout, new Rng(`${levelSeed(run)}/task-place`)) : null;
+  if (task) {
+    for (const target of task.targets) {
+      target.mesh = placeOnWall(breakerBox(), target.x, target.y, target.side);
+      world.group.add(target.mesh);
+    }
+    for (const exit of exits) exit.door.userData.setLocked(true);
+  }
+  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
@@ -135,6 +137,24 @@ function onContact(entity, time) {
   level.encounter.retreat(entity, time);
   if (recordSurvival(codex, entity.kind)) hud.say(`codex: ${entity.def.name} - ${entity.def.counter}`, 7, time);
   else hud.say(`${entity.def.name} marked you. it won't let go next time.`, 5, time);
+}
+
+function useTask(time) {
+  const { task, world } = level;
+  const target = interact(task, (t) => t.mesh.position.distanceTo(new THREE.Vector3(player.x, 0, player.z)) < 1.3);
+  if (!target) return;
+  target.mesh.userData.setOn(true);
+  audio?.clunk(target.mesh.position.x, 1.4, target.mesh.position.z);
+  // the breaker brings its corner of the floor back
+  world.panels.forEach((panel) => {
+    if (panel.state === "dead" && Math.hypot(panel.x - target.x, panel.y - target.y) < 4) {
+      panel.state = "on";
+      panel.level = 1;
+      panel.mesh.material.color.setHex(panel.on);
+    }
+  });
+  hud.say(task.task.progress(doneCount(task), task.targets.length), 3, time);
+  if (task.complete) for (const exit of level.exits) exit.door.userData.setLocked(false);
 }
 
 const lookDirection = new THREE.Vector3();
@@ -185,7 +205,8 @@ function nextLevel(time) {
     loadLevel();
     fade.style.opacity = "0";
     hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
-    if (level.shift) setTimeout(() => hud.say(level.shift.note, 6, clock.elapsedTime), 4200);
+    const notes = [level.shift?.note, level.task?.task.note].filter(Boolean);
+    notes.forEach((note, i) => setTimeout(() => hud.say(note, 6, clock.elapsedTime), 4200 + i * 6500));
     transitioning = false;
   }, 950);
 }
@@ -294,8 +315,13 @@ function frame() {
       hud.say("almond water", 1.5, time);
     }
   }
+  if (frameInput.pressed.has("KeyE") && level.task) useTask(time);
   for (const exit of level.exits) {
-    if (Math.hypot(exit.door.position.x - player.x, exit.door.position.z - player.z) < 0.7) nextLevel(time);
+    if (Math.hypot(exit.door.position.x - player.x, exit.door.position.z - player.z) >= 0.7) continue;
+    if (level.task && !level.task.complete) {
+      if (time > (level.lockedSaidAt ?? -10) + 4) hud.say("it won't open. the sign is dead.", 2.5, time);
+      level.lockedSaidAt = time;
+    } else nextLevel(time);
   }
 
   bob += moved.travelled * (player.running ? 5.2 : 6.4);
@@ -350,7 +376,20 @@ window.__noclip = {
   get tension() { return tension; },
   get plan() { return level.plan; },
   get archetype() { return level.archetype.id; },
+  // what a level will be, without building it
+  preview(depth) {
+    const p = levelPlan(run.seed, depth, tier);
+    return { archetype: p.archetype.id, roster: p.roster.map((d) => d.id), shift: p.shift?.id ?? null, task: p.task?.id ?? null };
+  },
   get shift() { return level.shift?.id ?? null; },
+  get task() {
+    const t = level.task;
+    return t && { id: t.task.id, complete: t.complete, targets: t.targets.map((x) => ({ x: x.mesh.position.x, z: x.mesh.position.z, done: x.done })) };
+  },
+  stand(x, z) {
+    player.x = x;
+    player.z = z;
+  },
   get tier() { return tier.name; },
   goToDepth(depth) {
     run.depth = depth;

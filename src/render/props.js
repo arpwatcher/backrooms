@@ -52,11 +52,45 @@ export function exitDoor(label = "EXIT", color = "#d23a2a") {
   const glow = new THREE.PointLight(0xff3020, 0.6, 3, 2);
   glow.position.set(0, 2.3, 0.4);
   group.add(left, right, top, dark, sign, glow);
+  // a locked exit: the sign and its glow are dead until the task is done
+  group.userData.setLocked = (locked) => {
+    sign.material.color.setHex(locked ? 0x2a2420 : 0xffffff);
+    glow.intensity = locked ? 0 : 0.6;
+  };
   // a back face so it reads from both sides
   const back = dark.clone();
   back.rotation.y = Math.PI;
   group.add(back);
   return group;
+}
+
+// a grey breaker box on a wall, lever down until you throw it
+export function breakerBox() {
+  const group = new THREE.Group();
+  const metal = new THREE.MeshLambertMaterial({ color: 0x7c7f78 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.56, 0.12), metal);
+  box.position.y = 1.35;
+  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.05), new THREE.MeshLambertMaterial({ color: 0x2b2b2b }));
+  const pivot = new THREE.Group();
+  pivot.position.set(0, 1.35, 0.08);
+  lever.position.y = 0.09;
+  pivot.add(lever);
+  pivot.rotation.x = Math.PI * 0.75;
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5a1010 }));
+  lamp.position.set(0.14, 1.56, 0.07);
+  group.add(box, pivot, lamp);
+  group.userData.setOn = (on) => {
+    pivot.rotation.x = on ? Math.PI * 0.25 : Math.PI * 0.75;
+    lamp.material.color.setHex(on ? 0x40ff60 : 0x5a1010);
+  };
+  return group;
+}
+
+// mounts something flat against the wall on one side of a cell
+export function placeOnWall(object, x, y, side) {
+  object.position.set((x + 0.5 + side.dx * 0.44) * CELL, 0, (y + 0.5 + side.dy * 0.44) * CELL);
+  object.rotation.y = Math.atan2(-side.dx, -side.dy);
+  return object;
 }
 
 export function placeInCell(object, x, y, rotation = 0) {

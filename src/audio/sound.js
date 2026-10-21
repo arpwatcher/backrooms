@@ -141,6 +141,23 @@ export function createAudio() {
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
       }
     },
+    // a breaker thrown: a heavy clunk, then the buzz of power coming back
+    clunk(x, y, z) {
+      const dest = panner(x, y, z, 1.2);
+      const t = ctx.currentTime;
+      burst({ duration: 0.12, frequency: 180, q: 2, type: "bandpass", level: 0.9, at: t, destination: dest });
+      burst({ duration: 0.04, frequency: 2400, q: 4, type: "bandpass", level: 0.4, at: t, destination: dest });
+      const buzz = ctx.createOscillator();
+      buzz.type = "sawtooth";
+      buzz.frequency.value = 120;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + 0.15);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+      buzz.connect(g).connect(dest);
+      buzz.start(t + 0.15);
+      buzz.stop(t + 1.7);
+    },
     // the knock-down: a low thump and a ring in the ears
     hit() {
       const t = ctx.currentTime;

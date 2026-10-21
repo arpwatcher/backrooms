@@ -34,6 +34,12 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
+// headless rendering is slow (a few frames a second), so wait on frames, not time
+async function frames(n = 2) {
+  const start = await page.evaluate(() => window.__noclip.frames);
+  await page.waitForFunction((target) => window.__noclip.frames >= target, start + n, { timeout: 20000 });
+}
+
 let failed = false;
 function check(ok, message) {
   console.log(`${ok ? "ok  " : "FAIL"} ${message}`);
@@ -98,30 +104,20 @@ try {
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();
-    for (let depth = 3; depth < 16 && kinds.size < 4; depth++) {
-      window.__noclip.goToDepth(depth);
-      await new Promise((r) => setTimeout(r, 120));
-      for (const e of window.__noclip.entities) kinds.add(e.kind);
-    }
-    window.__noclip.goToDepth(3);
+    for (let depth = 3; depth < 16; depth++) for (const id of window.__noclip.preview(depth).roster) kinds.add(id);
     return [...kinds].sort();
   });
   check(all.length >= 4, `entities met on levels 3-15: ${all.join(", ")}`);
   const places = await page.evaluate(async () => {
     const ids = new Set();
-    for (let depth = 0; depth < 16; depth++) {
-      window.__noclip.goToDepth(depth);
-      ids.add(window.__noclip.archetype);
-    }
-    window.__noclip.goToDepth(3);
+    for (let depth = 0; depth < 16; depth++) ids.add(window.__noclip.preview(depth).archetype);
     return [...ids];
   });
   check(places.length >= 4, `levels 0-15 visit different kinds of place: ${places.join(", ")}`);
   const shifts = await page.evaluate(() => {
     const found = {};
     for (let depth = 0; depth < 40; depth++) {
-      window.__noclip.goToDepth(depth);
-      const id = window.__noclip.shift;
+      const id = window.__noclip.preview(depth).shift;
       if (id && !(id in found)) found[id] = depth;
     }
     return found;
@@ -130,21 +126,43 @@ try {
   if ("flat" in shifts) {
     await page.evaluate((d) => window.__noclip.goToDepth(d), shifts.flat);
     await page.keyboard.press("KeyF");
-    await page.waitForTimeout(300);
+    await frames();
     check(!(await page.evaluate(() => window.__noclip.flashlight.on)), "on a dead-battery level F does nothing");
   }
   if ("soaked" in shifts) {
     await page.evaluate((d) => window.__noclip.goToDepth(d), shifts.soaked);
     await page.keyboard.down("ShiftLeft");
     await page.keyboard.down("KeyW");
-    await page.waitForTimeout(600);
+    await frames(3);
     const running = await page.evaluate(() => window.__noclip.player.running);
     await page.keyboard.up("KeyW");
     await page.keyboard.up("ShiftLeft");
     check(!running, "on a soaked level you cannot run");
   }
-  await page.evaluate(() => window.__noclip.goToDepth(3));
+  const taskDepth = await page.evaluate(() => {
+    for (let depth = 2; depth < 30; depth++) if (window.__noclip.preview(depth).task) return depth;
+    return null;
+  });
+  if (taskDepth !== null) await page.evaluate((d) => window.__noclip.goToDepth(d), taskDepth);
+  check(taskDepth !== null, `a level with a task turns up (level ${taskDepth})`);
+  if (taskDepth !== null) {
+    await page.evaluate(() => window.__noclip.teleportToExit());
+    await page.waitForTimeout(1500);
+    check((await page.evaluate(() => window.__noclip.run.depth)) === taskDepth, "its exit stays shut until the task is done");
+    const targets = await page.evaluate(() => window.__noclip.task.targets);
+    for (const t of targets) {
+      await page.evaluate(([x, z]) => window.__noclip.stand(x, z), [t.x, t.z]);
+      await frames();
+      await page.keyboard.press("KeyE");
+      await frames();
+    }
+    check(await page.evaluate(() => window.__noclip.task.complete), `E at each of the ${targets.length} breakers restores power`);
+    await page.evaluate(() => window.__noclip.teleportToExit());
+    await page.waitForFunction((d) => window.__noclip.run.depth === d + 1, taskDepth, { timeout: 5000 }).catch(() => {});
+    check((await page.evaluate(() => window.__noclip.run.depth)) === taskDepth + 1, "and then the exit lets you through");
+  }
 
+  await page.evaluate(() => window.__noclip.goToDepth(3));
   await page.evaluate(() => window.__noclip.touch(0));
   const firstTouch = await page.evaluate(() => ({
     down: window.__noclip.player.downUntil > 0, dead: window.__noclip.dead, marks: [...window.__noclip.marks()],
