@@ -25,6 +25,8 @@ import { TIERS, createTension, stepTension, noteContact } from "./game/director.
 import { levelPlan } from "./game/plan.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { createCodexScreen } from "./ui/codex.js";
+import { createPauseScreen } from "./ui/pause.js";
+import { loadSettings, saveSettings } from "./game/settings.js";
 import { checkpointFor } from "./game/run.js";
 
 const params = new URLSearchParams(location.search);
@@ -227,7 +229,7 @@ function nextLevel(time) {
     fade.style.opacity = "0";
     hud.say(`level ${run.depth} - ${level.archetype.name}`, 3.5, time + 1);
     const notes = [level.shift?.note, level.task?.task.note].filter(Boolean);
-    notes.forEach((note, i) => setTimeout(() => hud.say(note, 6, clock.elapsedTime), 4200 + i * 6500));
+    notes.forEach((note, i) => setTimeout(() => hud.say(note, 6, time), 4200 + i * 6500));
     transitioning = false;
   }, 950);
 }
@@ -269,10 +271,33 @@ document.getElementById("enter").addEventListener("click", () => {
   // browsers only allow sound after a click, so it starts here
   audio ??= createAudio();
   audio.resume();
+  audio.setVolume(settings.volume);
   audio.setHum(1, 2);
 });
 canvas.addEventListener("click", () => {
-  if (title.classList.contains("hidden") && !input.locked) input.lock();
+  if (title.classList.contains("hidden") && !input.locked && !pause.shown) input.lock();
+});
+
+let settings = loadSettings();
+const pause = createPauseScreen({
+  settings,
+  onChange(next) {
+    settings = next;
+    saveSettings(settings);
+    audio?.setVolume(settings.volume);
+  },
+  onResume() {
+    pause.hide();
+    input.lock();
+    audio?.ctx.resume();
+  },
+  onCodex: () => codexScreen.open(),
+});
+// letting go of the mouse mid-level pauses the game
+document.addEventListener("pointerlockchange", () => {
+  if (input.locked || !title.classList.contains("hidden") || screens.dead || smoke) return;
+  pause.show();
+  audio?.ctx.suspend();
 });
 if (smoke) title.classList.add("hidden");
 
@@ -285,10 +310,22 @@ window.addEventListener("resize", () => {
 const clock = new THREE.Clock();
 let frames = 0;
 let bob = 0;
+// game time only runs while you're playing, so pausing never lets a timer
+// run out behind your back
+let time = 0;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.1);
-  const time = clock.elapsedTime;
+  const real = Math.min(clock.getDelta(), 0.1);
+  if (pause.shown || codexScreen.isOpen) {
+    input.read();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+    return;
+  }
+  const dt = real;
+  time += dt;
   const frameInput = input.read();
+  frameInput.lookX *= settings.sensitivity;
+  frameInput.lookY *= settings.sensitivity;
   if (frameInput.pressed.has("KeyF")) {
     if (level.effects.noFlashlight) hud.say("click. nothing.", 1.5, time);
     else toggleFlashlight(flashlight);
@@ -393,12 +430,13 @@ window.__noclip = {
   get layout() { return level.layout; },
   get player() { return player; },
   get frames() { return frames; },
+  get time() { return time; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,
   // test hooks
   touch(index) {
-    onContact(level.encounter.entities[index], clock.elapsedTime);
+    onContact(level.encounter.entities[index], time);
   },
   get dead() { return screens.dead; },
   get tension() { return tension; },

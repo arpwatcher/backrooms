@@ -194,6 +194,23 @@ try {
   const woke = await page.evaluate(() => ({ dead: window.__noclip.dead, depth: window.__noclip.run.depth }));
   check(!woke.dead && woke.depth === 0, `waking up goes back to the checkpoint (level ${woke.depth})`);
 
+  // the pause screen: it exists, its settings stick, and the clock stops under it
+  const paused = await page.evaluate(async () => {
+    const screen = document.getElementById("pause");
+    screen.classList.remove("hidden");
+    const slider = document.getElementById("set-volume");
+    slider.value = "0.3";
+    slider.dispatchEvent(new Event("input"));
+    await new Promise((r) => requestAnimationFrame(r));
+    const t = window.__noclip.time;
+    const frames = window.__noclip.frames;
+    await new Promise((r) => setTimeout(r, 1500));
+    const held = window.__noclip.time === t;
+    document.getElementById("pause-resume").click();
+    return { held, saved: JSON.parse(localStorage.getItem("noclip.settings.v1")).volume, frames };
+  });
+  check(paused.held && paused.saved === 0.3, "pausing freezes the level and settings are saved");
+
   const cards = await page.evaluate(() => {
     document.getElementById("codex-open").click();
     const n = document.querySelectorAll("#codex .card").length;

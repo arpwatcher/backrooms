@@ -175,6 +175,9 @@ export function createAudio() {
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
       }
     },
+    setVolume(volume) {
+      master.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
+    },
     // paper peeled off a wall
     rustle(x, y, z) {
       const dest = panner(x, y, z, 1);
