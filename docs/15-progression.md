@@ -8,7 +8,7 @@ ways: you know more, and you get deeper.
 | What | Where | Status |
 |------|-------|--------|
 | **The codex**: every entity you've survived, in full; the rest only by their tell | this browser (`localStorage`) | built |
-| **Your deepest level** per tier | this browser | next |
+| **Your deepest level** per tier | this browser | built |
 | **Seeds you liked**, to replay or share | URL `?seed=` | built (URL); a saved list is later |
 | **Settings** (sensitivity, volume) | this browser | built |
 
@@ -25,19 +25,19 @@ with an empty hand, so knowledge is the only thing you keep.
 - **Marks** reset each level. An entity that touched you on level 6 has
   forgotten you on level 7.
 
-## Milestones [next]
+## Milestones [built]
 
 Shown on the title screen, quietly, as lines in a list rather than
 achievements with sound effects:
 
 - *survived your first contact*
-- *finished level 9 without being touched*
-- *met every entity*
+- *got through level 9 without being touched*
+- *met everything that lives down here*
 - *reached level 25*
-- *restored power with a Smiler on the level*
-- *walked past a party*
-- *completed a silent level* (you'll only find out afterward that it was
-  one)
+- *restored power with a smiler on the level*
+- *walked past a party without going in*
+- *got through a level where nothing lived (you heard it anyway)*: you only
+  find out afterward that it was one
 
 ## The long tail [later]
 

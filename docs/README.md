@@ -22,6 +22,7 @@ document is the target and the code is where things currently stand.
 | 13 | [The first ten levels](13-first-ten-levels.md) | the composed opening: one new rule per level, each on the right stage |
 | 14 | [Scary, not punishing](14-fairness.md) | twelve promises to the player and the tests that keep them; the tiers |
 | 15 | [Progression](15-progression.md) | what you keep between runs (knowledge), and what you don't |
+| 16 | [Co-op: the technical plan](16-coop-tech.md) | host-authoritative peer-to-peer, what goes over the wire, and the rollout |
 
 Status markers used throughout: **[built]** means it is in the browser build,
 **[next]** means it is planned for the next few sessions, and **[later]** means
