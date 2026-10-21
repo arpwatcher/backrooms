@@ -15,7 +15,8 @@ const STAMINA_REGEN = 0.14;
 
 // noise is what most entities hunt by: running is loud, crouching is
 // nearly silent, standing still is silent
-export const NOISE = { still: 0, crouch: 0.15, walk: 0.45, run: 1 };
+// hum: holding V, humming under your breath - about as loud as walking quietly
+export const NOISE = { still: 0, crouch: 0.15, hum: 0.3, walk: 0.45, run: 1 };
 
 export function createPlayer(x, z, yaw = 0) {
   return {
@@ -66,7 +67,9 @@ export function stepPlayer(player, input, dt, layout) {
   const target = player.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
   player.height += (target - player.height) * Math.min(1, dt * 10);
 
-  player.noise = travelled < 1e-4 ? NOISE.still : player.crouching ? NOISE.crouch : player.running ? NOISE.run : NOISE.walk;
+  const steps = travelled < 1e-4 ? NOISE.still : player.crouching ? NOISE.crouch : player.running ? NOISE.run : NOISE.walk;
+  player.humming = Boolean(input.hum);
+  player.noise = Math.max(steps, player.humming ? NOISE.hum : 0);
   player.stride += travelled;
   const strideLength = player.running ? 1.6 : 1.15;
   let stepped = false;

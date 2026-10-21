@@ -93,3 +93,15 @@ test("footsteps are counted by distance, faster when running", () => {
   for (let i = 0; i < 20; i++) if (stepPlayer(player, { forward: true }, 0.1, layout).stepped) steps++;
   assert.equal(steps, Math.floor((WALK_SPEED * 2) / 1.15));
 });
+
+test("humming (V) makes a little noise even standing still", () => {
+  const layout = generateLayout({ seed: "hum", width: 6, height: 6, wallRuns: 0, rooms: 0, pillarChance: 0 });
+  const player = createPlayer(3, 3);
+  stepPlayer(player, { hum: true }, 0.1, layout);
+  assert.equal(player.noise, NOISE.hum);
+  assert.ok(player.humming);
+  stepPlayer(player, {}, 0.1, layout);
+  assert.equal(player.noise, NOISE.still);
+  stepPlayer(player, { hum: true, forward: true, run: true }, 0.1, layout);
+  assert.equal(player.noise, NOISE.run, "running drowns the hum out");
+});

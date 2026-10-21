@@ -8,6 +8,7 @@ const KEYS = {
   KeyD: "right", ArrowRight: "right",
   ShiftLeft: "run", ShiftRight: "run",
   KeyC: "crouch", ControlLeft: "crouch",
+  KeyV: "hum",
 };
 
 export function createInput(canvas) {
