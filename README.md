@@ -13,12 +13,14 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
 - **Generated levels.** Six kinds of place (lobby, pillar hall, cubicle
   maze, dim wing, damp floor, overtime), each from a seed. The same seed
   always gives the same run.
-- **Five entities, one rule each.**
+- **Seven entities, one rule each.**
   - Smiler: it only moves in the dark.
   - Hounds: they hunt by sound.
   - Still Life: it only moves when nobody is looking.
   - Deathmoths: they fly to the brightest light.
   - Partygoers: they only come for you if you go to the party.
+  - Facelings: harmless unless you stare at their blank faces.
+  - Stilts: it sees anything standing, and nothing crouched.
 - **A threat director.**
   - Something new is always met alone first.
   - Pairs that make each other worse turn up together.

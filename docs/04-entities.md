@@ -54,7 +54,7 @@ sessions, and **[later]** is designed only.
 - **Pairs:** Smiler (both want your eyes), Hounds (back away slowly and
   quietly).
 
-### 4. Deathmoths [next]
+### 4. Deathmoths [built]
 - **Class:** stalker, swarm. A famous one.
 - **Tell:** a papery fluttering that thickens; moth dust drifts through the
   beam.
@@ -65,7 +65,7 @@ sessions, and **[later]** is designed only.
 - **Pairs:** Smiler is the hard pair: light keeps the Smiler off and draws
   the moths. It is allowed only on levels with working panels.
 
-### 5. Partygoers [next]
+### 5. Partygoers [built]
 - **Class:** lurer. A famous one.
 - **Tell:** distant party music, a balloon drifting at the end of a hall,
   and a "=)" sign taped to a wall.
@@ -76,7 +76,7 @@ sessions, and **[later]** is designed only.
   hears friends' voices coming from the party room.
 - **Pairs:** the Intercom (it gives directions that lead to the party).
 
-### 6. Facelings [next]
+### 6. Facelings [built]
 - **Class:** watcher. A famous one.
 - **Tell:** a person standing too still, at the edge of a room, with no face.
 - **Rule:** they do nothing unless you look them in the face for more than
@@ -96,17 +96,19 @@ sessions, and **[later]** is designed only.
 - **Co-op:** easy with friends who talk, and miserable alone.
 - **Conflicts with:** Hounds. The director never pairs them.
 
-### 8. Stilts [later]
+### 8. Stilts [built]
 - **Class:** watcher. A homage to a tall thin figure in a suit.
-- **Tell:** a long shadow over the top of the walls, and a slow creak of
-  joints.
-- **Rule:** it sees anything standing above waist height and nothing below
+- **Tell:** ceiling tiles rattling where its head drags along them, and a
+  creak of long joints, every few seconds within 26 m.
+- **Rule:** it sees anything standing above waist height, and nothing below
   it.
-- **Counter:** crouch while it looks your way. Its head turns slowly, so you
-  have time.
+- **Counter:** crouch when its head turns your way. It sweeps slowly, and
+  when it does see you it stares for 1.5 s before it strides, which gives you
+  time to get down.
 - **Co-op:** players can draw its gaze by standing on purpose.
-- **Pairs:** Hounds (crouching is quiet, so this is a kind pair) and Deadline
-  (crouching is slow, so this is a cruel one).
+- **Pairs:** Hounds (crouching is quiet, so this is a kind pair), Still Life
+  (crouch for one, eyes up for the other), and Deadline (crouching is slow, so
+  this is a cruel one).
 
 ### 9. The Attendant [later]
 - **Class:** hazard. An original.

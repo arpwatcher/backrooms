@@ -8,7 +8,7 @@ keep you scared. Everything in this chapter marked **[built]** is in
 ## Choosing who lives here [built]
 
 **Budget.** Each entity has a threat cost (Facelings 0.75, Smiler 1, Moths 1,
-Partygoers 1, Still Life 1.25, Hounds 1.5). A level's budget is
+Partygoers 1, Still Life 1.25, Stilts 1.25, Hounds 1.5). A level's budget is
 
 ```
 budget(depth) = min(1 + 0.5 x (depth - 1), 5) x tier scale     (0 on level 0)
@@ -19,7 +19,7 @@ co-op:       x (1 + 0.35 x (players - 1))                      [later]
 **Debut.** The first level where an entity becomes possible
 (its `minDepth`), it appears **alone**. You learn one rule at a time.
 Debuts: Hounds 1, Smiler 2, Still Life 3, Deathmoths 4, Partygoers 5,
-Facelings 6.
+Facelings 6, Stilts 7.
 
 **Variety.** Anything you met in the last three levels is less likely to come
 back. The weight drops the more recently you saw it.
@@ -85,7 +85,7 @@ in §4 and §8.
 | 8 | Partygoers + Hounds | the music covers the panting near the party | built |
 | 9 | Facelings + Still Life | one punishes your gaze and the other needs it - which figure is the mannequin? | built |
 | 10 | Facelings + Smiler | the beam you need for the grin lands on blank faces too | built |
-| 11 | Hounds + Stilts | crouching hides you from both, but is slow | later |
+| 11 | Hounds + Stilts | crouching hides you from both, but is slow | built |
 | 12 | Deadline + Still Life | you have to keep moving forward and keep looking back | later |
 | 13 | Deadline + Stilts | crouching is slow, and the dark is coming | later |
 | 14 | Attendant + Hounds | going around wet patches is the long, loud way | later |

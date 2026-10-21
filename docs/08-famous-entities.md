@@ -20,7 +20,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 2 | **Hounds** | hunt by sound | panting and claws on carpet | crouch or freeze | built |
 | 3 | **Deathmoths** | fly to the brightest light | papery flutter, dust in the beam | light off, or stand under a panel | built |
 | 4 | **Partygoers** | only chase guests of the party | music through walls, balloons, a =) sign | never enter the room the music is in | built |
-| 5 | **Facelings** | harmless unless you stare at their blank face | a too-still person with no face | don't look for more than 3 s | next |
+| 5 | **Facelings** | harmless unless you stare at their blank face | a too-still person with no face | don't look for more than 3 s | built |
 | 6 | **Skin-stealers** | can only copy someone seen alone | a survivor walking slightly wrong | stay in pairs and ask a question only your friend can answer | later |
 | 7 | **Howlers** | charge in a line at the last scream | a long howl from the direction it will come | sidestep, since it cannot turn | later |
 | 8 | **Clumps** | faster the more people stand together | many wet footsteps and breathing at once | split up | later |
@@ -54,7 +54,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | # | Ours | Nod to | Our rule | Status |
 |---|------|--------|----------|--------|
 | 1 | **Still Life** | the statue that moves when unobserved | moves only while nobody looks, and low lucidity makes you blink | built |
-| 2 | **Stilts** | the tall thin man in a suit | sees only what stands above waist height | later |
+| 2 | **Stilts** | the tall thin man in a suit | sees only what stands above waist height | built |
 | 3 | **Tannoy** | the siren-headed giant | walks to any sound it can repeat back to you | later |
 | 4 | **Crawlspace** | the pale long-limbed night thing | drops from missing ceiling tiles | later |
 | 5 | **The Attendant** | the janitor in every slasher | follows wet footprints | later |
