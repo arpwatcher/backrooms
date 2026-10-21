@@ -5,7 +5,7 @@ import { createPathfinder } from "../src/world/path.js";
 import { lineOfSight } from "../src/world/sight.js";
 import { CELL } from "../src/world/units.js";
 import { Rng } from "../src/core/rng.js";
-import { contact, spawn } from "../src/entities/core.js";
+import { contact, spawn, nearestPlayer } from "../src/entities/core.js";
 import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
 import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
@@ -477,4 +477,24 @@ test("stand still long enough and the dark reaches you; the first touch pushes i
   const before = e.front;
   deadline.retreat(e);
   assert.equal(e.front, before - 6);
+});
+
+test("with several players, each entity deals with the nearest one", () => {
+  const a = { id: "a", x: 0, z: 0 };
+  const b = { id: "b", x: 10, z: 0 };
+  assert.equal(nearestPlayer([a, b], { x: 2, z: 1 }), a);
+  assert.equal(nearestPlayer([a, b], { x: 8, z: -1 }), b);
+  assert.equal(nearestPlayer([a], { x: 99, z: 99 }), a);
+});
+
+test("two players, one pack: the hounds go for whichever runner is closer", () => {
+  const layout = open(14, 4);
+  const pack = [spawn(hounds, { x: 12, y: 1 }, { rng: new Rng("h1") })];
+  const near = { x: c(9), z: c(1), noise: 1, running: true, crouching: false };
+  const far = { x: c(1), z: c(1), noise: 1, running: true, crouching: false };
+  const sense = senseFor(layout, near);
+  sense.player = nearestPlayer([far, near], pack[0]);
+  assert.equal(sense.player, near);
+  const events = run(hounds, pack[0], sense, 4);
+  assert.ok(events.some((ev) => ev.type === "contact"));
 });

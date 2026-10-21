@@ -68,3 +68,17 @@ export function contact(marks, kind, allowed = 2) {
   marks.set(kind, count);
   return { fatal: count >= allowed, first: count === 1 };
 }
+
+// with more than one player, each entity deals with whoever is nearest
+export function nearestPlayer(players, entity) {
+  let best = players[0];
+  let bestD = Infinity;
+  for (const p of players) {
+    const d = Math.hypot(p.x - entity.x, p.z - entity.z);
+    if (d < bestD) {
+      best = p;
+      bestD = d;
+    }
+  }
+  return best;
+}

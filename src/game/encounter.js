@@ -3,7 +3,7 @@
 
 import { MESHES } from "../render/entities.js";
 import { balloon, paperSign, placeOnWall } from "../render/props.js";
-import { cellAt } from "../entities/core.js";
+import { cellAt, nearestPlayer } from "../entities/core.js";
 import { lineOfSight } from "../world/sight.js";
 import { darkCells } from "../world/layout.js";
 import { CELL } from "../world/units.js";
@@ -38,7 +38,9 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) 
       const events = [];
       for (const entity of entities) {
         if ((entity.stunnedUntil ?? 0) > sense.time) continue;
-        for (const event of entity.def.update(entity, sense, dt)) events.push({ ...event, entity });
+        // co-op ready: every entity deals with its nearest player
+        const player = nearestPlayer(sense.players, entity);
+        for (const event of entity.def.update(entity, { ...sense, player }, dt)) events.push({ ...event, entity, player });
       }
       for (const entity of entities) {
         entity.mesh.position.set(entity.x, 0, entity.z);
@@ -82,6 +84,7 @@ export function makeSense({ player, flashlight, camera, layout, paths, lightAt, 
   const forward = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
   return {
     player,
+    players: [player],
     paths,
     time,
     darkCells: dark,
