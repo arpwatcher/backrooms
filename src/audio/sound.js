@@ -175,6 +175,12 @@ export function createAudio() {
         burst({ duration: 0.3, frequency: 1400, q: 2, type: "bandpass", level: 0.18 * volume, at: t + 0.05, destination: dest });
       }
     },
+    // paper peeled off a wall
+    rustle(x, y, z) {
+      const dest = panner(x, y, z, 1);
+      const t = ctx.currentTime;
+      for (let i = 0; i < 3; i++) burst({ duration: 0.07, frequency: 3200 + i * 500, q: 0.8, type: "bandpass", level: 0.18, at: t + i * 0.06, destination: dest });
+    },
     // a breaker thrown: a heavy clunk, then the buzz of power coming back
     clunk(x, y, z) {
       const dest = panner(x, y, z, 1.2);

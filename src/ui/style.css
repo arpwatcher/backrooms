@@ -32,3 +32,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 .small { font-size: 11px; opacity: 0.6; }
 #codex-open { font-size: 13px; padding: 6px 16px; margin-top: 12px; }
 #codex { background: rgba(8,7,3,0.97); }
+#toast.note { font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; letter-spacing: 0.04em; font-size: 20px; color: #f6efd8; max-width: 760px; margin: 0 auto; line-height: 1.5; }

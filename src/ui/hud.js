@@ -23,11 +23,19 @@ export function createHud() {
       vignette.style.filter = `saturate(${(1 - edge * 0.6).toFixed(2)})`;
       if (time > toastUntil) toast.style.opacity = "0";
     },
+    // a note on the wall, read out in the toast's place, in handwriting
+    note(text, time) {
+      toast.classList.add("note");
+      toast.textContent = text;
+      toast.style.opacity = "1";
+      toastUntil = time + Math.max(5, text.length / 12);
+    },
     hush() {
       toast.style.opacity = "0";
       toastUntil = 0;
     },
     say(text, seconds, time) {
+      toast.classList.remove("note");
       toast.textContent = text;
       toast.style.opacity = "1";
       toastUntil = time + seconds;

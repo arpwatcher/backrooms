@@ -121,6 +121,36 @@ export function paperSign(text) {
   return group;
 }
 
+// a handwritten note: too small to read from a distance, just lines of ink
+export function wallNote(seed = 1) {
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 80;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#e9e2c8";
+  ctx.fillRect(0, 0, 64, 80);
+  ctx.strokeStyle = "#2a2a5a";
+  ctx.lineWidth = 1.6;
+  let r = seed * 9301 + 49297;
+  const rand = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+  for (let y = 12; y < 72; y += 8) {
+    ctx.beginPath();
+    ctx.moveTo(8, y);
+    for (let x = 8; x < 56 - rand() * 14; x += 4) ctx.lineTo(x, y + (rand() - 0.5) * 3);
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.25), new THREE.MeshLambertMaterial({ map: texture, emissive: 0x1a1810 }));
+  sheet.position.set(0, 1.45, -0.06);
+  sheet.rotation.z = (rand() - 0.5) * 0.2;
+  const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.025), new THREE.MeshLambertMaterial({ color: 0xd8d0a8, transparent: true, opacity: 0.8 }));
+  tape.position.set(0, 1.575, -0.055);
+  const group = new THREE.Group();
+  group.add(sheet, tape);
+  return group;
+}
+
 // mounts something flat against the wall on one side of a cell
 export function placeOnWall(object, x, y, side) {
   object.position.set((x + 0.5 + side.dx * 0.44) * CELL, 0, (y + 0.5 + side.dy * 0.44) * CELL);

@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
-import { almondWater, exitDoor, placeInCell, breakerBox, placeOnWall } from "./render/props.js";
+import { almondWater, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote } from "./render/props.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
 import { createAudio } from "./audio/sound.js";
@@ -20,6 +20,7 @@ import { createEncounter, makeSense } from "./game/encounter.js";
 import { contact } from "./entities/core.js";
 import { createTrail, stepTrail } from "./game/shifts.js";
 import { placeTask, interact, doneCount } from "./game/tasks.js";
+import { placeNotes } from "./game/notes.js";
 import { TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { levelPlan } from "./game/plan.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
@@ -111,7 +112,12 @@ function loadLevel() {
     }
     for (const exit of exits) exit.door.userData.setLocked(true);
   }
-  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, pace, trail: createTrail() };
+  const notes = placeNotes(layout, run.depth, new Rng(`${levelSeed(run)}/notes`)).map((note, i) => {
+    const mesh = placeOnWall(wallNote(i + run.depth * 7 + 1), note.x, note.y, note.side);
+    world.group.add(mesh);
+    return { ...note, mesh, read: false };
+  });
+  level = { layout, world, bottles, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
@@ -332,6 +338,12 @@ function frame() {
     }
   }
   if (frameInput.pressed.has("KeyE") && level.task) useTask(time);
+  for (const note of level.notes) {
+    if (note.read || Math.hypot(note.mesh.position.x - player.x, note.mesh.position.z - player.z) > 1.4) continue;
+    note.read = true;
+    hud.note(note.text, time);
+    audio?.rustle(note.mesh.position.x, 1.4, note.mesh.position.z);
+  }
   for (const exit of level.exits) {
     if (Math.hypot(exit.door.position.x - player.x, exit.door.position.z - player.z) >= 0.7) continue;
     if (level.task && !level.task.complete) {
@@ -402,6 +414,7 @@ window.__noclip = {
     const t = level.task;
     return t && { id: t.task.id, complete: t.complete, targets: t.targets.map((x) => ({ x: x.mesh.position.x, z: x.mesh.position.z, done: x.done })) };
   },
+  get notes() { return level.notes.map((n) => ({ text: n.text, x: n.mesh.position.x, z: n.mesh.position.z, read: n.read })); },
   stand(x, z) {
     player.x = x;
     player.z = z;
