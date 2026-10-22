@@ -508,54 +508,85 @@ export function facelingsMesh() {
   return group;
 }
 
-// bent double under the ceiling: long legs, a short folded torso, the back
-// of its head against the tiles and its face looking out, never down
+// Bent double under the ceiling: legs far too long in a black suit, a short
+// folded torso, arms hanging past its knees on fingers longer than hands,
+// and a pale stretched head pressed up against the tiles, looking out with
+// two pin-points of light. It never looks down.
 export function stiltsMesh() {
   const group = new THREE.Group();
-  const suit = new THREE.MeshLambertMaterial({ color: 0x17161a });
-  const skin = new THREE.MeshLambertMaterial({ color: 0xd8d2c6 });
-  const limb = (material, length, radius, x, y, z) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(x, y, z);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.8, length, 6), material);
-    mesh.position.y = -length / 2;
-    pivot.add(mesh);
-    group.add(pivot);
-    return pivot;
-  };
-  const legs = [limb(suit, 1.75, 0.05, -0.12, 1.75, 0), limb(suit, 1.75, 0.05, 0.12, 1.75, 0)];
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.13, 0.8, 8), suit);
-  torso.position.set(0, 2.08, 0.12);
-  torso.rotation.x = 0.5;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), skin);
-  head.scale.set(0.85, 1.2, 0.9);
-  head.position.set(0, 2.5, 0.36);
-  head.rotation.x = 0.35;
-  // two dark hollows where the eyes should be
-  const socket = new THREE.MeshBasicMaterial({ color: 0x050403 });
-  for (const x of [-0.045, 0.045]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), socket);
-    eye.position.set(x, 0.02, 0.105);
-    head.add(eye);
-  }
-  const arms = [limb(suit, 1.45, 0.035, -0.24, 2.3, 0.28), limb(suit, 1.45, 0.035, 0.24, 2.3, 0.28)];
-  for (const arm of arms) {
-    const hand = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.22, 3, 6), skin);
-    hand.position.y = -1.58;
-    arm.add(hand);
-  }
-  group.add(torso, head);
+  const suit = fleshMaterial({ skin: skin({ base: "#18171b", blotch: "rgba(40,36,30,0.5)", veins: null, grime: 0.5, pores: 0, seed: "suit" }), roughness: 0.85, rim: 0x2a2830, rimPower: 2 });
+  const pale = fleshMaterial({ skin: skin({ base: "#d2cabf", blotch: "rgba(140,100,100,0.35)", veins: "rgba(90,90,140,0.5)", grime: 0.35, pores: 0.2, seed: "stilts-skin" }), roughness: 0.55, rim: 0x5a5048 });
+  const limb = (material, points, radius, taper = 0.7) => new THREE.Mesh(tube(points, radius, taper, 8), material);
+  const legs = [-0.12, 0.12].map((x) => {
+    const hip = new THREE.Group();
+    hip.position.set(x, 1.78, 0);
+    hip.add(limb(suit, [[0, 0, 0], [0, -0.45, 0.04], [0, -0.9, 0.02]], 0.055));
+    const knee = new THREE.Group();
+    knee.position.set(0, -0.9, 0.02);
+    knee.add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), suit));
+    knee.add(limb(suit, [[0, 0, 0], [0, -0.45, -0.03], [0, -0.86, 0]], 0.042));
+    const shoe = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.06, 10, 8), { amount: 0.005 }), suit);
+    shoe.scale.set(0.8, 0.5, 2.2);
+    shoe.position.set(0, -0.88, 0.07);
+    knee.add(shoe);
+    hip.add(knee);
+    group.add(hip);
+    return { hip, knee };
+  });
+  const torso = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 20, 16), { amount: 0.01, seed: 71 }), suit);
+  torso.scale.set(1.05, 1.9, 0.7);
+  torso.position.set(0, 2.08, 0.14);
+  torso.rotation.x = 0.55;
+  group.add(torso);
+  const neck = new THREE.Group();
+  neck.position.set(0, 2.42, 0.32);
+  group.add(neck);
+  neck.add(limb(pale, [[0, 0, 0], [0, 0.07, 0.06], [0, 0.1, 0.13]], 0.04, 0.9));
+  const head = new THREE.Group();
+  head.position.set(0, 0.1, 0.2);
+  neck.add(head);
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.12, 24, 20), {
+    amount: 0.004, seed: 73,
+    along: (v) => {
+      if (v.z < 0.04) return 0;
+      const socket = Math.exp(-(((Math.abs(v.x) - 0.04) / 0.02) ** 2 + ((v.y - 0.02) / 0.02) ** 2)) * -0.03;
+      const cheek = Math.exp(-(((Math.abs(v.x) - 0.05) / 0.02) ** 2 + ((v.y + 0.03) / 0.02) ** 2)) * -0.015;
+      return socket + cheek;
+    },
+  }), pale);
+  skull.scale.set(0.85, 1.35, 0.95);
+  head.add(skull);
+  const gaze = eyes({ color: 0xfff6d8, spacing: 0.08, size: 0.008, halo: 0.08, intensity: 1.2 });
+  gaze.position.set(0, 0.02, 0.1);
+  head.add(gaze);
+  const arms = [-0.24, 0.24].map((x) => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(x, 2.32, 0.28);
+    shoulder.add(limb(suit, [[0, 0, 0], [x * 0.15, -0.55, 0.05], [x * 0.1, -1.05, 0.08]], 0.035));
+    const hand = new THREE.Group();
+    hand.position.set(x * 0.1, -1.05, 0.08);
+    for (let f = 0; f < 5; f++) {
+      const spread = (f - 2) * 0.018;
+      hand.add(limb(pale, [[spread, 0, 0], [spread * 1.4, -0.14, 0.02], [spread * 1.6, -0.3, 0.01]], 0.008, 0.6));
+    }
+    shoulder.add(hand);
+    group.add(shoulder);
+    return { shoulder, hand };
+  });
   group.userData.animate = (time, entity) => {
     const pace = entity.state === "stride" ? 5 : entity.state === "patrol" || entity.state === "search" ? 2 : 0;
-    const swing = Math.sin(time * pace + entity.id) * (pace ? 0.35 : 0);
-    legs[0].rotation.x = swing;
-    legs[1].rotation.x = -swing;
-    arms[0].rotation.x = -swing * 0.6 - 0.1;
-    arms[1].rotation.x = swing * 0.6 - 0.1;
-    // the body walks one way, the head looks wherever it is looking
+    const swing = Math.sin(time * pace + entity.id) * (pace ? 0.4 : 0);
+    legs[0].hip.rotation.x = swing;
+    legs[1].hip.rotation.x = -swing;
+    legs.forEach((l, i) => (l.knee.rotation.x = pace ? Math.max(0, Math.sin(time * pace + entity.id + (i ? Math.PI : 0))) * 0.5 : 0.05));
+    arms[0].shoulder.rotation.x = -swing * 0.6;
+    arms[1].shoulder.rotation.x = swing * 0.6;
+    arms.forEach((a, i) => (a.hand.rotation.x = Math.sin(time * 0.8 + i) * 0.15 + twitch(time, entity.id + i * 3, 1.5, 0.4)));
+    // the body walks one way, the head looks wherever it's looking - in jerks
     const relative = (entity.head ?? 0) - (entity.facing ?? 0);
-    head.rotation.z = Math.sin(relative) * 0.6;
-    head.position.x = Math.sin(relative) * 0.25;
+    neck.rotation.y = Math.sin(relative) * 0.9 + twitch(time, entity.id, 0.9, 0.12);
+    head.rotation.z = Math.sin(relative) * 0.4 + 0.3;
+    gaze.userData.setOpen(entity.state === "notice" || entity.state === "stride" ? 1.6 : 1);
   };
   return group;
 }
