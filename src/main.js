@@ -15,6 +15,7 @@ import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recha
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createPost } from "./render/post.js";
+import { preloadModels } from "./render/models.js";
 import { createPortrait } from "./render/portrait.js";
 import { createSightings, stepSightings, chaseIntensity, heartRate } from "./game/sighting.js";
 import { createScreens } from "./ui/screens.js";
@@ -418,7 +419,12 @@ function nextLevel() {
 }
 let fallingSince = null;
 
+// real models first (a second or two), then the first level
+await preloadModels();
 loadLevel();
+const enterButton = document.getElementById("enter");
+enterButton.disabled = false;
+enterButton.textContent = "enter";
 
 function readTier() {
   try {

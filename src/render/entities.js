@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import { skin, fleshMaterial, lumpy, tube, eyes, twitch, smoke } from "./flesh.js";
+import { modelInstance } from "./models.js";
 
 function grinTexture() {
   const c = document.createElement("canvas");
@@ -822,7 +823,22 @@ export function deadlineMesh() {
   return group;
 }
 
+// the Wretch is a real model (assets/models/creature.glb, CC0) with its own
+// walk, run and idle; if the model didn't load it falls back to a dark
+// figure built from the faceling's body
+export function wretchMesh() {
+  const model = modelInstance("creature", {
+    clipFor: (e) => (e.state === "chase" ? "run" : e.state === "search" || e.state === "investigate" || e.state === "wander" ? "walk" : "idle"),
+    speedFor: (e) => (e.state === "chase" ? 1.15 : e.state === "wander" ? 0.7 : 1),
+  });
+  if (model) return model;
+  const fallback = facelingsMesh();
+  fallback.traverse((o) => o.material?.color?.setHex(0x2a2420));
+  return fallback;
+}
+
 export const MESHES = {
+  wretch: wretchMesh,
   deadline: deadlineMesh,
   attendant: attendantMesh,
   hushbaby: hushbabyMesh,

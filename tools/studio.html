@@ -5,7 +5,7 @@
 <title>NOCLIP studio</title>
 <style>html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }</style>
 <script type="importmap">
-{ "imports": { "three": "../vendor/three/three.module.js" } }
+{ "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
 </script>
 </head>
 <body>
@@ -16,6 +16,7 @@
 // at a model closely: studio.html?kind=hounds&state=hunt&angle=0.6&dist=2.4&light=1
 import * as THREE from "three";
 import { MESHES } from "../src/render/entities.js";
+import { preloadModels } from "../src/render/models.js";
 import { createPost } from "../src/render/post.js";
 import { wallpaperTexture, carpetTexture } from "../src/render/textures.js";
 
@@ -52,6 +53,7 @@ const beam = new THREE.SpotLight(0xfff4d6, Number(q.get("beam") ?? 16), 22, 0.42
 camera.add(beam, beam.target);
 beam.target.position.set(0, 0, -1);
 scene.add(camera);
+await preloadModels("../");
 const mesh = MESHES[kind]();
 scene.add(mesh);
 const entity = { id: 3, state, facing: 0, head: 0, stare: 2, x: 0, z: 0, memory: {} };

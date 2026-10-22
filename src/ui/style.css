@@ -51,3 +51,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #death { justify-content: flex-end; padding-bottom: 7vh; box-sizing: border-box; }
 #death h1 { text-shadow: 0 0 12px #000, 0 0 30px #000; }
 #death p { text-shadow: 0 0 8px #000; }
+button:disabled { opacity: 0.4; cursor: wait; }

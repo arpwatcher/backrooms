@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # only what the browser needs - no tests, tools or node_modules
-      - run: mkdir site && cp -r index.html src vendor site/
+      - run: mkdir site && cp -r index.html src vendor assets site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -11,7 +11,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 const root = fileURLToPath(new URL("..", import.meta.url));
-const types = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".glb": "model/gltf-binary" };
 
 const server = http.createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^([/\\])+/, "");
@@ -48,6 +48,7 @@ function check(ok, message) {
 
 try {
   await page.goto(`http://localhost:${port}/index.html?seed=smoke&smoke`);
+  await page.waitForFunction(() => !document.getElementById("enter").disabled, null, { timeout: 60000 });
   await page.evaluate(() => document.getElementById("enter").click());
   await page.waitForFunction(() => window.__noclip && window.__noclip.frames > 5, null, { timeout: 30000 });
   check(true, "renders frames");
@@ -337,7 +338,7 @@ try {
   const voices = await page.evaluate(() => {
     const a = window.__noclip.audio;
     const played = [];
-    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop", "tone"]) {
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop", "tone", "rasp", "shriek"]) {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
@@ -357,7 +358,7 @@ try {
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 15, "every entity voice and player sound plays without an error");
+  check(voices === 17, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
