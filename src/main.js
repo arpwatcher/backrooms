@@ -30,6 +30,7 @@ import { levelPlan } from "./game/plan.js";
 import { loadCodex, recordSurvival } from "./game/codex.js";
 import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
+import { createHelp } from "./ui/help.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
 import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
@@ -80,6 +81,7 @@ const flashlight = createFlashlight();
 const input = createInput(canvas);
 const hud = createHud();
 const screens = createScreens();
+const help = createHelp();
 const codex = loadCodex();
 const codexScreen = createCodexScreen(codex);
 document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
@@ -479,6 +481,7 @@ function frame() {
   const frameInput = input.read();
   frameInput.lookX *= settings.sensitivity;
   frameInput.lookY *= settings.sensitivity;
+  if (frameInput.pressed.has("KeyH")) help.toggle();
   if (frameInput.pressed.has("KeyF")) {
     if (level.effects.noFlashlight) hud.say("click. nothing.", 1.5, time);
     else toggleFlashlight(flashlight);
@@ -609,6 +612,7 @@ window.__noclip = {
   get player() { return player; },
   get frames() { return frames; },
   get time() { return time; },
+  get helpShown() { return help.shown; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,

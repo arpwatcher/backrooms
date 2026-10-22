@@ -87,6 +87,12 @@ try {
   const after = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const moved = Math.hypot(after.x - before.x, after.z - before.z);
   check(moved > 0.2, `holding W walks (${moved.toFixed(2)} m)`);
+  await page.keyboard.press("KeyH");
+  await frames();
+  const helpOpen = await page.evaluate(() => window.__noclip.helpShown && document.querySelectorAll("#help tr").length);
+  await page.keyboard.press("KeyH");
+  await frames();
+  check(helpOpen >= 8 && !(await page.evaluate(() => window.__noclip.helpShown)), `H opens and closes the help (${helpOpen} keys listed)`);
   await page.keyboard.press("KeyF");
   const lightOn = await page
     .waitForFunction(() => window.__noclip.flashlight.on, null, { timeout: 3000 })

@@ -51,6 +51,8 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
 | E | use (breakers, ...) |
 | Q | drink almond water |
 | V (hold) | hum under your breath |
+| H | help: every key, and what to do |
+| Esc | pause and settings |
 
 Play with headphones. Most of the game is in what you hear.
 
