@@ -52,7 +52,8 @@ export function skin(options = {}) {
   const rng = new Rng(seed);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
-  const g = canvas.getContext("2d");
+  // read back pixel by pixel below: keep the canvas on the cpu
+  const g = canvas.getContext("2d", { willReadFrequently: true });
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   // blotches
