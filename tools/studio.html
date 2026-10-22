@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NOCLIP studio</title>
+<style>html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+// One monster at a time, under the game's own light: a dim panel overhead,
+// the flashlight from the camera, the game's fog and post pass. For looking
+// at a model closely: studio.html?kind=hounds&state=hunt&angle=0.6&dist=2.4&light=1
+import * as THREE from "three";
+import { MESHES } from "../src/render/entities.js";
+import { createPost } from "../src/render/post.js";
+import { wallpaperTexture, carpetTexture } from "../src/render/textures.js";
+
+const q = new URLSearchParams(location.search);
+const kind = q.get("kind") || "hounds";
+const state = q.get("state") || "idle";
+const angle = Number(q.get("angle") ?? 0.6);
+const dist = Number(q.get("dist") ?? 2.4);
+const height = Number(q.get("height") ?? 1.5);
+const panel = Number(q.get("light") ?? 1);
+const canvas = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+const post = createPost(renderer);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1608);
+scene.fog = new THREE.FogExp2(0x3b3316, 0.048);
+scene.add(new THREE.AmbientLight(0x9a8848, 0.6 * panel + 0.08));
+const overhead = new THREE.PointLight(0xfff1c4, 3 * panel, 12, 1.6);
+overhead.position.set(0, 2.45, 0.6);
+scene.add(overhead);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshLambertMaterial({ map: carpetTexture("studio") }));
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(20, 2.7), new THREE.MeshLambertMaterial({ map: wallpaperTexture("studio") }));
+wall.position.set(0, 1.35, -2.4);
+scene.add(wall);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 50);
+camera.position.set(Math.sin(angle) * dist, height, Math.cos(angle) * dist);
+camera.lookAt(0, height * 0.6, 0);
+const beam = new THREE.SpotLight(0xfff4d6, Number(q.get("beam") ?? 16), 22, 0.42, 0.45, 1.4);
+camera.add(beam, beam.target);
+beam.target.position.set(0, 0, -1);
+scene.add(camera);
+const mesh = MESHES[kind]();
+scene.add(mesh);
+const entity = { id: 3, state, facing: 0, head: 0, stare: 2, x: 0, z: 0, memory: {} };
+let time = 0;
+let frames = 0;
+function frame() {
+  time += 1 / 30;
+  mesh.userData.animate?.(time, entity, panel > 0.5 ? "lit" : "dark");
+  post.render(scene, camera, { time, fear: Number(q.get("fear") ?? 0) });
+  window.__frames = ++frames;
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
