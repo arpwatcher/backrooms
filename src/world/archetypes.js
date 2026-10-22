@@ -57,6 +57,61 @@ export const ARCHETYPES = [
     layout: { deadLightChance: 0.45, flickerChance: 0.02, darkPatches: 2 },
     look: { light: 0xdfe8ff, panel: 0xe8f0ff, ambientColor: 0x5a6070, ambient: 0.4, fog: 0x14171c, background: 0x07080a, wall: 0xb4b0a0 },
   },
+  // --- the levels everyone knows, from the story on (and mixed in after it) ---
+  {
+    id: "habitable",
+    name: "Level 1 - the habitable zone",
+    minDepth: 7,
+    weight: 1,
+    // a warehouse: bare concrete, crates stacked in the open, wet floor
+    layout: { wallRuns: 45, rooms: 4, pillarChance: 0.09, deadLightChance: 0.14, flickerChance: 0.1 },
+    look: { walls: "concrete", floor: "wetConcrete", ceilingSurface: "darkConcrete", pillars: "crate", light: 0xe8eef5, panel: 0xf2f6ff, ambientColor: 0x6a6e72, ambient: 0.45, fog: 0x1c1e20, background: 0x0a0b0c, fogDensity: 0.05 },
+  },
+  {
+    id: "pipes",
+    name: "Level 2 - pipe dreams",
+    minDepth: 7,
+    weight: 1,
+    // narrow maintenance tunnels, hot, pipes along every wall
+    layout: { wallRuns: 170, rooms: 0, pillarChance: 0, deadLightChance: 0.35, flickerChance: 0.15 },
+    look: { walls: "darkConcrete", floor: "darkConcrete", ceilingSurface: "metal", pipes: true, light: 0xffb070, panel: 0xffc890, ambientColor: 0x5a3a24, ambient: 0.35, fog: 0x1e120a, background: 0x080402, fogDensity: 0.065 },
+  },
+  {
+    id: "electrical",
+    name: "Level 3 - the electrical station",
+    minDepth: 7,
+    weight: 1,
+    // cramped metal rooms, buzzing, half the lights sparking
+    layout: { wallRuns: 120, rooms: 2, pillarChance: 0.05, deadLightChance: 0.25, flickerChance: 0.3, darkPatches: 2 },
+    look: { walls: "metal", floor: "darkConcrete", ceilingSurface: "metal", pipes: true, light: 0xd8f0ff, panel: 0xe0f4ff, ambientColor: 0x3a4650, ambient: 0.35, fog: 0x0e1418, background: 0x05070a, fogDensity: 0.06 },
+  },
+  {
+    id: "office",
+    name: "Level 4 - the abandoned office",
+    minDepth: 7,
+    weight: 1,
+    // offices and corridors, quiet, everything left where it was dropped
+    layout: { wallRuns: 80, rooms: 7, pillarChance: 0.03, deadLightChance: 0.12, flickerChance: 0.05 },
+    look: { walls: "office", floor: "officeCarpet", light: 0xf4f6ff, panel: 0xf8faff, ambientColor: 0x7a7c84, ambient: 0.5, fog: 0x2a2c30, background: 0x101114, fogDensity: 0.045 },
+  },
+  {
+    id: "lightsout",
+    name: "Level 6 - lights out",
+    minDepth: 7,
+    weight: 1,
+    // the same office space with every light dead: only what you carry
+    layout: { wallRuns: 70, rooms: 4, deadLightChance: 1, flickerChance: 0, items: 6 },
+    look: { walls: "office", floor: "officeCarpet", ambientColor: 0x202022, ambient: 0.08, fog: 0x020203, background: 0x000000, fogDensity: 0.09 },
+  },
+  {
+    id: "poolrooms",
+    name: "Level 37 - the poolrooms",
+    minDepth: 7,
+    weight: 1,
+    // tiled halls under shallow, still water; bright, warm, and far too quiet
+    layout: { wallRuns: 25, rooms: 5, pillarChance: 0.12, deadLightChance: 0, flickerChance: 0 },
+    look: { walls: "tile", floor: "bigTile", ceilingSurface: "tile", water: true, light: 0xfff8ee, panel: 0xfffcf4, ambientColor: 0xb8c8c8, ambient: 0.95, fog: 0xc8d8d8, background: 0xdfe8e8, fogDensity: 0.03 },
+  },
 ];
 
 export function archetypeById(id) {
