@@ -13,14 +13,15 @@ lit and in the dark.
 1. **Chases have nowhere to go.** There's now a drone, a heartbeat and a
    lunge, but no escape tools: doors to shut behind you and nooks to duck
    into.
-2. **Deathmoths haven't been touched.** From a distance their wings read as
-   confetti. They need dust, bodies and a fluttering glow.
-3. **Deadline still reads as a column.** It should be a wall of dark across
+2. **Deadline still reads as a column.** It should be a wall of dark across
    the corridor, not a pillar of it.
-4. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
+3. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
    from the neck up but not below.
 
 ## Fixed
+
+- 2026-10-22: the Deathmoths reading as confetti. They now have bodies,
+  bigger wings and a fall of dust in the beam.
 
 - 2026-10-22: monsters floating. Each now has a soft shadow on the carpet.
 - 2026-10-22: Facelings as a pill with an egg on top. They now have a chest,
