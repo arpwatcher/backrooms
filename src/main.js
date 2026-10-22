@@ -609,6 +609,14 @@ window.__noclip = {
   },
   get items() { return level.items.map((i) => ({ kind: i.kind, x: i.mesh.position.x, z: i.mesh.position.z, taken: i.taken })); },
   get phantom() { return phantoms.current; },
+  // test hook: every panel on the level goes out
+  darkAll() {
+    for (const panel of level.world.panels) {
+      panel.state = "dead";
+      panel.level = 0;
+      panel.mesh.material.color.setHex(0x3a3628);
+    }
+  },
   get litPanels() { return level.world.panels.filter((p) => p.state !== "dead").length; },
   get tracks() {
     const [first] = level.tracks.wet;
