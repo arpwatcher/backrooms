@@ -526,35 +526,69 @@ export function stiltsMesh() {
   return group;
 }
 
-// small, pale, on all fours, with arms a little too long
+// Something that was nearly a baby. Pale grey and too thin, on all fours on
+// arms far too long, a head too big for the neck, black hollows for eyes and
+// a mouth that opens much further than a mouth should.
 export function hushbabyMesh() {
   const group = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xe6d6cc, emissive: 0x1a1210 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.3, 4, 10), skin);
-  body.rotation.x = Math.PI / 2;
-  body.position.set(0, 0.32, 0);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), skin);
-  head.position.set(0, 0.42, 0.3);
-  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.035, 10), new THREE.MeshBasicMaterial({ color: 0x1a0606 }));
-  mouth.position.set(0, -0.04, 0.145);
+  const pale = fleshMaterial({ skin: skin({ base: "#b9b1ac", blotch: "rgba(120,90,110,0.35)", veins: "rgba(80,90,150,0.5)", grime: 0.4, pores: 0.05, seed: "hush" }), roughness: 0.6, rim: 0x4a4458 });
+  const body = new THREE.Group();
+  body.position.y = 0.42;
+  group.add(body);
+  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.11, 0.26, 6, 14), { amount: 0.012, scale: 8, seed: 41,
+    along: (v) => (v.z > 0 && Math.abs(v.y) < 0.12 ? Math.max(0, Math.sin(v.y * 60)) * 0.01 : 0) }), pale);
+  torso.rotation.x = Math.PI / 2;
+  body.add(torso);
+  const head = new THREE.Group();
+  head.position.set(0, 0.12, 0.27);
+  body.add(head);
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 24, 20), { amount: 0.01, scale: 7, seed: 43,
+    along: (v) => {
+      if (v.z < 0.06) return 0;
+      const socket = Math.exp(-(((Math.abs(v.x) - 0.06) / 0.03) ** 2 + ((v.y - 0.03) / 0.03) ** 2)) * -0.045;
+      return socket;
+    } }), pale);
+  skull.scale.set(1, 1.05, 0.95);
+  head.add(skull);
+  const black = new THREE.MeshBasicMaterial({ color: 0x030202 });
+  for (const x of [-0.06, 0.06]) {
+    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), black);
+    socket.position.set(x, 0.03, 0.125);
+    head.add(socket);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    glint.position.set(x + 0.008, 0.04, 0.152);
+    head.add(glint);
+  }
+  // the mouth: a hole that stretches open, lips pulled thin around it
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), black);
+  mouth.scale.set(0.8, 1, 0.4);
+  mouth.position.set(0, -0.07, 0.13);
   head.add(mouth);
-  group.add(body, head);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 20), pale);
+  lip.position.copy(mouth.position);
+  lip.position.z += 0.012;
+  head.add(lip);
   const limbs = [];
-  for (const [x, z, length] of [[-0.12, 0.18, 0.5], [0.12, 0.18, 0.5], [-0.11, -0.16, 0.36], [0.11, -0.16, 0.36]]) {
+  for (const [x, z, length] of [[-0.1, 0.12, 0.62], [0.1, 0.12, 0.62], [-0.09, -0.15, 0.42], [0.09, -0.15, 0.42]]) {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 0.36, z);
-    const limb = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, length, 5), skin);
-    limb.position.y = -length / 2;
-    pivot.add(limb);
-    group.add(pivot);
+    pivot.position.set(x, 0, z);
+    const elbow = length * 0.5;
+    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 1.6, -elbow * 0.6, 0.06], [x * 0.8, -0.42, 0.12]], 0.025, 0.6, 6), pale));
+    for (let f = -1; f <= 1; f++) pivot.add(new THREE.Mesh(tube([[x * 0.8, -0.42, 0.12], [x * 0.8 + f * 0.02, -0.43, 0.17]], 0.008, 0.5, 4), pale));
+    body.add(pivot);
     limbs.push(pivot);
   }
   group.userData.animate = (time, entity) => {
-    // in the wall it is just a voice; you only see it when it comes out
+    // in the wall it is only a voice; you see it when it comes out
     group.visible = entity.state === "coming";
-    const pace = 14;
-    limbs.forEach((l, i) => (l.rotation.x = Math.sin(time * pace + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.7));
-    mouth.scale.setScalar(1 + Math.abs(Math.sin(time * 9)) * 0.8);
+    // it crawls in fits: a burst of limbs, a freeze, a burst
+    const burst = Math.sin(time * 2.3 + entity.id) > -0.2 ? 1 : 0;
+    limbs.forEach((l, i) => (l.rotation.x = burst * Math.sin(time * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.7));
+    head.rotation.z = twitch(time, entity.id, 2.4, 0.6);
+    head.rotation.x = -0.25 + twitch(time, entity.id + 1, 1.7, 0.3);
+    const open = 1 + Math.abs(Math.sin(time * 7)) * 1.4;
+    mouth.scale.set(0.8, open, 0.4);
+    lip.scale.set(1, open * 0.9, 1);
   };
   return group;
 }
