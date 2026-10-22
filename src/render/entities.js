@@ -330,12 +330,26 @@ function mothTexture() {
 export function deathmothsMesh() {
   const group = new THREE.Group();
   const count = 46;
-  const wing = new THREE.PlaneGeometry(0.13, 0.09);
+  const wing = new THREE.PlaneGeometry(0.16, 0.11);
   const material = new THREE.MeshLambertMaterial({
     map: mothTexture(), side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, emissive: 0x2a2418,
   });
   const moths = new THREE.InstancedMesh(wing, material, count);
   group.add(moths);
+  // furred bodies under the wings, and the dust they shed
+  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.008, 0.03, 3, 6), new THREE.MeshLambertMaterial({ color: 0x3a3226 }), count);
+  group.add(bodies);
+  const dustCount = 160;
+  const dustPositions = new Float32Array(dustCount * 3);
+  for (let i = 0; i < dustCount; i++) {
+    dustPositions[i * 3] = ((i * 73) % 100) / 50 - 1;
+    dustPositions[i * 3 + 1] = 0.8 + ((i * 37) % 100) / 60;
+    dustPositions[i * 3 + 2] = ((i * 91) % 100) / 50 - 1;
+  }
+  const dustGeometry = new THREE.BufferGeometry();
+  dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
+  const dust = new THREE.Points(dustGeometry, new THREE.PointsMaterial({ color: 0xcfc4a0, size: 0.012, transparent: true, opacity: 0.6, depthWrite: false }));
+  group.add(dust);
   const orbits = Array.from({ length: count }, (_, i) => ({
     radius: 0.25 + ((i * 37) % 11) / 14,
     height: 1.2 + ((i * 53) % 13) / 11,
@@ -353,8 +367,17 @@ export function deathmothsMesh() {
       dummy.scale.set(0.6 + Math.abs(Math.sin(time * 34 + i)) * 0.4, 1, 1);
       dummy.updateMatrix();
       moths.setMatrixAt(i, dummy.matrix);
+      dummy.scale.set(1, 1, 1);
+      dummy.rotation.set(Math.PI / 2, a, 0);
+      dummy.updateMatrix();
+      bodies.setMatrixAt(i, dummy.matrix);
     });
     moths.instanceMatrix.needsUpdate = true;
+    bodies.instanceMatrix.needsUpdate = true;
+    // the dust drifts down slowly and spins with the swarm
+    dust.rotation.y = time * 0.3;
+    dust.position.y = -((time * 0.05) % 0.4);
+    dust.scale.setScalar(tight);
   };
   return group;
 }
