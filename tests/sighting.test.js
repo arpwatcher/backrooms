@@ -45,3 +45,14 @@ test("the chase is as intense as the nearest thing hunting you is close", async 
   assert.equal(chaseIntensity([{ ...far, x: CHASE_RANGE + 1 }], player), 0);
   assert.ok(heartRate(1) > 140 && heartRate(0) < 70);
 });
+
+test("a hunt ends in a lunge: one short surge when it gets close, then not again for a while", async () => {
+  const { lungeScale, LUNGE } = await import("../src/game/sighting.js");
+  const e = { id: 9, def, state: "hunt" };
+  assert.equal(lungeScale(e, 10, 0), 1, "too far to lunge");
+  assert.equal(lungeScale(e, 2, 1), LUNGE.burst);
+  assert.equal(lungeScale(e, 2, 1 + LUNGE.lasts / 2), LUNGE.burst, "the surge lasts a moment");
+  assert.equal(lungeScale(e, 2, 1 + LUNGE.lasts + 0.1), 1, "then it's spent");
+  assert.equal(lungeScale(e, 2, 1 + LUNGE.every + 0.1), LUNGE.burst, "and comes again later");
+  assert.equal(lungeScale({ id: 10, def, state: "wander" }, 1, 0), 1, "nothing lunges unless it's hunting");
+});

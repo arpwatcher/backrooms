@@ -46,3 +46,16 @@ export function chaseIntensity(entities, player) {
 export function heartRate(intensity) {
   return 64 + intensity * 86;
 }
+
+export const LUNGE = { range: 3, burst: 1.7, lasts: 0.6, every: 6 };
+
+// the last few metres of a hunt: once per approach, it surges at you.
+// returns the time multiplier for this frame (1 when not lunging)
+export function lungeScale(e, distance, time) {
+  if ((e.lungeUntil ?? -Infinity) > time) return LUNGE.burst;
+  if (!e.def.hunting?.(e) || distance > LUNGE.range) return 1;
+  if (time - (e.lungedAt ?? -Infinity) < LUNGE.every) return 1;
+  e.lungedAt = time;
+  e.lungeUntil = time + LUNGE.lasts;
+  return LUNGE.burst;
+}
