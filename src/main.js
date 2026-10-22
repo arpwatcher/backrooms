@@ -15,6 +15,7 @@ import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recha
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createPost } from "./render/post.js";
+import { createPortrait } from "./render/portrait.js";
 import { createSightings, stepSightings, chaseIntensity, heartRate } from "./game/sighting.js";
 import { createScreens } from "./ui/screens.js";
 import { CELL } from "./world/units.js";
@@ -53,6 +54,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
 const post = createPost(renderer);
+const portrait = createPortrait();
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 80);
@@ -224,6 +226,7 @@ function onContact(entity, time) {
   if (fatal) {
     run.deaths += 1;
     hud.hush();
+    portrait.show(entity.kind, window.innerWidth / window.innerHeight);
     screens.die(entity.def, () => {
       run.depth = checkpointFor(run.depth);
       player = null;
@@ -505,12 +508,24 @@ let bob = 0;
 let time = 0;
 // 0..1, spikes when something sees you or touches you, then fades
 let fear = 0;
+let portraitTime = 0;
 let shake = 0;
 function frame() {
   const real = Math.min(clock.getDelta(), 0.1);
   if (pause.shown || codexScreen.isOpen) {
     input.read();
     post.render(scene, camera, { time });
+    requestAnimationFrame(frame);
+    return;
+  }
+  // dead: the thing that got you, close, behind the death screen
+  if (screens.dead) {
+    input.read();
+    hintLine.style.opacity = "0";
+    portraitTime += real;
+    portrait.animate(portraitTime);
+    post.render(portrait.scene, portrait.camera, { time: portraitTime, fear: 0.35, unease: 0.6 });
+    frames++;
     requestAnimationFrame(frame);
     return;
   }

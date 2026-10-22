@@ -273,6 +273,20 @@ try {
     rule: document.getElementById("death-rule").textContent,
   }));
   check(death.dead && death.name.length > 0 && death.rule.startsWith("the rule:"), `second contact kills and names it (${death.name})`);
+  await frames(3);
+  const portraitLit = await page.evaluate(() => {
+    const c = document.getElementById("view");
+    const probe = document.createElement("canvas");
+    probe.width = 64;
+    probe.height = 36;
+    const g = probe.getContext("2d");
+    g.drawImage(c, 0, 0, 64, 36);
+    const d = g.getImageData(0, 0, 64, 36).data;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) lit++;
+    return lit;
+  });
+  check(portraitLit > 30, `the death screen shows what got you, up close (${portraitLit} lit pixels)`);
   if (shot) await page.screenshot({ path: "smoke-death.png" });
   await page.evaluate(() => document.getElementById("death-wake").click());
   const woke = await page.evaluate(() => ({ dead: window.__noclip.dead, depth: window.__noclip.run.depth }));
