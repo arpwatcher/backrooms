@@ -14,9 +14,6 @@ lit and in the dark.
    and no texture, and they read as placeholder NPCs, not things. They need
    real skin (mottled, veined, dirty), wrong proportions, detail that holds
    up at 2 m, and eyes that catch the light.
-2. **The flashlight blows everything out to white.** There is no tone
-   mapping, and the beam is too hot at close range, so the Faceling's shirt
-   and the Partygoer glow like lamps.
 3. **Nothing moves wrong.** Animation is smooth sine-wave bobbing. Scary
    things twitch, freeze, jerk their heads and move in bursts.
 4. **No reaction when one sees you.** There is no sting, no shake and no
@@ -35,9 +32,6 @@ lit and in the dark.
    keeps it to the wall, with his neck at the wrong angle.
 10. **Deadline is three cylinders.** It should be a wall of moving black with
     shapes in it, not geometry.
-11. **The image is too clean.** There's no grain, no lens dirt and no
-    chromatic edge. A little film texture would hide primitive-ness and add
-    dread.
 12. **Monsters are rarely seen.** Most of a level passes without seeing
     anything. They should patrol toward you and cross your sightlines more,
     and hunt harder on harder tiers.
@@ -45,3 +39,8 @@ lit and in the dark.
     hints; new players miss F, E and V.
 
 ## Fixed
+
+- 2026-10-22: the flashlight blowing everything out to white (ACES filmic tone
+  mapping, a cooler beam), and the image being too clean (a post pass: film
+  grain, vignette and colour fringing, all pushed harder by fear and low
+  lucidity).

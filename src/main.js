@@ -14,6 +14,7 @@ import { stepLucidity } from "./game/lucidity.js";
 import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recharge } from "./game/flashlight.js";
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
+import { createPost } from "./render/post.js";
 import { createScreens } from "./ui/screens.js";
 import { CELL } from "./world/units.js";
 import { Rng } from "./core/rng.js";
@@ -44,6 +45,10 @@ const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: smoke });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+// filmic tone mapping: the beam and the panels roll off instead of clipping
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+const post = createPost(renderer);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 80);
@@ -187,6 +192,7 @@ function onContact(entity, time) {
   player.downUntil = time + 2.2;
   player.lucidity = Math.max(0, player.lucidity - 0.3);
   screens.hit();
+  fear = 1;
   audio?.hit();
   level.encounter.retreat(entity, time);
   milestone({ type: "survived" });
@@ -444,6 +450,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  post.resize();
 });
 
 const clock = new THREE.Clock();
@@ -452,11 +459,13 @@ let bob = 0;
 // game time only runs while you're playing, so pausing never lets a timer
 // run out behind your back
 let time = 0;
+// 0..1, spikes when something sees you or touches you, then fades
+let fear = 0;
 function frame() {
   const real = Math.min(clock.getDelta(), 0.1);
   if (pause.shown || codexScreen.isOpen) {
     input.read();
-    renderer.render(scene, camera);
+    post.render(scene, camera, { time });
     requestAnimationFrame(frame);
     return;
   }
@@ -545,7 +554,7 @@ function frame() {
   const unease = Math.max(0, 0.6 - player.lucidity);
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
   camera.updateProjectionMatrix();
-  beam.intensity = beamStrength(flashlight, time) * 26;
+  beam.intensity = beamStrength(flashlight, time) * 16;
 
   applyShiftToLights(time);
   const ticks = updateLights(level.world, camera.position, time);
@@ -572,7 +581,8 @@ function frame() {
     lucidity: player.lucidity,
     time,
   });
-  renderer.render(scene, camera);
+  fear = Math.max(0, fear - dt * 1.2);
+  post.render(scene, camera, { time, fear, unease: Math.max(0, 0.5 - player.lucidity) * 2 });
   frames++;
   requestAnimationFrame(frame);
 }
