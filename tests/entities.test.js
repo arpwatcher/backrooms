@@ -16,6 +16,7 @@ import { stilts, NOTICE_TIME } from "../src/entities/stilts.js";
 import { hushbaby, CRY_AFTER, COME_AFTER } from "../src/entities/hushbaby.js";
 import { attendant } from "../src/entities/attendant.js";
 import { deadline, START_DELAY as DEADLINE_DELAY } from "../src/entities/deadline.js";
+import { wretch, NOTICE, LOSE_AFTER, SEARCH_FOR } from "../src/entities/wretch.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -497,4 +498,74 @@ test("two players, one pack: the hounds go for whichever runner is closer", () =
   assert.equal(sense.player, near);
   const events = run(hounds, pack[0], sense, 4);
   assert.ok(events.some((ev) => ev.type === "contact"));
+});
+
+function wretchSense(layout, player, extra = {}) {
+  return { ...senseFor(layout, { crouching: false, running: false, noise: 0, ...player }, extra), flashlightOn: false };
+}
+
+test("the wretch needs a moment of seeing you, then shrieks and runs", () => {
+  const layout = open();
+  const e = spawn(wretch, { x: 6, y: 2 }, { rng: new Rng("w"), seenFor: 0 });
+  const sense = wretchSense(layout, { x: c(1), z: c(2) }, { light: () => "lit" });
+  const first = run(wretch, e, sense, NOTICE - 0.2);
+  assert.notEqual(e.state, "chase", "not on the first glance");
+  const then = run(wretch, e, sense, 0.4);
+  assert.equal(e.state, "chase");
+  assert.ok(then.some((ev) => ev.sound === "shriek"));
+  assert.ok(!first.some((ev) => ev.type === "contact"));
+});
+
+test("in the dark with your light off it only sees you up close", () => {
+  const layout = open();
+  const e = spawn(wretch, { x: 6, y: 2 }, { rng: new Rng("w"), seenFor: 0 });
+  const sense = wretchSense(layout, { x: c(1), z: c(2) });
+  assert.ok(!wretch.sees(e, sense), "12 m in the dark: you're a shape it can't make out");
+  sense.flashlightOn = true;
+  assert.ok(wretch.sees(e, sense), "turn the light on and it can");
+});
+
+test("it runs slower than you sprint: a straight sprint pulls away", () => {
+  const layout = open(20, 4);
+  const e = spawn(wretch, { x: 3, y: 1 }, { rng: new Rng("w"), seenFor: 0 });
+  const sense = wretchSense(layout, { x: c(6), z: c(1), running: true, noise: 1 }, { light: () => "lit" });
+  run(wretch, e, sense, 1.2);
+  assert.equal(e.state, "chase");
+  const gapBefore = Math.abs(sense.player.x - e.x);
+  for (let t = 0; t < 2.5; t += 0.05) {
+    sense.time += 0.05;
+    sense.player.x = Math.min(c(19), sense.player.x + 4.6 * 0.05);
+    wretch.update(e, sense, 0.05);
+  }
+  assert.ok(Math.abs(sense.player.x - e.x) > gapBefore, "the gap grows");
+});
+
+test("break its sight and it searches where it last saw you, then gives up", () => {
+  const layout = open();
+  const e = spawn(wretch, { x: 6, y: 2 }, { rng: new Rng("w"), seenFor: 0 });
+  const sense = wretchSense(layout, { x: c(1), z: c(2) }, { light: () => "lit" });
+  run(wretch, e, sense, 1);
+  assert.equal(e.state, "chase");
+  sense.canSee = () => false;
+  sense.player.x = c(10);
+  sense.player.z = c(10);
+  sense.player.crouching = true;
+  run(wretch, e, sense, LOSE_AFTER + 0.5);
+  assert.equal(e.state, "search");
+  const events = run(wretch, e, sense, SEARCH_FOR + 1);
+  assert.equal(e.state, "wander");
+  assert.ok(!events.some((ev) => ev.type === "contact"));
+});
+
+test("a loud step draws it over to look, a crouch doesn't", () => {
+  const layout = open();
+  const e = spawn(wretch, { x: 6, y: 2 }, { rng: new Rng("w"), seenFor: 0 });
+  const sense = wretchSense(layout, { x: c(4), z: c(2), crouching: true });
+  sense.canSee = () => false;
+  run(wretch, e, sense, 0.2);
+  assert.notEqual(e.state, "investigate");
+  sense.player.crouching = false;
+  sense.player.noise = 0.45;
+  run(wretch, e, sense, 0.2);
+  assert.equal(e.state, "investigate");
 });

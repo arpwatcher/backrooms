@@ -10,8 +10,9 @@ import { stilts } from "./stilts.js";
 import { hushbaby } from "./hushbaby.js";
 import { attendant } from "./attendant.js";
 import { deadline } from "./deadline.js";
+import { wretch } from "./wretch.js";
 
-export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts, hushbaby, attendant, deadline];
+export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts, hushbaby, attendant, deadline, wretch];
 
 export function entityById(id) {
   return ENTITIES.find((d) => d.id === id) ?? null;

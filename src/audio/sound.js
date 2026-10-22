@@ -201,6 +201,32 @@ export function createAudio() {
         wobble.start(t);
         osc.stop(t + 1);
         wobble.stop(t + 1);
+      } else if (sound === "rasp") {
+        // a wet, catching breath and bare feet on carpet
+        burst({ duration: 0.5, frequency: 520, q: 2.5, type: "bandpass", level: 0.35 * volume, at: t, destination: dest });
+        burst({ duration: 0.3, frequency: 300, q: 4, type: "bandpass", level: 0.25 * volume, at: t + 0.55, destination: dest });
+        burst({ duration: 0.06, frequency: 180, level: 0.4 * volume, at: t + 0.2, destination: dest });
+      } else if (sound === "shriek") {
+        // it has seen you: a human voice torn up into something else
+        for (const [f, d] of [[880, 0], [1240, 0.02], [660, 0.05]]) {
+          const osc = ctx.createOscillator();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(f * detune, t + d);
+          osc.frequency.exponentialRampToValueAtTime(f * 1.6 * detune, t + d + 0.35);
+          osc.frequency.exponentialRampToValueAtTime(f * 0.7 * detune, t + d + 1.1);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t + d);
+          g.gain.exponentialRampToValueAtTime(0.12 * volume, t + d + 0.06);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + d + 1.2);
+          const band = ctx.createBiquadFilter();
+          band.type = "bandpass";
+          band.frequency.value = 1500;
+          band.Q.value = 0.8;
+          osc.connect(band).connect(g).connect(dest);
+          osc.start(t + d);
+          osc.stop(t + d + 1.25);
+        }
+        burst({ duration: 0.9, frequency: 2600, q: 1, type: "bandpass", level: 0.4 * volume, at: t, destination: dest });
       } else if (sound === "tone") {
         // a low climbing tone, two notes beating against each other
         for (const f of [55, 57.5]) {

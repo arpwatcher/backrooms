@@ -17,6 +17,7 @@ const FACES = {
   hushbaby: [0.55, 0.3, 0.7],
   attendant: [1.32, 0.42, 0.8],
   deadline: [1.5, 0, 2.2],
+  wretch: [1.68, 0.15, 0.8],
 };
 
 export function createPortrait() {
@@ -42,7 +43,7 @@ export function createPortrait() {
       });
       scene.add(current);
       // states that look like it's coming for you
-      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "follow", deadline: "coming", partygoers: "chase", deathmoths: "swarm" }[kind] ?? "hunt";
+      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "follow", deadline: "coming", partygoers: "chase", deathmoths: "swarm", wretch: "chase" }[kind] ?? "hunt";
       // where each one's face is, and how close to stand to it
       const [fy, fz, dist] = FACES[kind] ?? [1.6, 0, 1];
       const face = new THREE.Vector3(0, fy, fz);
