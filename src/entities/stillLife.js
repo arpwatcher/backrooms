@@ -16,7 +16,7 @@ export const stillLife = {
   famous: false,
   homage: "the statue that only moves when unobserved",
   threat: 1.25,
-  minDepth: 3,
+  minDepth: 7,
   hunting: (e) => e.state === "close",
   tell: "stone scraping over carpet somewhere near, and a grey figure that is never where it was",
   counter: "keep it in view and back away - it cannot move while anyone is looking at it",

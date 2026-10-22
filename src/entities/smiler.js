@@ -12,7 +12,7 @@ export const smiler = {
   class: "stalker",
   famous: true,
   threat: 1,
-  minDepth: 2,
+  minDepth: 3,
   hunting: (e) => e.state === "approach",
   // it needs somewhere dark to live
   layout: { darkPatches: 3 },

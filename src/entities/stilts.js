@@ -16,7 +16,7 @@ export const stilts = {
   famous: false,
   homage: "the tall thin man in a suit",
   threat: 1.25,
-  minDepth: 7,
+  minDepth: 9,
   hunting: (e) => e.state === "stride" || e.state === "notice",
   tell: "ceiling tiles rattling where its head drags along them, and a creak of long joints",
   counter: "crouch when its head turns your way - it looks straight over anything below waist height",

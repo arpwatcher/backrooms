@@ -29,7 +29,10 @@ export function levelPlan(runSeed, depth, tier = TIERS.uneasy, pool = ENTITIES) 
     // a debut is never thinned out or silenced: it is how you learn the rule
     const debut = pool.some((def) => def.minDepth === d);
     const pace = debut ? { scale: 1, kind: "normal" } : paceFor(d, plans, new Rng(`${seed}/pace`));
-    const director = planLevel({ depth: d, rng: new Rng(`${seed}/director`), pool, tier, recent, scale: pace.scale });
+    // a story level can say exactly who is there
+    const director = fixed?.roster
+      ? { roster: fixed.roster.map((id) => pool.find((e) => e.id === id)).filter(Boolean), budget: 0, synergy: null, reason: "story" }
+      : planLevel({ depth: d, rng: new Rng(`${seed}/director`), pool, tier, recent, scale: pace.scale });
     plans.push({
       depth: d,
       seed,
@@ -37,6 +40,7 @@ export function levelPlan(runSeed, depth, tier = TIERS.uneasy, pool = ENTITIES) 
       roster: director.roster,
       director,
       pace: pace.kind,
+      ending: Boolean(fixed?.ending),
       shift: fixed ? SHIFTS.find((x) => x.id === fixed.shift) ?? null : pickShift(d, new Rng(`${seed}/shift`)),
       task: fixed ? TASKS.find((x) => x.id === fixed.task) ?? null : pickTask(d, new Rng(`${seed}/task`)),
     });

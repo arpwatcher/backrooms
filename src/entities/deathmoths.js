@@ -13,7 +13,7 @@ export const deathmoths = {
   class: "stalker",
   famous: true,
   threat: 1,
-  minDepth: 4,
+  minDepth: 5,
   hunting: (e) => e.state === "swarm",
   tell: "a papery fluttering that thickens, and pale dust drifting through your beam",
   counter: "turn your flashlight off, or stand under a working panel - it is brighter than you",

@@ -18,7 +18,7 @@ export const partygoers = {
   class: "lurer",
   famous: true,
   threat: 1,
-  minDepth: 5,
+  minDepth: 8,
   hunting: (e) => e.state === "chase",
   tell: "party music through the walls, a balloon at the end of a hall, a sign that says =)",
   counter: "never go into the room the music comes from - they only chase guests",

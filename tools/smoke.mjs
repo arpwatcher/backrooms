@@ -205,10 +205,17 @@ try {
     check(charge > 0.7, `picking up a battery recharges the flashlight (${charge.toFixed(2)})`);
   } else check(false, "a battery turns up somewhere in the first levels");
 
-  // level 6 is the damp floor: puddles, and wet shoes leave prints
-  await page.evaluate(() => window.__noclip.goToDepth(6));
+  // a damp or soaked level: puddles, and wet shoes leave prints
+  const wetDepth = await page.evaluate(() => {
+    for (let depth = 7; depth < 60; depth++) {
+      const p = window.__noclip.preview(depth);
+      if (p.archetype === "damp" || p.shift === "soaked") return depth;
+    }
+    return 7;
+  });
+  await page.evaluate((d) => window.__noclip.goToDepth(d), wetDepth);
   const wet = await page.evaluate(() => window.__noclip.tracks);
-  check(wet.puddles > 0, `the damp floor has puddles (${wet.puddles} wet cells)`);
+  check(wet.puddles > 0, `a wet level has puddles (level ${wetDepth}, ${wet.puddles} wet cells)`);
   if (wet.first) {
     const [px, py] = wet.first;
     await page.evaluate(([x, z]) => window.__noclip.stand(x, z), [(px + 0.5) * 2.4, (py + 0.5) * 2.4]);

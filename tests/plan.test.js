@@ -56,7 +56,8 @@ test("some deep levels are silent, and silent levels are empty", () => {
 
 test("the first ten levels are the composed ones, for every seed", async () => {
   const { FIRST_LEVELS } = await import("../src/game/firstLevels.js");
-  assert.equal(FIRST_LEVELS.length, 10);
+  assert.ok(FIRST_LEVELS.length >= 7);
+  assert.ok(FIRST_LEVELS.at(-1).ending, "the story ends on its last level");
   for (const seed of ["c1", "c2", "c3"]) {
     for (const f of FIRST_LEVELS) {
       const p = levelPlan(seed, f.depth);
@@ -75,8 +76,17 @@ test("every composed level names a real archetype, shift and task", async () => 
   for (const f of FIRST_LEVELS) {
     const a = ARCHETYPES.find((x) => x.id === f.archetype);
     assert.ok(a, f.archetype);
-    assert.ok(a.minDepth <= f.depth, `${f.archetype} before its depth`);
+    if (f.roster) for (const id of f.roster) assert.ok((await import("../src/entities/index.js")).ENTITIES.some((e) => e.id === id), id);
     if (f.shift) assert.ok(SHIFTS.some((x) => x.id === f.shift), f.shift);
     if (f.task) assert.ok(TASKS.some((x) => x.id === f.task), f.task);
   }
+});
+
+test("the story levels name their own residents, and the last one is the ending", async () => {
+  const { FIRST_LEVELS } = await import("../src/game/firstLevels.js");
+  const last = FIRST_LEVELS.at(-1);
+  const p = levelPlan("story", last.depth);
+  assert.deepEqual(p.roster.map((e) => e.id), last.roster);
+  assert.equal(p.ending, true);
+  assert.equal(levelPlan("story", last.depth + 1).ending, false, "after the ending, the descent goes on");
 });

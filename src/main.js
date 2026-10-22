@@ -282,11 +282,15 @@ for (const mesh of Object.values(phantomMeshes)) {
 phantomMeshes.figure.traverse((o) => o.material?.color?.setHex(0x0d0b07));
 function updatePhantoms(time) {
   const view = { x: player.x, z: player.z, yaw: player.yaw };
+  // as far as it can stand in plain view; in cramped levels that's closer
   const place = (angle, distance) => {
-    const x = player.x - Math.sin(angle) * distance;
-    const z = player.z - Math.cos(angle) * distance;
-    const inside = x > 0.5 && z > 0.5 && x < level.layout.width * CELL - 0.5 && z < level.layout.height * CELL - 0.5;
-    return inside && lineOfSight(level.layout, player.x, player.z, x, z) ? { x, z } : null;
+    for (const d of [distance, distance * 0.6, distance * 0.4]) {
+      const x = player.x - Math.sin(angle) * d;
+      const z = player.z - Math.cos(angle) * d;
+      const inside = x > 0.5 && z > 0.5 && x < level.layout.width * CELL - 0.5 && z < level.layout.height * CELL - 0.5;
+      if (inside && lineOfSight(level.layout, player.x, player.z, x, z)) return { x, z };
+    }
+    return null;
   };
   const change = stepPhantoms(phantoms, { lucidity: player.lucidity, time, view, place, rng: phantomRng });
   if (change?.vanished) phantomMeshes[change.vanished.kind].visible = false;

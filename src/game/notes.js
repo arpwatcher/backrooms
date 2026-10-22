@@ -13,22 +13,27 @@ export const TEACHING = {
     "almond water on the floor sometimes. drink it when your head goes funny (Q).",
   ],
   1: [
-    "something breathes out there. it can't see. it HEARS. crouch (C) and it loses you.",
-    "running (shift) is the loudest thing you can do down here.",
+    "it was one of us once. if it sees you, RUN. then get somewhere dark and keep still. it forgets.",
+    "the exit runs off the same power as the lights. breakers on the walls (E).",
   ],
   2: [
-    "where the lights are dead, something smiles. keep the light on it (F). it hates the light.",
-    "the flashlight doesn't last. turn it off when you're under the panels.",
+    "the dogs down here can't see. they HEAR. crouch (C) and they lose you.",
+    "running is the loudest thing you can do down here.",
   ],
   3: [
-    "the mannequin moved. i didn't see it move. i only looked away for a second.",
-    "if you're tired your eyes close by themselves. that's when it comes.",
+    "where the lights are dead, something smiles. keep your light on it (F). it hates the light.",
+    "the flashlight doesn't last. turn it off when you're under the panels.",
   ],
   4: [
-    "moths. turn your light OFF. they want the light, not you.",
+    "they sit at the desks like they're still working. don't look at their faces. i mean it.",
   ],
   5: [
-    "music through the wall. don't go. whatever you do, don't go to the party.",
+    "no lights at all on this one. if you hear wings, turn your light OFF.",
+    "batteries turn up on the floor if you're lucky. ration it.",
+  ],
+  6: [
+    "day 4012. the water is warm. i can see the door from here. i can't make myself walk to it.",
+    "if you're reading this - go. don't wait for me. - e.",
   ],
 };
 

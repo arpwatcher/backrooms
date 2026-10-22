@@ -17,15 +17,15 @@ test("level 0 walks you through it: walk, light, the exit, help - each until don
 
 test("each level gets its own hints, and a hint seen before is never shown again", () => {
   const hints = createHints();
-  assert.match(stepHints(hints, at({ depth: 1, time: 0 })), /crouch/);
-  assert.equal(stepHints(hints, at({ depth: 1, time: 1, crouched: true })), null);
+  assert.match(stepHints(hints, at({ depth: 2, time: 0 })), /crouch/);
+  assert.equal(stepHints(hints, at({ depth: 2, time: 1, crouched: true })), null);
   const again = createHints(hints.seen);
-  assert.equal(stepHints(again, at({ depth: 1, time: 0 })), null);
+  assert.equal(stepHints(again, at({ depth: 2, time: 0 })), null);
   assert.ok(HINTS.every((h) => h.text.length < 90), "short enough to read at a glance");
 });
 
 test("leaving the level drops its hint", () => {
   const hints = createHints();
   stepHints(hints, at({ time: 0 }));
-  assert.match(stepHints(hints, at({ depth: 2, time: 1 })), /flashlight/);
+  assert.match(stepHints(hints, at({ depth: 3, time: 1 })), /flashlight/);
 });

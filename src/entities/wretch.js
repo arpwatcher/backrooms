@@ -19,7 +19,7 @@ export const wretch = {
   class: "stalker",
   famous: true,
   threat: 1.5,
-  minDepth: 8,
+  minDepth: 1,
   hunting: (e) => e.state === "chase",
   tell: "slow bare footsteps and a wet rasping breath, then a shriek when it sees you",
   counter: "outrun it to a corner, then crouch and keep quiet in the dark - it looks where it last saw you, then gives up",

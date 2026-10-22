@@ -15,7 +15,7 @@ export const hounds = {
   class: "stalker",
   famous: true,
   threat: 1.5,
-  minDepth: 1,
+  minDepth: 2,
   hunting: (e) => e.state === "hunt",
   tell: "panting and claws ticking on damp carpet, getting louder",
   counter: "stop making noise - stand still or crouch-walk and they lose your trail",

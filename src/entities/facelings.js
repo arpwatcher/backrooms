@@ -14,7 +14,7 @@ export const facelings = {
   class: "watcher",
   famous: true,
   threat: 0.75,
-  minDepth: 6,
+  minDepth: 4,
   hunting: (e) => e.state === "offended",
   tell: "a person standing too still at the edge of a room, and no face",
   counter: "look away - pass them with your eyes on the floor, and they leave you alone",

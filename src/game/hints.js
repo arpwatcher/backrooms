@@ -7,8 +7,9 @@ export const HINTS = [
   { id: "light", depth: 0, text: "F turns your flashlight on and off - the battery doesn't last", done: (s) => s.toggledLight },
   { id: "exit", depth: 0, text: "find the red EXIT sign and walk into it", done: (s) => s.shownFor > 10 },
   { id: "help", depth: 0, text: "H shows every key, any time", done: (s) => s.shownFor > 7 },
-  { id: "crouch", depth: 1, text: "something here hunts by sound. C to crouch - slow, and almost silent", done: (s) => s.crouched || s.shownFor > 14 },
-  { id: "flashlight-smiler", depth: 2, text: "where the panels are dead, keep your flashlight on what's waiting there", done: (s) => s.shownFor > 12 },
+  { id: "run-hide", depth: 1, text: "if something sees you: run (Shift), then hide somewhere dark and keep still", done: (s) => s.shownFor > 12 },
+  { id: "crouch", depth: 2, text: "something here hunts by sound. C to crouch - slow, and almost silent", done: (s) => s.crouched || s.shownFor > 14 },
+  { id: "flashlight-smiler", depth: 3, text: "where the panels are dead, keep your flashlight on what's waiting there", done: (s) => s.shownFor > 12 },
 ];
 
 export function createHints(seen = new Set()) {
