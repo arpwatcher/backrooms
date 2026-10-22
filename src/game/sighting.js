@@ -27,3 +27,22 @@ export function stepSightings(seen, entities, player, time) {
   }
   return stings;
 }
+
+export const CHASE_RANGE = 22;
+
+// how hard you're being chased right now, 0..1: the closest thing that is
+// actively hunting you, scaled by how close it is
+export function chaseIntensity(entities, player) {
+  let worst = 0;
+  for (const e of entities) {
+    if (!e.def.hunting?.(e)) continue;
+    const d = Math.hypot(e.x - player.x, e.z - player.z);
+    worst = Math.max(worst, Math.max(0, 1 - d / CHASE_RANGE));
+  }
+  return worst;
+}
+
+// beats per minute of your heart at that intensity
+export function heartRate(intensity) {
+  return 64 + intensity * 86;
+}

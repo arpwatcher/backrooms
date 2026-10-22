@@ -34,3 +34,14 @@ test("a hunt far away doesn't sting", () => {
   const e = { id: 2, x: STING_RANGE + 5, z: 0, def, state: "hunt" };
   assert.equal(stepSightings(seen, [e], player, 0).length, 0);
 });
+
+test("the chase is as intense as the nearest thing hunting you is close", async () => {
+  const { chaseIntensity, heartRate, CHASE_RANGE } = await import("../src/game/sighting.js");
+  const near = { x: 2, z: 0, def, state: "hunt" };
+  const far = { x: 18, z: 0, def, state: "hunt" };
+  const calm = { x: 1, z: 0, def, state: "wander" };
+  assert.equal(chaseIntensity([calm], player), 0, "something close but not hunting isn't a chase");
+  assert.ok(chaseIntensity([far], player) < chaseIntensity([near, far], player));
+  assert.equal(chaseIntensity([{ ...far, x: CHASE_RANGE + 1 }], player), 0);
+  assert.ok(heartRate(1) > 140 && heartRate(0) < 70);
+});
