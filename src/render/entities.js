@@ -2,6 +2,7 @@
 // in proportion, posture and movement more than detail.
 
 import * as THREE from "three";
+import { skin, fleshMaterial, lumpy, tube, eyes, twitch } from "./flesh.js";
 
 function grinTexture() {
   const c = document.createElement("canvas");
@@ -58,30 +59,115 @@ export function smilerMesh() {
   return group;
 }
 
+// Hairless, starved and too long. A spine you can count, ribs pushing
+// through grey skin, legs that bend the wrong way, and on the end of a long
+// neck a head that is nearly a face: forward eyes, no lips, a jaw that hangs.
 export function houndMesh() {
   const group = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0x15120c });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.9, 4, 8), skin);
-  body.rotation.x = Math.PI / 2;
-  body.position.y = 0.62;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), skin);
-  head.scale.set(0.9, 0.8, 1.4);
-  head.position.set(0, 0.66, 0.68);
-  group.add(body, head);
+  const hide = fleshMaterial({ skin: skin({ base: "#8d7f78", blotch: "rgba(90,40,40,0.4)", veins: "rgba(60,50,90,0.45)", grime: 0.6, seed: "hound" }), rim: 0x4a3c30 });
+  const dark = fleshMaterial({ skin: skin({ base: "#4a3a36", blotch: "rgba(30,10,10,0.5)", veins: null, grime: 0.8, seed: "hound-dark" }), rim: 0x2a2018 });
+  const body = new THREE.Group();
+  body.position.y = 0.86;
+  group.add(body);
+  // the torso: a stretched, lumpy capsule with ribs raised along its middle
+  // deep chest in front, a waist pinched to nothing behind it, ribs showing
+  const torsoGeometry = lumpy(new THREE.CapsuleGeometry(0.2, 0.85, 8, 20), {
+    amount: 0.016, scale: 6, seed: 3,
+    along: (v) => {
+      const waist = -0.11 * Math.exp(-(((v.y + 0.22) / 0.2) ** 2));
+      const chest = 0.05 * Math.exp(-(((v.y - 0.22) / 0.18) ** 2)) * (v.z > 0 ? 1.4 : 0.6);
+      const ribs = v.y > -0.05 && v.y < 0.42 ? Math.max(0, Math.sin(v.y * 46)) * 0.02 : 0;
+      return waist + chest + ribs;
+    },
+  });
+  const torso = new THREE.Mesh(torsoGeometry, hide);
+  torso.rotation.x = Math.PI / 2;
+  torso.scale.set(0.8, 1, 1.15);
+  // shoulder blades riding up under the skin
+  for (const x of [-0.1, 0.1]) {
+    const blade = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.08, 12, 8), { amount: 0.01, seed: x }), hide);
+    blade.scale.set(0.7, 0.4, 1.2);
+    blade.position.set(x, 0.17, 0.32);
+    body.add(blade);
+  }
+  body.add(torso);
+  // the spine, bead by bead
+  for (let i = 0; i < 13; i++) {
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.032 - Math.abs(i - 6) * 0.0015, 8, 6), hide);
+    knob.position.set(0, 0.19 - Math.abs(i - 6) * 0.004, -0.58 + i * 0.095);
+    body.add(knob);
+  }
+  // neck and head
+  const neckPivot = new THREE.Group();
+  neckPivot.position.set(0, 0.06, 0.6);
+  body.add(neckPivot);
+  neckPivot.add(new THREE.Mesh(tube([[0, 0, 0], [0, 0.08, 0.18], [0, 0.04, 0.36]], 0.075, 0.7, 10), hide));
+  const head = new THREE.Group();
+  head.position.set(0, 0.02, 0.42);
+  neckPivot.add(head);
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 24, 18), { amount: 0.012, scale: 9, seed: 7,
+    along: (v) => (v.z > 0.08 && Math.abs(v.x) > 0.03 && Math.abs(v.x) < 0.09 && v.y > 0 ? -0.03 : 0) }), hide);
+  skull.scale.set(0.9, 0.85, 1.25);
+  head.add(skull);
+  const gaze = eyes({ color: 0xffe9a8, spacing: 0.11, size: 0.016, halo: 0.2, intensity: 1.4 });
+  gaze.position.set(0, 0.04, 0.17);
+  head.add(gaze);
+  // the jaw, hinged under the skull, with teeth on both rows
+  const jawPivot = new THREE.Group();
+  jawPivot.position.set(0, -0.05, 0.02);
+  head.add(jawPivot);
+  const jaw = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.11, 16, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), { amount: 0.008, seed: 2 }), dark);
+  jaw.scale.set(0.9, 0.6, 1.4);
+  jaw.position.z = 0.06;
+  jawPivot.add(jaw);
+  const toothMaterial = fleshMaterial({ color: 0xd8cfb4, roughness: 0.4, rim: 0x302820 });
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 11 - 0.5) * 2.2;
+    const upper = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.045, 5), toothMaterial);
+    upper.position.set(Math.sin(a) * 0.09, -0.04, 0.1 + Math.cos(a) * 0.08);
+    upper.rotation.x = Math.PI;
+    head.add(upper);
+    const lower = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.04, 5), toothMaterial);
+    lower.position.set(Math.sin(a) * 0.08, 0.005, 0.08 + Math.cos(a) * 0.07);
+    jawPivot.add(lower);
+  }
+  // legs: two joints each, the back pair bent backwards like a hare's
   const legs = [];
-  for (const [x, z] of [[-0.16, 0.38], [0.16, 0.38], [-0.16, -0.38], [0.16, -0.38]]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.025, 0.66, 5), skin);
-    leg.position.set(x, 0.33, z);
-    group.add(leg);
-    legs.push(leg);
+  for (const [x, z, back] of [[-0.15, 0.42, false], [0.15, 0.42, false], [-0.15, -0.44, true], [0.15, -0.44, true]]) {
+    const hip = new THREE.Group();
+    hip.position.set(x, -0.05, z);
+    body.add(hip);
+    const thigh = new THREE.Mesh(tube([[0, 0.04, 0], [0, -0.2, back ? -0.14 : 0.07], [0, -0.42, back ? -0.04 : 0.02]], 0.06, 0.5, 8), hide);
+    hip.add(thigh);
+    const knee = new THREE.Group();
+    knee.position.set(0, -0.42, back ? -0.04 : 0.02);
+    hip.add(knee);
+    const shin = new THREE.Mesh(tube([[0, 0, 0], [0, -0.2, back ? 0.1 : -0.05], [0, -0.38, back ? 0.05 : 0.02]], 0.035, 0.55, 8), hide);
+    knee.add(shin);
+    // long-fingered feet, almost hands
+    for (let f = -1; f <= 1; f++) {
+      const finger = new THREE.Mesh(tube([[0, -0.38, 0.04], [f * 0.035, -0.41, 0.1], [f * 0.05, -0.42, 0.16]], 0.012, 0.5, 5), dark);
+      knee.add(finger);
+    }
+    legs.push({ hip, knee, back });
   }
   group.userData.animate = (time, entity) => {
-    const pace = entity.state === "hunt" ? 16 : entity.state === "wander" ? 7 : 0;
-    legs.forEach((leg, i) => {
-      leg.rotation.x = Math.sin(time * pace + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * 0.55;
+    const hunting = entity.state === "hunt";
+    const pace = hunting ? 13 : entity.state === "wander" ? 5 : 0;
+    legs.forEach(({ hip, knee, back }, i) => {
+      const phase = time * pace + (i % 2 ? Math.PI : 0) + (back ? Math.PI / 2 : 0);
+      hip.rotation.x = pace ? Math.sin(phase) * (hunting ? 0.8 : 0.4) : 0;
+      knee.rotation.x = pace ? Math.max(0, Math.sin(phase + 1.2)) * (back ? -0.9 : 0.9) : back ? -0.15 : 0.15;
     });
-    body.position.y = 0.62 + Math.abs(Math.sin(time * pace)) * 0.04;
-    head.rotation.y = entity.state === "sniff" ? Math.sin(time * 5) * 0.6 : 0;
+    // low and stretched when it runs; breathing in its ribs when it doesn't
+    body.position.y = hunting ? 0.74 + Math.abs(Math.sin(time * pace)) * 0.07 : 0.86;
+    body.rotation.x = hunting ? 0.12 : 0;
+    torso.scale.x = 0.85 + Math.sin(time * (hunting ? 9 : 2.4)) * 0.03;
+    // the head never moves smoothly: it jerks
+    neckPivot.rotation.y = entity.state === "sniff" ? Math.sin(time * 6) * 0.5 + twitch(time, entity.id, 4, 0.4) : twitch(time, entity.id, 1.4, 0.5);
+    neckPivot.rotation.x = (hunting ? 0.15 : -0.1) + twitch(time, entity.id + 3, 2, 0.25);
+    head.rotation.z = twitch(time, entity.id + 7, 0.9, 0.6);
+    jawPivot.rotation.x = hunting ? 0.45 + Math.sin(time * 9) * 0.15 : 0.15 + Math.max(0, Math.sin(time * 1.8)) * 0.2;
   };
   return group;
 }
