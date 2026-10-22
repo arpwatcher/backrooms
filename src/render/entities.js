@@ -325,67 +325,81 @@ export function deathmothsMesh() {
   return group;
 }
 
-function partyFaceTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 64;
-  const g = canvas.getContext("2d");
-  g.fillStyle = "#e8cf3a";
-  g.fillRect(0, 0, 64, 64);
-  g.fillStyle = "#1a1408";
-  g.fillRect(20, 16, 6, 12);
-  g.fillRect(38, 16, 6, 12);
-  g.lineWidth = 5;
-  g.strokeStyle = "#1a1408";
-  g.beginPath();
-  g.arc(32, 30, 18, 0.25 * Math.PI, 0.75 * Math.PI);
-  g.stroke();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-let partyFace = null;
 
-// a tall, soft, yellow guest with a printed-on face and a balloon on a string
+// A guest who has been at the party far too long. Too tall, waxy yellow
+// skin stretched thin, a neck that keeps going, and a face that is all
+// smile: carved too wide, with small wet black eyes above it. It holds its
+// balloon like it was told to.
 export function partygoersMesh() {
-  partyFace ??= partyFaceTexture();
   const group = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xd9be35 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.0, 4, 10), skin);
-  body.position.y = 1.0;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), [skin]);
-  head.position.y = 1.88;
-  const face = new THREE.Mesh(new THREE.CircleGeometry(0.17, 20), new THREE.MeshLambertMaterial({ map: partyFace }));
-  face.position.set(0, 1.9, 0.19);
+  const wax = fleshMaterial({ skin: skin({ base: "#c9ad3c", blotch: "rgba(150,90,30,0.4)", veins: "rgba(120,80,40,0.3)", grime: 0.35, pores: 0.8, seed: "party" }), roughness: 0.45, rim: 0x5a4a10 });
+  const body = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.95, 8, 18), { amount: 0.02, scale: 4, seed: 21,
+    along: (v) => -0.06 * Math.exp(-(((v.y + 0.1) / 0.18) ** 2)) }), wax);
+  body.position.y = 1.08;
+  body.scale.set(1, 1, 0.75);
+  group.add(body);
+  const neck = new THREE.Mesh(tube([[0, 1.6, 0], [0, 1.82, 0.04], [0, 2.02, 0.06]], 0.06, 0.85, 10), wax);
+  group.add(neck);
+  const head = new THREE.Group();
+  head.position.set(0, 2.14, 0.06);
+  group.add(head);
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 26, 20), { amount: 0.01, scale: 8, seed: 5,
+    along: (v) => (v.z > 0.1 && v.y > 0.02 && v.y < 0.07 && Math.abs(Math.abs(v.x) - 0.06) < 0.03 ? -0.035 : 0) }), wax);
+  skull.scale.set(0.95, 1.15, 0.95);
+  head.add(skull);
+  // small black wet eyes, set in hollows
+  const wet = new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 0.08 });
+  for (const x of [-0.06, 0.06]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), wet);
+    eye.position.set(x, 0.05, 0.135);
+    head.add(eye);
+  }
+  // the smile, wider than the face
+  const gum = new THREE.MeshBasicMaterial({ color: 0x2a0806 });
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.02, 6, 30, Math.PI * 0.95), gum);
+  mouth.rotation.z = Math.PI * 1.025;
+  mouth.scale.set(1.15, 0.6, 0.6);
+  mouth.position.set(0, -0.02, 0.14);
+  head.add(mouth);
+  const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xf0ead6, roughness: 0.3 });
+  for (let i = 0; i < 18; i++) {
+    const a = Math.PI * 1.05 + (i / 17) * Math.PI * 0.9;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.022, 0.01), toothMaterial);
+    tooth.position.set(Math.cos(a) * 0.13 * 1.15, -0.02 + Math.sin(a) * 0.13 * 0.6 + 0.008, 0.15);
+    head.add(tooth);
+  }
   const arm = (x) => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 1.45, 0);
-    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.62, 3, 6), skin);
-    mesh.position.y = -0.36;
-    pivot.add(mesh);
+    pivot.position.set(x, 1.5, 0);
+    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.2, -0.45, 0.04], [x * 0.15, -0.95, 0.06]], 0.05, 0.55, 8), wax));
+    for (let f = 0; f < 4; f++) {
+      pivot.add(new THREE.Mesh(tube([[x * 0.15, -0.95, 0.06], [x * 0.15 + (f - 1.5) * 0.015, -1.08, 0.08], [x * 0.15 + (f - 1.5) * 0.02, -1.18, 0.07]], 0.01, 0.6, 5), wax));
+    }
     group.add(pivot);
     return pivot;
   };
-  const left = arm(-0.3);
-  const right = arm(0.3);
-  const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshLambertMaterial({ color: 0xc8202a, emissive: 0x300508 }));
+  const left = arm(-0.27);
+  const right = arm(0.27);
+  for (const x of [-0.09, 0.09]) group.add(new THREE.Mesh(tube([[x, 0.62, 0], [x, 0.3, 0.02], [x, 0.02, 0]], 0.065, 0.7, 8), wax));
+  const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0xc8202a, emissive: 0x300508, roughness: 0.25 }));
   balloon.scale.y = 1.2;
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.55, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
-  group.add(body, head, face, balloon, string);
+  group.add(balloon, string);
   group.userData.animate = (time, entity) => {
-    const sway = Math.sin(time * 1.7 + entity.id);
     const chasing = entity.state === "chase";
-    body.rotation.x = chasing ? 0.25 : 0;
-    // waving at the new guest
-    left.rotation.z = entity.state === "greet" ? -2.4 + Math.sin(time * 10) * 0.4 : -0.1 + sway * 0.05;
-    right.rotation.z = 0.1 - sway * 0.05;
-    right.rotation.x = chasing ? -1.2 : 0;
+    const sway = Math.sin(time * 1.7 + entity.id);
+    body.rotation.x = chasing ? 0.28 : 0;
+    left.rotation.z = entity.state === "greet" ? -2.6 + Math.sin(time * 12) * 0.5 : -0.05 + sway * 0.05;
+    right.rotation.z = 0.05 - sway * 0.05;
+    right.rotation.x = chasing ? -1.3 : 0;
+    // the head tilts too far and snaps back
+    head.rotation.z = Math.sin(time * 0.5 + entity.id) * 0.25 + twitch(time, entity.id, 1.1, 0.5);
+    head.rotation.x = twitch(time, entity.id + 2, 0.7, 0.3) + (chasing ? 0.3 : 0);
+    head.position.z = 0.06 + (chasing ? 0.25 : 0);
     const bob = Math.sin(time * 2.1 + entity.id) * 0.06;
-    balloon.position.set(0.45, 2.55 + bob, 0);
-    // from the hand up to the balloon
-    string.position.set(0.375, 1.55 + bob / 2, 0);
-    string.rotation.z = -0.1;
-    head.rotation.z = Math.sin(time * 0.6 + entity.id) * 0.15;
-    face.rotation.z = head.rotation.z;
+    balloon.position.set(0.45, 2.75 + bob, 0);
+    string.position.set(0.39, 1.75 + bob / 2, 0);
+    string.rotation.z = -0.06;
   };
   return group;
 }
