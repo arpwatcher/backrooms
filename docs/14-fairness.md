@@ -30,6 +30,8 @@ one of these promises, the change is wrong.
 | touches survived per entity | 2 | 1 | 1 | 1 |
 | overload before mercy | 10 s | 18 s | 28 s | 45 s |
 | mercy lasts | 25 s | 18 s | 12 s | 8 s |
+| wandering things drift toward you | 10% of steps | 22% | 32% | 45% |
+| movement pace | x0.88 | x1 | x1 | x1 |
 | tells | at least 5 s | at least 5 s | at least 5 s | at least 5 s |
 
 Tells are **never** shortened on any tier. Hard means more things at once,

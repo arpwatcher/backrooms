@@ -8,11 +8,14 @@
 // backs off (the mercy rule).
 
 export const TIERS = {
-  // name: budget scale, contacts before death, seconds of overload before mercy
-  lucid: { name: "lucid", budget: 0.6, contacts: 3, mercyAfter: 10, mercyFor: 25 },
-  uneasy: { name: "uneasy", budget: 1, contacts: 2, mercyAfter: 18, mercyFor: 18 },
-  lost: { name: "lost", budget: 1.3, contacts: 2, mercyAfter: 28, mercyFor: 12 },
-  noclip: { name: "noclip", budget: 1.7, contacts: 2, mercyAfter: 45, mercyFor: 8 },
+  // budget scale, contacts before death, seconds of overload before mercy;
+  // drift: how often a wandering thing's next step is toward you;
+  // pace: how fast everything moves - only ever slowed (lucid), never sped
+  // up, so a tell is never shorter than five seconds on any tier
+  lucid: { name: "lucid", budget: 0.6, contacts: 3, mercyAfter: 10, mercyFor: 25, drift: 0.1, pace: 0.88 },
+  uneasy: { name: "uneasy", budget: 1, contacts: 2, mercyAfter: 18, mercyFor: 18, drift: 0.22, pace: 1 },
+  lost: { name: "lost", budget: 1.3, contacts: 2, mercyAfter: 28, mercyFor: 12, drift: 0.32, pace: 1 },
+  noclip: { name: "noclip", budget: 1.7, contacts: 2, mercyAfter: 45, mercyFor: 8, drift: 0.45, pace: 1 },
 };
 
 // pairs that sharpen each other: the counter to one makes the other harder

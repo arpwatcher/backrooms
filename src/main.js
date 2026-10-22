@@ -159,7 +159,7 @@ function loadLevel() {
   level = { tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
-    scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt,
+    scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt, tier,
   });
 }
 

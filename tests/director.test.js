@@ -131,3 +131,10 @@ test("a conflicting pair never shares a level, except on noclip", () => {
   }
   assert.ok(together > 0, "noclip asked for it");
 });
+
+test("harder tiers lean in harder, but nothing is ever sped up past a fair tell", () => {
+  const order = [TIERS.lucid, TIERS.uneasy, TIERS.lost, TIERS.noclip];
+  for (let i = 1; i < order.length; i++) assert.ok(order[i].drift > order[i - 1].drift);
+  for (const tier of order) assert.ok(tier.pace <= 1, `${tier.name} pace ${tier.pace}`);
+  assert.ok(TIERS.lucid.pace < 1, "the easiest tier is a little slower");
+});

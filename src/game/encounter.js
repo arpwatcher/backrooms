@@ -5,6 +5,7 @@ import { MESHES } from "../render/entities.js";
 import { balloon, paperSign, placeOnWall } from "../render/props.js";
 import { cellAt, nearestPlayer } from "../entities/core.js";
 import { lineOfSight } from "../world/sight.js";
+import { driftToward } from "../world/path.js";
 import { darkCells } from "../world/layout.js";
 import { CELL } from "../world/units.js";
 
@@ -17,7 +18,8 @@ function propMesh(prop) {
   return placeOnWall(paperSign(prop.text), prop.x, prop.y, prop.side);
 }
 
-export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) {
+export function createEncounter({ scene, layout, roster, rng, paths, lightAt, tier = { drift: 0, pace: 1 } }) {
+  const driftRng = rng.fork("drift");
   const dark = darkCells(layout);
   const entities = [];
   for (const def of roster) {
@@ -40,7 +42,11 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt }) 
         if ((entity.stunnedUntil ?? 0) > sense.time) continue;
         // co-op ready: every entity deals with its nearest player
         const player = nearestPlayer(sense.players, entity);
-        for (const event of entity.def.update(entity, { ...sense, player }, dt)) events.push({ ...event, entity, player });
+        // wandering things lean toward whoever they're nearest; harder tiers lean more
+        const goal = cellAt(player.x, player.z);
+        const drifting = driftToward(sense.paths, goal, tier.drift, driftRng);
+        const own = { ...sense, player, paths: drifting };
+        for (const event of entity.def.update(entity, own, dt * tier.pace)) events.push({ ...event, entity, player });
       }
       for (const entity of entities) {
         entity.mesh.position.set(entity.x, 0, entity.z);
