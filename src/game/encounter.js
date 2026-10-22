@@ -8,6 +8,7 @@ import { balloon, paperSign, placeOnWall } from "../render/props.js";
 import { cellAt, nearestPlayer } from "../entities/core.js";
 import { lineOfSight } from "../world/sight.js";
 import { driftToward } from "../world/path.js";
+import { lungeScale } from "./sighting.js";
 import { darkCells } from "../world/layout.js";
 import { CELL } from "../world/units.js";
 
@@ -54,7 +55,8 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         const goal = cellAt(player.x, player.z);
         const drifting = driftToward(sense.paths, goal, tier.drift, driftRng);
         const own = { ...sense, player, paths: drifting };
-        for (const event of entity.def.update(entity, own, dt * tier.pace)) events.push({ ...event, entity, player });
+        const surge = lungeScale(entity, Math.hypot(entity.x - player.x, entity.z - player.z), sense.time);
+        for (const event of entity.def.update(entity, own, dt * tier.pace * surge)) events.push({ ...event, entity, player });
       }
       for (const entity of entities) {
         entity.mesh.position.set(entity.x, 0, entity.z);
