@@ -71,6 +71,8 @@ try {
   check(stats.yellow > 0.35, `and it is Backrooms yellow (${(stats.yellow * 100).toFixed(0)}% of pixels)`);
   if (shot) await page.screenshot({ path: "smoke-frame.png" });
 
+  const firstHint = await page.evaluate(() => window.__noclip.hint);
+  check(/walk/.test(firstHint), `level 0 opens with an on-screen hint (${firstHint})`);
   const home = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const firstNote = await page.evaluate(() => window.__noclip.notes[0]);
   check(firstNote && /EXIT/.test(firstNote.text), "level 0 has a note by the start that teaches the way out");

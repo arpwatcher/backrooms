@@ -31,6 +31,7 @@ import { loadCodex, recordSurvival } from "./game/codex.js";
 import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
 import { createHelp } from "./ui/help.js";
+import { createHints, stepHints } from "./game/hints.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
 import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
@@ -82,6 +83,32 @@ const input = createInput(canvas);
 const hud = createHud();
 const screens = createScreens();
 const help = createHelp();
+// first-level hints, remembered so each is only ever shown once
+const hintLine = document.createElement("div");
+hintLine.id = "hint";
+document.body.appendChild(hintLine);
+const hints = createHints(loadSeenHints());
+const hintState = { walked: 0, toggledLight: false, crouched: false };
+function loadSeenHints() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem("noclip.hints.v1") || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+function showHints(time, travelled) {
+  hintState.walked += travelled;
+  hintState.crouched ||= player.crouching;
+  const before = hints.seen.size;
+  const text = stepHints(hints, { ...hintState, depth: run.depth, time }) ?? "";
+  if (hintLine.textContent !== text) hintLine.textContent = text;
+  hintLine.style.opacity = text ? "1" : "0";
+  if (hints.seen.size !== before) {
+    try {
+      localStorage.setItem("noclip.hints.v1", JSON.stringify([...hints.seen]));
+    } catch {}
+  }
+}
 const codex = loadCodex();
 const codexScreen = createCodexScreen(codex);
 document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
@@ -485,6 +512,7 @@ function frame() {
   if (frameInput.pressed.has("KeyF")) {
     if (level.effects.noFlashlight) hud.say("click. nothing.", 1.5, time);
     else toggleFlashlight(flashlight);
+    hintState.toggledLight = true;
   }
   if (level.effects.noRun) frameInput.cannotRun = true;
   if (frameInput.pressed.has("KeyQ") && drinkAlmondWater(run, player)) hud.say("almond water", 1.5, time);
@@ -522,6 +550,7 @@ function frame() {
     fear = Math.max(fear, 0.75);
     shake = Math.max(shake, 0.7);
   }
+  showHints(time, moved.travelled);
   if (level.pace === "silence") phantomTells(time);
   stepPrints(time);
   ambience(time);
@@ -613,6 +642,7 @@ window.__noclip = {
   get frames() { return frames; },
   get time() { return time; },
   get helpShown() { return help.shown; },
+  get hint() { return hintLine.textContent; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,

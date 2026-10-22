@@ -46,3 +46,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #help td { padding: 1px 8px 1px 0; vertical-align: top; }
 #help td.key { color: #f3e6a2; white-space: nowrap; }
 #help ul { padding-left: 18px; margin: 10px 0 6px; opacity: 0.85; }
+#hint { position: fixed; left: 0; right: 0; bottom: 64px; text-align: center; font-size: 15px; letter-spacing: 0.08em; color: #f0e3a8; text-shadow: 0 0 6px #000, 0 0 2px #000; opacity: 0; transition: opacity 0.6s; pointer-events: none; }
