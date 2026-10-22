@@ -329,6 +329,9 @@ try {
     for (const kind of ["slam", "ring", "steps", "vent"]) a.ambient(kind, 20, 1.5, 20);
     a.fall();
     a.sting(2, 1.4, 2);
+    a.setChase(0.8);
+    a.heartbeat(0.8);
+    a.setChase(0);
     a.squelch();
     a.breath(0.7);
     a.voice(true);

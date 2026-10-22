@@ -83,6 +83,7 @@ export function createAudio() {
 
   const burst = noiseBurst;
   let voiceNode = null;
+  let chaseNode = null;
 
   return {
     ctx,
@@ -348,6 +349,33 @@ export function createAudio() {
       buzz.connect(g).connect(dest);
       buzz.start(t + 0.15);
       buzz.stop(t + 1.7);
+    },
+    // under a chase: a low drone that swells with how close it is
+    setChase(intensity) {
+      if (!chaseNode) {
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        const low = ctx.createBiquadFilter();
+        low.type = "lowpass";
+        low.frequency.value = 220;
+        for (const f of [41.2, 43.6, 82.4]) {
+          const osc = ctx.createOscillator();
+          osc.type = "sawtooth";
+          osc.frequency.value = f;
+          osc.connect(low);
+          osc.start();
+        }
+        low.connect(g).connect(master);
+        chaseNode = { g, low };
+      }
+      chaseNode.g.gain.setTargetAtTime(intensity * 0.12, ctx.currentTime, 0.4);
+      chaseNode.low.frequency.setTargetAtTime(160 + intensity * 500, ctx.currentTime, 0.4);
+    },
+    // your own heart, loud in your ears
+    heartbeat(intensity) {
+      const t = ctx.currentTime;
+      burst({ duration: 0.12, frequency: 60, level: 0.4 + intensity * 0.6, at: t });
+      burst({ duration: 0.1, frequency: 50, level: 0.3 + intensity * 0.5, at: t + 0.16 });
     },
     // the sting when something turns on you: a dissonant cluster that
     // swells from nothing and slams, with a scrape of noise under it

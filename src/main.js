@@ -15,7 +15,7 @@ import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recha
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createPost } from "./render/post.js";
-import { createSightings, stepSightings } from "./game/sighting.js";
+import { createSightings, stepSightings, chaseIntensity, heartRate } from "./game/sighting.js";
 import { createScreens } from "./ui/screens.js";
 import { CELL } from "./world/units.js";
 import { Rng } from "./core/rng.js";
@@ -563,6 +563,16 @@ function frame() {
   }
   showHints(time, moved.travelled);
   level.bearing = showArrow();
+  // the chase: a drone that swells and your heart in your ears
+  const chase = chaseIntensity(level.encounter.entities, player);
+  level.chase = chase;
+  if (audio) {
+    audio.setChase(screens.dead ? 0 : chase);
+    if (chase > 0.15 && time > (level.beatAt ?? 0)) {
+      audio.heartbeat(chase);
+      level.beatAt = time + 60 / heartRate(chase);
+    }
+  }
   if (level.pace === "silence") phantomTells(time);
   stepPrints(time);
   ambience(time);
@@ -656,6 +666,7 @@ window.__noclip = {
   get helpShown() { return help.shown; },
   get hint() { return hintLine.textContent; },
   get bearing() { return level.bearing ?? null; },
+  get chase() { return level.chase ?? 0; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,
