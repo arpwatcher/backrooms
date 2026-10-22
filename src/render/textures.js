@@ -143,3 +143,117 @@ export function panelTexture() {
   }
   return finish(c);
 }
+
+// --- other levels' surfaces --------------------------------------------------
+
+// poured concrete: grey, blotchy, hairline cracks, a seam where the
+// formwork joined
+export function concreteTexture(seed = "concrete", base = "#8a8780") {
+  const rng = new Rng(seed);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+  noise(ctx, rng, size, 0.1, 2);
+  stain(ctx, rng, size, "rgba(40,40,38,0.25)", 10, 45);
+  stain(ctx, rng, size, "rgba(160,155,140,0.18)", 6, 35);
+  ctx.strokeStyle = "rgba(40,38,34,0.35)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    let x = rng.range(0, size), y = rng.range(0, size);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let j = 0; j < 12; j++) {
+      x += rng.range(-9, 9);
+      y += rng.range(-2, 10);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(30,30,28,0.25)";
+  ctx.fillRect(0, size / 2 - 1, size, 2);
+  return finish(c);
+}
+
+// small square pool tiles, off-white, with grey grout and old water stains
+export function tileTexture(seed = "tile", base = "#dfe6e4", grout = "#9aa6a4", count = 8) {
+  const rng = new Rng(seed);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = grout;
+  ctx.fillRect(0, 0, size, size);
+  const step = size / count;
+  for (let y = 0; y < count; y++) {
+    for (let x = 0; x < count; x++) {
+      const v = rng.int(-10, 10);
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(x * step + 1.5, y * step + 1.5, step - 3, step - 3);
+      ctx.fillStyle = v > 0 ? `rgba(255,255,255,${v / 80})` : `rgba(0,0,0,${-v / 120})`;
+      ctx.fillRect(x * step + 1.5, y * step + 1.5, step - 3, step - 3);
+    }
+  }
+  stain(ctx, rng, size, "rgba(120,140,130,0.18)", 6, 40);
+  return finish(c);
+}
+
+// painted metal panels with rivets and rust at the seams
+export function metalTexture(seed = "metal") {
+  const rng = new Rng(seed);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = "#5c625e";
+  ctx.fillRect(0, 0, size, size);
+  noise(ctx, rng, size, 0.07, 2);
+  ctx.strokeStyle = "rgba(20,22,20,0.7)";
+  ctx.lineWidth = 3;
+  for (const x of [0, 128]) {
+    ctx.strokeRect(x + 2, 2, 124, size - 4);
+  }
+  ctx.fillStyle = "rgba(30,30,28,0.8)";
+  for (const x of [8, 120, 136, 248]) {
+    for (let y = 10; y < size; y += 40) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  stain(ctx, rng, size, "rgba(120,60,20,0.35)", 8, 30);
+  return finish(c);
+}
+
+// an office wall: off-white paint, scuffs, a dark baseboard
+export function officeWallTexture(seed = "office") {
+  const rng = new Rng(seed);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = "#cfcbbd";
+  ctx.fillRect(0, 0, size, size);
+  noise(ctx, rng, size, 0.04, 2);
+  stain(ctx, rng, size, "rgba(110,100,80,0.15)", 6, 50);
+  ctx.fillStyle = "#3a3a3e";
+  ctx.fillRect(0, size - 12, size, 12);
+  return finish(c);
+}
+
+// grey-blue office carpet tiles
+export function officeCarpetTexture(seed = "office-carpet") {
+  const rng = new Rng(seed);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = "#4e5866";
+  ctx.fillRect(0, 0, size, size);
+  noise(ctx, rng, size, 0.14, 2);
+  ctx.strokeStyle = "rgba(20,24,30,0.35)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= size; i += 128) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, size);
+    ctx.moveTo(0, i);
+    ctx.lineTo(size, i);
+    ctx.stroke();
+  }
+  stain(ctx, rng, size, "rgba(20,20,20,0.25)", 5, 40);
+  return finish(c);
+}
