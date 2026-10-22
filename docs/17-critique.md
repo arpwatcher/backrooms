@@ -10,24 +10,25 @@ lit and in the dark.
 
 ## Open (worst first)
 
-1. **No real chases.** A hunting thing just walks at you. A chase needs a
-   lunge when it closes, music that tells you you're being chased, and
-   escapes: corners that break its line, doors, a light to stand under.
-2. **Monsters float.** They cast no shadow, so they don't sit on the
-   carpet. A soft dark blot under each would ground them.
-3. **Facelings: a pill with an egg on top.** The torso has no chest or
-   shoulders and the head has no skull shape. They need real anatomy, so
-   the missing face is the only wrong thing.
-4. **Deathmoths haven't been touched.** From a distance their wings read as
+1. **Chases have nowhere to go.** There's now a drone, a heartbeat and a
+   lunge, but no escape tools: doors to shut behind you and nooks to duck
+   into.
+2. **Deathmoths haven't been touched.** From a distance their wings read as
    confetti. They need dust, bodies and a fluttering glow.
-5. **Deadline still reads as a column.** It should be a wall of dark across
+3. **Deadline still reads as a column.** It should be a wall of dark across
    the corridor, not a pillar of it.
-6. **The death screen is only text.** It should show the face of what got
-   you, close.
-7. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
+4. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
    from the neck up but not below.
 
 ## Fixed
+
+- 2026-10-22: monsters floating. Each now has a soft shadow on the carpet.
+- 2026-10-22: Facelings as a pill with an egg on top. They now have a chest,
+  waist, belt, shoulders, ears, a jaw and cheekbones.
+- 2026-10-22: the death screen being only text. It now shows the face of what
+  got you, close up and lit red from below.
+- 2026-10-22: chases with no shape. There is now a chase drone that swells, a
+  heartbeat that quickens and a lunge in the last three metres.
 
 - 2026-10-22: every monster rebuilt from the kit in `src/render/flesh.js`, with
   painted skin, normal maps, lumpy flesh, glowing eyes and a rim light:
