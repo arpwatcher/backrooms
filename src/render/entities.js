@@ -214,52 +214,86 @@ export function houndMesh() {
   return group;
 }
 
-// a featureless grey mannequin; every time it has moved unseen, its pose
-// is a little different when you look back
+// A shop mannequin in cracked plaster: ball joints at the shoulders, elbows
+// and knees, a carved face with two small painted eyes. It is never seen
+// moving. Each time you look back its pose is a little different, and its
+// head is turned a little more toward you.
 export function stillLifeMesh() {
   const group = new THREE.Group();
-  const plaster = new THREE.MeshLambertMaterial({ color: 0x9a968c });
-  const part = (geometry, x, y, z) => {
-    const mesh = new THREE.Mesh(geometry, plaster);
-    mesh.position.set(x, y, z);
-    group.add(mesh);
-    return mesh;
+  const plaster = fleshMaterial({ skin: skin({ base: "#b8b2a4", blotch: "rgba(110,95,70,0.35)", veins: "rgba(40,34,28,0.75)", grime: 0.55, pores: 0.2, seed: "plaster" }), roughness: 0.82, rim: 0x3a3630, normalScale: 1.2 });
+  const joint = (x, y, z, r = 0.05) => {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), plaster);
+    ball.position.set(x, y, z);
+    return ball;
   };
-  const torso = part(new THREE.CapsuleGeometry(0.16, 0.4, 6, 12), 0, 1.27, 0);
-  torso.scale.set(1.2, 1, 0.72);
-  const hips = part(new THREE.CapsuleGeometry(0.13, 0.08, 4, 10), 0, 0.9, 0);
-  hips.scale.set(1.25, 1, 0.8);
-  part(new THREE.CylinderGeometry(0.035, 0.045, 0.14, 6), 0, 1.6, 0);
-  const head = part(new THREE.SphereGeometry(0.105, 14, 12), 0, 1.74, 0.01);
-  head.scale.set(0.88, 1.28, 1);
+  // a sphere stretched into a torso (capsule caps smear the painted cracks)
+  const torso = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 28, 24), { amount: 0.004, scale: 5, seed: 61,
+    along: (v) => -0.035 * Math.exp(-(((v.y + 0.08) / 0.07) ** 2)) }), plaster);
+  torso.position.y = 1.27;
+  torso.scale.set(1.05, 1.65, 0.7);
+  group.add(torso);
+  const hips = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.16, 16, 12), { amount: 0.004 }), plaster);
+  hips.scale.set(1.15, 0.7, 0.8);
+  hips.position.y = 0.92;
+  group.add(hips);
+  group.add(new THREE.Mesh(tube([[0, 1.55, 0], [0, 1.63, 0.01]], 0.04, 0.9, 8), plaster));
+  const head = new THREE.Group();
+  head.position.set(0, 1.75, 0.01);
+  group.add(head);
+  // a carved face: brow, a straight nose, closed lips
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.105, 28, 22), {
+    amount: 0.002, scale: 10, seed: 63,
+    along: (v) => {
+      if (v.z < 0.04) return 0;
+      const brow = Math.exp(-(((v.y - 0.035) / 0.012) ** 2)) * (Math.abs(v.x) < 0.06 ? 0.008 : 0);
+      const socket = Math.exp(-(((Math.abs(v.x) - 0.035) / 0.018) ** 2 + ((v.y - 0.015) / 0.013) ** 2)) * -0.01;
+      const nose = Math.exp(-((v.x / 0.01) ** 2 + ((v.y + 0.005) / 0.025) ** 2)) * 0.016;
+      const lips = Math.exp(-((v.x / 0.025) ** 2 + ((v.y + 0.045) / 0.008) ** 2)) * 0.006;
+      return brow + socket + nose + lips;
+    },
+  }), plaster);
+  skull.scale.set(0.88, 1.22, 0.98);
+  head.add(skull);
+  const paint = new THREE.MeshBasicMaterial({ color: 0x1a1612 });
+  for (const x of [-0.033, 0.033]) {
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.008, 10), paint);
+    pupil.position.set(x, 0.018, 0.096);
+    pupil.rotation.y = x * 4;
+    head.add(pupil);
+  }
+  // segmented limbs: upper, a ball joint, lower
+  const limb = (x, y, upper, lower, r) => {
+    const top = new THREE.Group();
+    top.position.set(x, y, 0);
+    top.add(joint(0, 0, 0, r * 1.15));
+    top.add(new THREE.Mesh(tube([[0, 0, 0], [0, -upper, 0]], r, 0.85, 8), plaster));
+    const mid = new THREE.Group();
+    mid.position.y = -upper;
+    mid.add(joint(0, 0, 0, r));
+    mid.add(new THREE.Mesh(tube([[0, 0, 0], [0, -lower, 0]], r * 0.9, 0.75, 8), plaster));
+    top.add(mid);
+    group.add(top);
+    return { top, mid };
+  };
+  const arms = [limb(-0.25, 1.5, 0.3, 0.3, 0.04), limb(0.25, 1.5, 0.3, 0.3, 0.04)];
+  const legs = [limb(-0.09, 0.86, 0.42, 0.42, 0.055), limb(0.09, 0.86, 0.42, 0.42, 0.055)];
   // a default pose that is already slightly wrong
   head.rotation.set(0.18, 0, 0.22);
-  const limb = (length) => {
-    const pivot = new THREE.Group();
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, length, 6), plaster);
-    mesh.position.y = -length / 2;
-    pivot.add(mesh);
-    group.add(pivot);
-    return pivot;
-  };
-  const arms = [limb(0.66), limb(0.66)];
-  arms[0].position.set(-0.235, 1.5, 0);
-  arms[1].position.set(0.235, 1.5, 0);
-  arms[0].rotation.set(0.1, 0, -0.06);
-  arms[1].rotation.set(-0.35, 0, 0.1);
-  const legs = [limb(0.82), limb(0.82)];
-  legs[0].position.set(-0.09, 0.82, 0);
-  legs[1].position.set(0.09, 0.82, 0);
+  arms[1].top.rotation.x = -0.35;
+  arms[1].mid.rotation.x = -0.5;
   let lastState = "";
   group.userData.animate = (time, entity) => {
     const settled = entity.state === "frozen" || entity.state === "waking";
     if (settled && lastState && lastState !== entity.state && lastState !== "waking") {
       // a new pose, chosen while nobody was looking
       const r = (k) => Math.sin(entity.x * 12.9898 + entity.z * 78.233 + k) * 0.5;
-      arms[0].rotation.set(r(1) * 1.6 - 0.4, 0, -0.06 - Math.abs(r(2)) * 0.5);
-      arms[1].rotation.set(r(3) * 1.6 - 0.4, 0, 0.06 + Math.abs(r(4)) * 0.5);
-      head.rotation.set(r(5) * 0.4, r(6) * 0.8, r(7) * 0.5);
-      torso.rotation.z = r(8) * 0.12;
+      arms.forEach((a, i) => {
+        a.top.rotation.set(r(1 + i) * 2 - 0.5, 0, (i ? 1 : -1) * Math.abs(r(3 + i)) * 0.6);
+        a.mid.rotation.x = -Math.abs(r(5 + i)) * 1.6;
+      });
+      legs[0].mid.rotation.x = Math.abs(r(7)) * 0.4;
+      head.rotation.set(r(8) * 0.5, r(9) * 1.2, r(10) * 0.6);
+      torso.rotation.z = r(11) * 0.15;
     }
     lastState = entity.state;
   };
