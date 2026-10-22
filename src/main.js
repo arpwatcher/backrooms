@@ -32,6 +32,7 @@ import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
 import { createHelp } from "./ui/help.js";
 import { createHints, stepHints } from "./game/hints.js";
+import { exitBearing } from "./game/compass.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
 import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
@@ -84,6 +85,16 @@ const hud = createHud();
 const screens = createScreens();
 const help = createHelp();
 // first-level hints, remembered so each is only ever shown once
+// lucid only: a faint arrow down the path to the nearest exit
+const arrow = document.createElement("div");
+arrow.id = "arrow";
+document.body.appendChild(arrow);
+function showArrow() {
+  const bearing = tier.name === "lucid" && !screens.dead ? exitBearing(player, level.layout.exits, level.paths) : null;
+  arrow.style.opacity = bearing ? "0.55" : "0";
+  if (bearing) arrow.style.transform = `translateX(-50%) rotate(${-bearing.angle}rad)`;
+  return bearing;
+}
 const hintLine = document.createElement("div");
 hintLine.id = "hint";
 document.body.appendChild(hintLine);
@@ -551,6 +562,7 @@ function frame() {
     shake = Math.max(shake, 0.7);
   }
   showHints(time, moved.travelled);
+  level.bearing = showArrow();
   if (level.pace === "silence") phantomTells(time);
   stepPrints(time);
   ambience(time);
@@ -643,6 +655,7 @@ window.__noclip = {
   get time() { return time; },
   get helpShown() { return help.shown; },
   get hint() { return hintLine.textContent; },
+  get bearing() { return level.bearing ?? null; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,

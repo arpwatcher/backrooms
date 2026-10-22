@@ -47,3 +47,4 @@ button:hover { background: rgba(243,230,162,0.08); }
 #help td.key { color: #f3e6a2; white-space: nowrap; }
 #help ul { padding-left: 18px; margin: 10px 0 6px; opacity: 0.85; }
 #hint { position: fixed; left: 0; right: 0; bottom: 64px; text-align: center; font-size: 15px; letter-spacing: 0.08em; color: #f0e3a8; text-shadow: 0 0 6px #000, 0 0 2px #000; opacity: 0; transition: opacity 0.6s; pointer-events: none; }
+#arrow { position: fixed; top: 22px; left: 50%; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 22px solid #f0e3a8; opacity: 0; transition: opacity 0.4s; pointer-events: none; filter: drop-shadow(0 0 4px #000); transform-origin: 50% 60%; }

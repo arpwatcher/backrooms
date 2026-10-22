@@ -309,6 +309,13 @@ try {
   const startedAt = await deep.evaluate(() => window.__noclip.run.depth);
   check(startedAt === 4, `?depth=4 starts the run on level 4 (${startedAt})`);
   await deep.close();
+  const easy = await browser.newPage({ viewport: { width: 480, height: 270 } });
+  await easy.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&tier=lucid`);
+  await easy.waitForFunction(() => window.__noclip && window.__noclip.frames > 2 && window.__noclip.bearing, null, { timeout: 30000 }).catch(() => {});
+  const bearing = await easy.evaluate(() => window.__noclip.bearing);
+  check(bearing && bearing.cells > 0, `on lucid an arrow points down the path to the exit (${bearing?.cells} cells)`);
+  await easy.close();
+  check(await page.evaluate(() => window.__noclip.bearing === null), "and on other tiers there is no arrow");
 
   const audio = await page.evaluate(() => window.__noclip.audio && window.__noclip.audio.ctx.state);
   check(Boolean(audio), `entering starts the sound (audio context ${audio})`);
