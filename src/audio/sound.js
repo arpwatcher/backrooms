@@ -349,6 +349,31 @@ export function createAudio() {
       buzz.start(t + 0.15);
       buzz.stop(t + 1.7);
     },
+    // the sting when something turns on you: a dissonant cluster that
+    // swells from nothing and slams, with a scrape of noise under it
+    sting(x, y, z) {
+      const t = ctx.currentTime;
+      const dest = panner(x, y, z, 2.5);
+      for (const f of [146.8, 155.6, 207.7, 311.1, 329.6]) {
+        const osc = ctx.createOscillator();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(f, t);
+        osc.frequency.linearRampToValueAtTime(f * 0.97, t + 1.4);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.06, t + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+        const tone = ctx.createBiquadFilter();
+        tone.type = "lowpass";
+        tone.frequency.setValueAtTime(3200, t);
+        tone.frequency.exponentialRampToValueAtTime(400, t + 1.4);
+        osc.connect(tone).connect(g).connect(master);
+        osc.start(t);
+        osc.stop(t + 1.55);
+      }
+      burst({ duration: 0.6, frequency: 1800, q: 0.6, type: "bandpass", level: 0.5, at: t, destination: dest });
+      burst({ duration: 0.4, frequency: 70, level: 0.8, at: t });
+    },
     // the knock-down: a low thump and a ring in the ears
     hit() {
       const t = ctx.currentTime;

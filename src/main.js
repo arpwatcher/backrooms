@@ -15,6 +15,7 @@ import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recha
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createPost } from "./render/post.js";
+import { createSightings, stepSightings } from "./game/sighting.js";
 import { createScreens } from "./ui/screens.js";
 import { CELL } from "./world/units.js";
 import { Rng } from "./core/rng.js";
@@ -83,6 +84,8 @@ const codex = loadCodex();
 const codexScreen = createCodexScreen(codex);
 document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
 let marks = new Map();
+// who has already turned on you, so each hunt stings once (reset per level)
+let sightings = createSightings();
 let phantoms = createPhantoms();
 const phantomRng = new Rng("phantoms");
 let tier = TIERS[params.get("tier")] ?? TIERS[readTier()] ?? TIERS.uneasy;
@@ -151,6 +154,7 @@ function loadLevel() {
   const prints = printPool();
   world.group.add(prints);
   phantoms = createPhantoms();
+  sightings = createSightings();
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
   level = { tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
@@ -461,6 +465,7 @@ let bob = 0;
 let time = 0;
 // 0..1, spikes when something sees you or touches you, then fades
 let fear = 0;
+let shake = 0;
 function frame() {
   const real = Math.min(clock.getDelta(), 0.1);
   if (pause.shown || codexScreen.isOpen) {
@@ -508,6 +513,12 @@ function frame() {
     setTimeout(() => audio?.setHum(1, 6), tier.mercyFor * 1000);
     hud.say("the hum softens. something lets go of you, for now.", 4, time);
   }
+  // something just turned on you: a sting, a jolt, the image tears
+  for (const e of stepSightings(sightings, level.encounter.entities, player, time)) {
+    audio?.sting(e.x, 1.4, e.z);
+    fear = Math.max(fear, 0.75);
+    shake = Math.max(shake, 0.7);
+  }
   if (level.pace === "silence") phantomTells(time);
   stepPrints(time);
   ambience(time);
@@ -549,7 +560,9 @@ function frame() {
   bob += moved.travelled * (player.running ? 5.2 : 6.4);
   const bobHeight = moved.travelled > 0 ? Math.sin(bob) * (player.running ? 0.045 : 0.025) : 0;
   camera.position.set(player.x, (down ? 0.45 : player.height) + bobHeight, player.z);
-  camera.rotation.set(player.pitch, player.yaw, down ? 0.5 : 0);
+  shake = Math.max(0, shake - dt * 1.4);
+  const jolt = shake * shake * 0.035;
+  camera.rotation.set(player.pitch + (Math.random() - 0.5) * jolt, player.yaw + (Math.random() - 0.5) * jolt, (down ? 0.5 : 0) + (Math.random() - 0.5) * jolt);
   // low lucidity: the room breathes
   const unease = Math.max(0, 0.6 - player.lucidity);
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
