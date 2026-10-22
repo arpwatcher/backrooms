@@ -376,6 +376,12 @@ function stepPrints(time) {
   level.prints.instanceMatrix.needsUpdate = true;
 }
 
+// what your feet land on, for the sound of them
+function groundOf(look) {
+  if (look.water) return "water";
+  return ["concrete", "darkConcrete", "wetConcrete", "tile", "bigTile", "metal"].includes(look.floor) ? "hard" : "soft";
+}
+
 // every level: now and then the building makes a sound somewhere far off
 const AMBIENT = ["slam", "ring", "steps", "vent"];
 function ambience(time) {
@@ -673,7 +679,7 @@ function frame() {
   const ticks = updateLights(level.world, camera.position, time);
   if (audio) {
     audio.listen(camera.position, player.yaw);
-    if (moved.stepped) audio.footstep(player.running, player.crouching);
+    if (moved.stepped) audio.footstep(player.running, player.crouching, groundOf(level.archetype.look));
     if (moved.stepped && shoesWet(level.tracks, time)) audio.squelch();
     audio.voice(player.humming && !screens.dead);
     if ((player.stamina < 0.55 || player.exhausted) && time > (player.breathAt ?? 0)) {

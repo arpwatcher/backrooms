@@ -108,7 +108,8 @@ export function buildWorld(scene, layout, look = {}) {
   }
 
   if (look.pipes) group.add(pipesAlong(segments, layout.seed));
-  if (look.water) group.add(waterOver(width, depth));
+  const water = look.water ? waterOver(width, depth) : null;
+  if (water) group.add(water);
 
   // ceiling panels - emissive, so they glow even far from a real light
   const panelGeometry = new THREE.PlaneGeometry(1.2, 0.6);
@@ -137,13 +138,16 @@ export function buildWorld(scene, layout, look = {}) {
   const ambient = new THREE.AmbientLight(look.ambientColor ?? 0x9a8848, look.ambient ?? 0.6);
   group.add(ambient);
 
-  return { group, panels, pool, ambient, segments };
+  return { group, panels, pool, ambient, segments, water };
 }
 
 // per frame: flicker, then hand the light pool to the nearest live panels
 // returns the panels that just flickered off, so the caller can tick them
 export function updateLights(world, position, time) {
   const ticks = [];
+  if (world.water) {
+    world.water.userData.ripple.offset.set(time * 0.012, time * 0.007);
+  }
   for (const panel of world.panels) {
     if (panel.state === "flicker") {
       const t = time * 9 + panel.phase;
@@ -195,12 +199,48 @@ function pipesAlong(segments, seed) {
   return pipes;
 }
 
-// shallow still water over the whole floor
+// a tiling normal map of soft overlapping ripples
+let rippleMap = null;
+function ripples() {
+  if (rippleMap) return rippleMap;
+  const size = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const img = g.createImageData(size, size);
+  const h = (x, y) => {
+    const a = (x / size) * Math.PI * 2;
+    const b = (y / size) * Math.PI * 2;
+    return Math.sin(a * 3 + Math.sin(b * 2) * 1.5) * 0.5 + Math.sin(b * 4 + Math.cos(a * 3)) * 0.35 + Math.sin((a + b) * 5) * 0.15;
+  };
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (h(x + 1, y) - h(x - 1, y)) * 2;
+      const dy = (h(x, y + 1) - h(x, y - 1)) * 2;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * size + x) * 4;
+      img.data[i] = (-dx / l * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (-dy / l * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (1 / l * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  rippleMap = new THREE.CanvasTexture(c);
+  rippleMap.wrapS = rippleMap.wrapT = THREE.RepeatWrapping;
+  return rippleMap;
+}
+
+// shallow water over the whole floor, rippling slowly
 function waterOver(width, depth) {
+  const normalMap = ripples().clone();
+  normalMap.needsUpdate = true;
+  normalMap.repeat.set(width / 3, depth / 3);
   const water = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshStandardMaterial({ color: 0x8fc4c8, roughness: 0.04, metalness: 0.35, transparent: true, opacity: 0.55 }),
+    new THREE.MeshStandardMaterial({ color: 0x8fc4c8, roughness: 0.06, metalness: 0.35, transparent: true, opacity: 0.55, normalMap, normalScale: new THREE.Vector2(0.35, 0.35) }),
   );
+  water.userData.ripple = normalMap;
   water.rotation.x = -Math.PI / 2;
   water.position.set(width / 2, 0.07, depth / 2);
   return water;

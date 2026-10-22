@@ -101,11 +101,26 @@ export function createAudio() {
       for (const osc of tones) osc.detune.setTargetAtTime(cents, ctx.currentTime, 0.5);
       ballast.detune.setTargetAtTime(cents, ctx.currentTime, 0.5);
     },
-    footstep(running, crouching) {
+    // surface: "soft" (carpet), "hard" (concrete, tile, metal) or "water"
+    footstep(running, crouching, surface = "soft") {
       const level = crouching ? 0.05 : running ? 0.32 : 0.16;
-      burst({ duration: running ? 0.12 : 0.18, frequency: crouching ? 300 : 520, level });
+      const t = ctx.currentTime;
+      if (surface === "water") {
+        // ankle-deep: a slosh and a drip
+        burst({ duration: running ? 0.25 : 0.35, frequency: 900, q: 0.7, type: "bandpass", level: level * 1.3, at: t });
+        burst({ duration: 0.06, frequency: 2600 + Math.random() * 800, q: 6, type: "bandpass", level: level * 0.4, at: t + 0.12 });
+        return;
+      }
+      if (surface === "hard") {
+        // a heel on concrete, and the room giving it back a moment later
+        burst({ duration: 0.05, frequency: 1800, q: 1.5, type: "bandpass", level: level * 1.1, at: t });
+        burst({ duration: 0.12, frequency: 400, level: level * 0.7, at: t });
+        burst({ duration: 0.05, frequency: 1500, q: 1.5, type: "bandpass", level: level * 0.25, at: t + 0.14 });
+        return;
+      }
+      burst({ duration: running ? 0.12 : 0.18, frequency: crouching ? 300 : 520, level, at: t });
       // the damp squelch under it
-      burst({ duration: 0.09, frequency: 1600, q: 4, type: "bandpass", level: level * 0.25, at: ctx.currentTime + 0.03 });
+      burst({ duration: 0.09, frequency: 1600, q: 4, type: "bandpass", level: level * 0.25, at: t + 0.03 });
     },
     flickerTick(x, y, z) {
       burst({ duration: 0.04, frequency: 3000, q: 6, type: "bandpass", level: 0.25, destination: panner(x, y, z, 1.5) });

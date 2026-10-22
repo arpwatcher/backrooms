@@ -7,14 +7,14 @@ const http = require("node:http"); const fs = require("node:fs"); const path = r
 const out = process.argv[2]; fs.mkdirSync(out, { recursive: true });
 const only = process.argv[3];
 const root = new URL("..", import.meta.url).pathname;
-const srv = http.createServer((q, r) => { const p = path.join(root, decodeURIComponent(new URL(q.url, "http://x").pathname)); fs.readFile(p, (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "content-type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(b); }); });
+const srv = http.createServer((q, r) => { const p = path.join(root, decodeURIComponent(new URL(q.url, "http://x").pathname)); fs.readFile(p, (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "content-type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : p.endsWith(".html") ? "text/html" : "application/octet-stream" }); r.end(b); }); });
 await new Promise((ok) => srv.listen(0, ok));
 const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 const pg = await b.newPage({ viewport: { width: 960, height: 540 } });
 pg.on("pageerror", (e) => console.log("pageerror", e.message));
 await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
-await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3);
-const shots = [["hounds", 1], ["smiler", 2], ["stillLife", 3], ["deathmoths", 4], ["partygoers", 5], ["facelings", 6], ["stilts", 7], ["hushbaby", 11], ["attendant", 12], ["deadline", 13]].filter(([k]) => !only || only.split(",").includes(k));
+await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
+const shots = [["wretch", 1], ["hounds", 2], ["smiler", 3], ["facelings", 4], ["deathmoths", 5], ["stillLife", 7], ["partygoers", 8], ["stilts", 9], ["hushbaby", 11], ["attendant", 12], ["deadline", 13]].filter(([k]) => !only || only.split(",").includes(k));
 for (const [kind, depth] of shots) {
   for (const mode of ["lit", "dark"]) {
     const info = await pg.evaluate(([kind, depth, mode]) => {
