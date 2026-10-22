@@ -1,7 +1,9 @@
 // A level's entities: spawning them, giving each its sense of the world, and
 // turning what they do into events for the game (sounds, contact, drains).
 
+import * as THREE from "three";
 import { MESHES } from "../render/entities.js";
+import { groundShadow } from "../render/flesh.js";
 import { balloon, paperSign, placeOnWall } from "../render/props.js";
 import { cellAt, nearestPlayer } from "../entities/core.js";
 import { lineOfSight } from "../world/sight.js";
@@ -28,6 +30,12 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
     for (const entity of spawned) {
       entity.spawnCell = cellAt(entity.x, entity.z);
       entity.mesh = MESHES[def.id]();
+      // grounded: a soft shadow sized to its footprint (not for smoke or swarms)
+      if (!["deadline", "deathmoths"].includes(def.id)) {
+        const box = new THREE.Box3().setFromObject(entity.mesh);
+        const size = box.getSize(new THREE.Vector3());
+        entity.mesh.add(groundShadow(Math.max(0.5, size.x * 1.3), Math.max(0.5, size.z * 1.3)));
+      }
       entity.mesh.position.set(entity.x, 0, entity.z);
       scene.add(entity.mesh);
       entities.push(entity);

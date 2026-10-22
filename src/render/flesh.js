@@ -296,3 +296,29 @@ export function smoke(seed = "smoke", size = 128) {
   smokes.set(seed, texture);
   return texture;
 }
+
+// a soft dark blot on the carpet under something standing on it
+let blotTexture = null;
+export function groundShadow(width = 0.8, depth = width) {
+  if (!blotTexture) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(0,0,0,0.75)");
+    grad.addColorStop(0.55, "rgba(0,0,0,0.35)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    blotTexture = new THREE.CanvasTexture(c);
+  }
+  const blot = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: blotTexture, transparent: true, depthWrite: false }),
+  );
+  blot.rotation.x = -Math.PI / 2;
+  blot.position.y = 0.015;
+  blot.scale.set(width, depth, 1);
+  blot.renderOrder = -1;
+  return blot;
+}
