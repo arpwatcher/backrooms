@@ -446,10 +446,23 @@ export function facelingsMesh() {
   const flesh = fleshMaterial({ skin: skin({ base: "#c4ab98", blotch: "rgba(150,80,80,0.3)", veins: "rgba(90,80,140,0.25)", grime: 0.25, pores: 0.7, seed: "faceling" }), roughness: 0.55, rim: 0x3a3028 });
   const shirt = fleshMaterial({ skin: skin({ base: "#b4b2a6", blotch: "rgba(120,110,70,0.3)", veins: null, grime: 0.25, pores: 0, seed: "shirt" }), roughness: 0.9, rim: 0x202020, normalScale: 0.6 });
   const trousers = fleshMaterial({ skin: skin({ base: "#26262c", blotch: "rgba(10,10,10,0.4)", veins: null, grime: 0.6, pores: 0, seed: "trousers" }), roughness: 0.95, rim: 0x151515 });
-  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.19, 0.42, 6, 14), { amount: 0.006, scale: 5, seed: 31 }), shirt);
-  torso.scale.set(1.15, 1, 0.7);
-  torso.position.y = 1.28;
+  // a chest that tapers to a waist, shoulders squared under the shirt
+  const torso = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 28, 24), {
+    amount: 0.004, scale: 5, seed: 31,
+    along: (v) => {
+      const waist = -0.05 * Math.exp(-(((v.y + 0.11) / 0.06) ** 2));
+      const chest = 0.025 * Math.exp(-(((v.y - 0.06) / 0.06) ** 2)) * (v.z > 0 ? 1 : 0.4);
+      const shoulders = v.y > 0.12 ? 0.03 * Math.min(1, Math.abs(v.x) / 0.15) : 0;
+      return waist + chest + shoulders;
+    },
+  }), shirt);
+  torso.scale.set(1.1, 1.55, 0.68);
+  torso.position.y = 1.27;
   group.add(torso);
+  const belt = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.16, 20, 12), { amount: 0.003 }), trousers);
+  belt.scale.set(1.15, 0.55, 0.78);
+  belt.position.y = 0.96;
+  group.add(belt);
   group.add(new THREE.Mesh(tube([[0, 1.52, 0], [0, 1.6, 0.01], [0, 1.7, 0.02]], 0.055, 0.85, 10), flesh));
   // shoulders, so the arms hang from something
   for (const x of [-0.22, 0.22]) {
@@ -468,13 +481,21 @@ export function facelingsMesh() {
       if (v.z < 0.05) return 0;
       const eye = Math.exp(-(((Math.abs(v.x) - 0.04) / 0.022) ** 2 + ((v.y - 0.02) / 0.017) ** 2)) * -0.028;
       const nose = Math.exp(-((v.x / 0.012) ** 2 + ((v.y + 0.01) / 0.03) ** 2)) * 0.016;
+      const cheek = Math.exp(-(((Math.abs(v.x) - 0.055) / 0.02) ** 2 + ((v.y + 0.01) / 0.02) ** 2)) * 0.008;
       // a jaw and a chin where a mouth should be, closed over
-      const jaw = v.y < -0.03 ? Math.exp(-((v.x / 0.05) ** 2)) * 0.01 : 0;
-      return eye + nose + jaw;
+      const jaw = v.y < -0.03 ? Math.exp(-((v.x / 0.05) ** 2)) * 0.012 : 0;
+      return eye + nose + cheek + jaw;
     },
   }), flesh);
-  skull.scale.set(0.88, 1.18, 0.98);
+  skull.scale.set(0.86, 1.2, 1);
   head.add(skull);
+  // ears, because a person has them
+  for (const x of [-0.1, 0.1]) {
+    const ear = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.02, 8, 6), { amount: 0.003 }), flesh);
+    ear.scale.set(0.5, 1.4, 0.9);
+    ear.position.set(x, 0.0, -0.005);
+    head.add(ear);
+  }
   const limb = (material, points, radius) => {
     const pivot = new THREE.Group();
     pivot.position.set(...points[0]);
