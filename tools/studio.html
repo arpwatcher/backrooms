@@ -47,7 +47,7 @@ wall.position.set(0, 1.35, -2.4);
 scene.add(wall);
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 50);
 camera.position.set(Math.sin(angle) * dist, height, Math.cos(angle) * dist);
-camera.lookAt(0, height * 0.6, 0);
+camera.lookAt(0, Number(q.get("look") ?? height * 0.6), 0);
 const beam = new THREE.SpotLight(0xfff4d6, Number(q.get("beam") ?? 16), 22, 0.42, 0.45, 1.4);
 camera.add(beam, beam.target);
 beam.target.position.set(0, 0, -1);
