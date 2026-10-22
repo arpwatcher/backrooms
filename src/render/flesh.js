@@ -266,3 +266,30 @@ export function twitch(time, seed, rate = 1.6, size = 1) {
   const hold = phase < 0.35 ? 1 : Math.max(0, 1 - (phase - 0.35) * 6);
   return (hash3(step, seed, 1.5) - 0.5) * 2 * size * hold;
 }
+
+// black smoke with holes in it, tiling, for things made of the dark
+const smokes = new Map();
+export function smoke(seed = "smoke", size = 128) {
+  if (smokes.has(seed)) return smokes.get(seed);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  const img = g.createImageData(size, size);
+  const off = seed.length * 3.7;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // tileable: sample noise on a torus
+      const a = (x / size) * Math.PI * 2;
+      const b = (y / size) * Math.PI * 2;
+      const n = fbm(Math.cos(a) * 1.6 + off, Math.sin(a) * 1.6, Math.cos(b) * 1.6 + Math.sin(b) * 0.9, 5);
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 4;
+      img.data[i + 3] = Math.max(0, Math.min(255, (n - 0.32) * 3.2 * 255));
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  smokes.set(seed, texture);
+  return texture;
+}

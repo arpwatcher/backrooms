@@ -2,7 +2,7 @@
 // in proportion, posture and movement more than detail.
 
 import * as THREE from "three";
-import { skin, fleshMaterial, lumpy, tube, eyes, twitch } from "./flesh.js";
+import { skin, fleshMaterial, lumpy, tube, eyes, twitch, smoke } from "./flesh.js";
 
 function grinTexture() {
   const c = document.createElement("canvas");
@@ -731,20 +731,49 @@ export function attendantMesh() {
   return group;
 }
 
-// the edge of the dark: a column of black that the light doesn't reach into
+// The edge of the dark: a wall of black smoke rolling forward, thicker at
+// the bottom, and now and then the shape of a person standing inside it,
+// gone again before you're sure.
 export function deadlineMesh() {
   const group = new THREE.Group();
-  for (const [radius, opacity] of [[1.25, 0.35], [0.95, 0.6], [0.6, 0.9]]) {
-    const shell = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius, radius, 2.7, 16, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }),
-    );
+  const layers = [];
+  for (const [radius, speed, opacity] of [[1.5, 0.05, 0.75], [1.2, -0.08, 0.85], [0.9, 0.12, 0.95]]) {
+    const map = smoke(`deadline-${radius}`).clone();
+    map.needsUpdate = true;
+    map.repeat.set(2, 1);
+    const material = new THREE.MeshBasicMaterial({ map, color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, fog: false });
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.15, 2.7, 24, 1, true), material);
     shell.position.y = 1.35;
     group.add(shell);
+    layers.push({ map, speed, shell });
   }
+  // figures in the smoke: black silhouettes that fade in and out
+  const figures = [0, 1].map((i) => {
+    const figure = facelingsMesh();
+    figure.traverse((o) => {
+      if (o.material) {
+        o.material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 });
+      }
+    });
+    figure.position.set(i ? 0.6 : -0.5, 0, i ? -0.3 : 0.4);
+    figure.scale.setScalar(1.05);
+    group.add(figure);
+    return figure;
+  });
   group.userData.animate = (time, entity) => {
     group.visible = entity.state === "coming";
-    group.children.forEach((shell, i) => shell.scale.setScalar(1 + Math.sin(time * (1.3 + i * 0.4)) * 0.06));
+    for (const { map, speed, shell } of layers) {
+      map.offset.x = time * speed;
+      map.offset.y = Math.sin(time * 0.3 + speed * 10) * 0.05;
+      shell.rotation.y = time * speed * 0.5;
+    }
+    figures.forEach((figure, i) => {
+      const show = Math.max(0, Math.sin(time * 0.35 + i * 2.4) - 0.6) * 2.2;
+      figure.traverse((o) => {
+        if (o.material) o.material.opacity = Math.min(0.9, show);
+      });
+      figure.rotation.y = Math.sin(time * 0.2 + i) * 0.6;
+    });
   };
   return group;
 }
