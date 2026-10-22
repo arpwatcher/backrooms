@@ -24,7 +24,7 @@ for (const [kind, depth] of shots) {
       if (!e) return "missing";
       e.stunnedUntil = 1e9;
       if (kind === "hushbaby") e.state = "coming";
-      if (kind === "deadline") e.state = "coming";
+      if (kind === "deadline") e.front = Math.max(e.front, 3);
       const p = n.player;
       // stand in the entity's own cell, offset toward the most open side
       const L = n.layout, cx = Math.floor(e.x / 2.4), cy = Math.floor(e.z / 2.4);
