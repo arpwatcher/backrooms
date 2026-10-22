@@ -75,3 +75,30 @@ test("wandering never walks through a wall and avoids doubling back when it can"
     at = next;
   }
 });
+
+test("drifting wanderers lean toward the player, and plain ones don't", async () => {
+  const { createPathfinder, driftToward } = await import("../src/world/path.js");
+  const { Rng } = await import("../src/core/rng.js");
+  const layout = generateLayout({ seed: "drift", width: 16, height: 16, wallRuns: 0, rooms: 0, pillarChance: 0 });
+  const paths = createPathfinder(layout);
+  const goal = { x: 15, y: 15 };
+  const walk = (p, seed) => {
+    let at = { x: 0, y: 0 };
+    let from = null;
+    const rng = new Rng(seed);
+    for (let i = 0; i < 40; i++) {
+      const next = p.wander(at, rng, from);
+      from = at;
+      at = next;
+    }
+    return Math.abs(goal.x - at.x) + Math.abs(goal.y - at.y);
+  };
+  let drifted = 0;
+  let plain = 0;
+  for (let i = 0; i < 30; i++) {
+    drifted += walk(driftToward(paths, goal, 0.5, new Rng(`d${i}`)), `w${i}`);
+    plain += walk(paths, `w${i}`);
+  }
+  assert.ok(drifted < plain * 0.6, `drifted ${drifted} vs plain ${plain}`);
+  assert.equal(walk(driftToward(paths, null, 1, new Rng("x")), "w0"), walk(paths, "w0"), "no goal, no drift");
+});

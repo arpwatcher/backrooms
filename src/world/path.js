@@ -47,3 +47,19 @@ export function createPathfinder(layout) {
     },
   };
 }
+
+// Wandering that isn't quite random: now and then the next step is the one
+// that leads toward `goal` (the player). Things drift your way without
+// hunting you - which is how you keep catching sight of them.
+export function driftToward(paths, goal, chance, rng) {
+  return {
+    ...paths,
+    wander(from, wanderRng, avoid) {
+      if (goal && rng.next() < chance) {
+        const step = paths.nextStep(from, goal);
+        if (step && (step.x !== from.x || step.y !== from.y)) return step;
+      }
+      return paths.wander(from, wanderRng, avoid);
+    },
+  };
+}
