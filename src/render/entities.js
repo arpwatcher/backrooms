@@ -41,20 +41,62 @@ function grinTexture() {
 
 let grin = null;
 
+// A shape made of the dark itself, a little taller than you, leaning in.
+// What you actually see is the grin: far too wide, every tooth separate and
+// faintly lit, and two pale points above it. In the light the body is
+// almost nothing; in the dark it's a hole in the room with teeth in it.
 export function smilerMesh() {
-  grin ??= grinTexture();
-  const material = new THREE.SpriteMaterial({ map: grin, transparent: true, depthWrite: false, fog: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(1.1, 0.55, 1);
-  sprite.position.y = 1.55;
   const group = new THREE.Group();
-  group.add(sprite);
+  const shade = fleshMaterial({ skin: skin({ base: "#0c0a09", blotch: "rgba(40,10,10,0.5)", veins: "rgba(30,20,40,0.6)", grime: 0.3, seed: "smiler" }), rim: 0x2a1410, rimPower: 1.8, roughness: 0.95 });
+  shade.transparent = true;
+  const body = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 28, 22), {
+    amount: 0.08, scale: 3, seed: 11,
+    along: (v) => (v.y < -0.2 ? -0.12 * (-0.2 - v.y) * 4 : 0),
+  }), shade);
+  body.scale.set(0.85, 2.1, 0.7);
+  body.position.y = 1.15;
+  group.add(body);
+  const face = new THREE.Group();
+  face.position.set(0, 1.62, 0.3);
+  group.add(face);
+  // the grin: two rows of teeth along a wide arc, gums barely there
+  const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e2cc, emissive: 0x9a9480, emissiveIntensity: 0.55, roughness: 0.35 });
+  const gum = new THREE.MeshBasicMaterial({ color: 0x1a0505 });
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.035, 8, 40, Math.PI * 0.9), gum);
+  mouth.rotation.z = Math.PI + Math.PI * 0.05;
+  mouth.scale.set(1, 0.55, 0.6);
+  face.add(mouth);
+  const teeth = [];
+  for (let i = 0; i < 26; i++) {
+    const a = Math.PI + Math.PI * 0.08 + (i / 25) * Math.PI * 0.84;
+    const x = Math.cos(a) * 0.26;
+    const y = Math.sin(a) * 0.26 * 0.55;
+    for (const row of [1, -1]) {
+      const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.05 + (i % 3) * 0.008, 4), toothMaterial);
+      tooth.position.set(x, y + row * 0.018, 0.02);
+      tooth.rotation.z = row > 0 ? Math.PI : 0;
+      face.add(tooth);
+      teeth.push(tooth);
+    }
+  }
+  const gaze = eyes({ color: 0xf6f2e0, spacing: 0.24, size: 0.016, halo: 0.13, intensity: 1.1 });
+  gaze.position.y = 0.2;
+  face.add(gaze);
   group.userData.animate = (time, entity, light) => {
-    // nearly invisible in the light, stark in the dark
-    material.opacity = light === "lit" ? 0.06 : 0.95;
-    sprite.position.y = 1.55 + Math.sin(time * 1.3 + entity.id) * 0.03;
-    const s = entity.state === "flinch" ? 0.8 : 1;
-    sprite.scale.set(1.1 * s, 0.55 * s, 1);
+    const lit = light === "lit";
+    // nearly nothing in the light; a hole in the room in the dark
+    shade.opacity = lit ? 0.12 : 0.97;
+    toothMaterial.emissiveIntensity = lit ? 0.05 : 0.55;
+    gaze.userData.setOpen(lit ? 0.2 : 1);
+    const flinch = entity.state === "flinch";
+    face.scale.setScalar(flinch ? 0.75 : 1);
+    // the grin widens when it gets closer; the whole thing sways and jerks
+    const hunting = entity.state === "approach";
+    face.scale.x = (flinch ? 0.75 : 1) * (hunting ? 1.25 + Math.sin(time * 3) * 0.05 : 1);
+    body.rotation.z = Math.sin(time * 0.7 + entity.id) * 0.05 + twitch(time, entity.id, 1.2, 0.12);
+    face.position.x = twitch(time, entity.id + 5, 2.2, 0.06);
+    face.rotation.z = twitch(time, entity.id + 9, 0.8, 0.35);
+    group.position.y = Math.sin(time * 1.3 + entity.id) * 0.03;
   };
   return group;
 }
