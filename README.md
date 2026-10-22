@@ -10,34 +10,44 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
 
 ## What is in it
 
-- **Generated levels.** Six kinds of place (lobby, pillar hall, cubicle
-  maze, dim wing, damp floor, overtime), each from a seed. The same seed
-  always gives the same run.
-- **Ten entities, one rule each.**
-  - Smiler: it only moves in the dark.
-  - Hounds: they hunt by sound.
-  - Still Life: it only moves when nobody is looking.
-  - Deathmoths: they fly to the brightest light.
-  - Partygoers: they only come for you if you go to the party.
-  - Facelings: harmless unless you stare at their blank faces.
-  - Stilts: it sees anything standing, and nothing crouched.
-  - Hushbaby: it comes when you have been quiet too long.
-  - The Attendant: he follows every wet footprint you leave.
-  - Deadline: the dark comes from where you came in, and never stops.
-- **A threat director.**
-  - Something new is always met alone first.
-  - Pairs that make each other worse turn up together.
-  - It backs off when it has pushed too hard (the mercy rule).
-- **Rule shifts** (soaked carpet, dead battery, lights dying behind you, shy
-  lights) and **tasks** (restore power before the exit opens).
-- **Fair, not punishing.**
-  - Every entity has a tell at least 5 seconds before it can reach you.
-  - The first contact is survivable.
-  - The death screen names what killed you and the rule you broke.
-  - Checkpoints every 5 levels, and four difficulty tiers.
-- **A codex** of everything you've survived, kept between runs.
-- All textures are painted on canvas and all sound is synthesized with
-  WebAudio. There are no asset files.
+- **A story.** You noclip into the Backrooms with a radio in your hand.
+  Elena, who came through long ago, talks you down through the levels to the
+  way out:
+
+  | Level | Place | What lives there |
+  |-------|-------|------------------|
+  | 0 | The Lobby | nothing (yet) |
+  | 1 | Habitable Zone | the Wretch |
+  | 2 | Pipe Dreams | Hounds |
+  | 3 | Electrical Station | the Smiler |
+  | 4 | Abandoned Office | Facelings |
+  | 6 | Lights Out | Deathmoths |
+  | 37 | The Poolrooms | the ending |
+
+  After the ending you can keep going down. Endless levels are generated
+  from the seed, with more entities.
+- **Things that hunt you.** The Wretch is a real 3D model with walk and run
+  animations:
+  - It sees you in light, hears you when you're loud, and runs you down.
+  - Break its line of sight, hide in the dark and keep still, and it gives
+    up.
+
+  Eleven entities in all, each with one rule. Something new is always met
+  alone first.
+- **Scary, not punishing.**
+  - Every entity gives a warning at least 5 seconds before it can reach you.
+  - The first touch only knocks you down.
+  - The death screen shows what got you and the rule you broke.
+  - There's a checkpoint at the Lights Out level.
+  - Four difficulty tiers. The easiest has an arrow to the exit.
+- **Atmosphere.**
+  - Film grain and filmic light.
+  - A sting and a camera jolt when something sees you.
+  - A chase drone and a heartbeat when something is after you.
+  - Hallucinations at low lucidity.
+  - Footsteps that sound like the floor.
+- Textures are painted on canvas and sounds are synthesized with WebAudio.
+  The one exception is the 3D model credited below.
 
 ## Controls
 
@@ -75,4 +85,7 @@ npm test             # logic: generation, entities, director, fairness (node --t
 npm run smoke        # plays the real game in headless Chromium and checks it
 ```
 
-three.js is vendored under `vendor/three/` (MIT, see its LICENSE).
+three.js and its glTF loader are vendored under `vendor/three/` (MIT, see its LICENSE).
+
+The Wretch model is CC0, by HorrorGameMaker.com via OpenGameArt. See
+[`assets/models/CREDITS.md`](assets/models/CREDITS.md).
