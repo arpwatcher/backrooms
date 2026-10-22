@@ -317,6 +317,12 @@ export function createAudio() {
       src.start(t);
       src.stop(t + 1.35);
     },
+    // the radio keying up: a click and a breath of static
+    radio() {
+      const t = ctx.currentTime;
+      burst({ duration: 0.02, frequency: 2000, q: 1, type: "bandpass", level: 0.4, at: t });
+      burst({ duration: 0.5, frequency: 2600, q: 0.5, type: "bandpass", level: 0.12, at: t + 0.03 });
+    },
     // your own voice, humming under your breath while V is held
     voice(on) {
       if (on && !voiceNode) {

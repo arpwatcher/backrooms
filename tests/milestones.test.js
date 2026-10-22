@@ -22,6 +22,7 @@ test("each milestone is earned once, by the event it describes, and remembered",
   assert.deepEqual(checkMilestones(earned, { type: "task", roster: ["smiler"] }, store).map((m) => m.id), ["power-smiler"]);
   assert.deepEqual(checkMilestones(earned, { type: "met", known: 9, total: 10 }, store), []);
   assert.deepEqual(checkMilestones(earned, { type: "met", known: 10, total: 10 }, store).map((m) => m.id), ["met-all"]);
+  assert.deepEqual(checkMilestones(earned, { type: "ending" }, store).map((m) => m.id), ["out"]);
   assert.equal(loadMilestones(store).size, MILESTONES.length);
 });
 

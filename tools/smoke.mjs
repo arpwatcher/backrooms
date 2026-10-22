@@ -74,6 +74,10 @@ try {
 
   const firstHint = await page.evaluate(() => window.__noclip.hint);
   check(/walk/.test(firstHint), `level 0 opens with an on-screen hint (${firstHint})`);
+  const radio = await page
+    .waitForFunction(() => document.getElementById("radio").textContent.length > 10, null, { timeout: 40000 })
+    .then(() => page.evaluate(() => document.getElementById("radio").textContent), () => "");
+  check(/RADIO/.test(radio), `the radio speaks on level 0 (${radio.slice(0, 50)}...)`);
   const home = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const firstNote = await page.evaluate(() => window.__noclip.notes[0]);
   check(firstNote && /EXIT/.test(firstNote.text), "level 0 has a note by the start that teaches the way out");
@@ -257,6 +261,17 @@ try {
     const after = await page.evaluate(() => window.__noclip.litPanels);
     check(after < lit, `deadline puts the lights out behind it (${lit} -> ${after} lit panels)`);
   } else check(false, "deadline turns up by level 29");
+
+  // the story ends at the poolrooms' door: the ending, then on down if you like
+  await page.evaluate(() => window.__noclip.goToDepth(6));
+  await page.evaluate(() => window.__noclip.teleportToExit());
+  const ended = await page.waitForFunction(() => window.__noclip.endingShown, null, { timeout: 20000 }).then(() => true, () => false);
+  check(ended, "walking out of the poolrooms ends the story");
+  if (ended) {
+    await page.evaluate(() => document.getElementById("ending-continue").click());
+    await page.waitForFunction(() => window.__noclip.run.depth === 7, null, { timeout: 20000 }).catch(() => {});
+    check((await page.evaluate(() => window.__noclip.run.depth)) === 7, "and 'keep going down' carries on below it");
+  }
 
   const recordLine = await page.evaluate(() => document.getElementById("records").textContent);
   check(/deepest: .*uneasy \d+/.test(recordLine), `the deepest level is remembered (${recordLine})`);

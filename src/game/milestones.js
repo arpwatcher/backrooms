@@ -11,6 +11,7 @@ export const MILESTONES = [
   { id: "power-smiler", text: "restored power with a smiler on the level" },
   { id: "silent", text: "got through a level where nothing lived (you heard it anyway)" },
   { id: "party", text: "walked past a party without going in" },
+  { id: "out", text: "found the way out" },
 ];
 
 export function loadMilestones(storage = globalThis.localStorage) {
@@ -40,6 +41,7 @@ export function checkMilestones(earned, event, storage = globalThis.localStorage
     if (event.roster.includes("partygoers") && !event.enteredParty) award("party");
   }
   if (event.type === "task" && event.roster.includes("smiler")) award("power-smiler");
+  if (event.type === "ending") award("out");
   if (fresh.length) {
     try {
       storage?.setItem(KEY, JSON.stringify([...earned]));

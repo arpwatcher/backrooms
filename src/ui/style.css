@@ -52,3 +52,9 @@ button:hover { background: rgba(243,230,162,0.08); }
 #death h1 { text-shadow: 0 0 12px #000, 0 0 30px #000; }
 #death p { text-shadow: 0 0 8px #000; }
 button:disabled { opacity: 0.4; cursor: wait; }
+#ending { z-index: 22; background: radial-gradient(ellipse at center, rgba(40,46,48,0.85), rgba(4,5,6,0.99)); }
+#ending h1 { font-size: 46px; margin-bottom: 26px; }
+#ending p { max-width: 620px; line-height: 1.6; margin: 4px 0; }
+#ending .row { display: flex; gap: 14px; margin-top: 26px; }
+#radio { position: fixed; left: 16px; bottom: 70px; max-width: 460px; font-size: 14px; line-height: 1.45; color: #cfe3d8; text-shadow: 0 0 6px #000; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
+#radio b { color: #7fb89a; font-weight: normal; letter-spacing: 0.2em; margin-right: 8px; font-size: 11px; }

@@ -33,6 +33,8 @@ import { loadCodex, recordSurvival } from "./game/codex.js";
 import { createCodexScreen } from "./ui/codex.js";
 import { createPauseScreen } from "./ui/pause.js";
 import { createHelp } from "./ui/help.js";
+import { createEnding } from "./ui/ending.js";
+import { radioSchedule } from "./game/story.js";
 import { createHints, stepHints } from "./game/hints.js";
 import { exitBearing } from "./game/compass.js";
 import { loadSettings, saveSettings } from "./game/settings.js";
@@ -87,6 +89,14 @@ const input = createInput(canvas);
 const hud = createHud();
 const screens = createScreens();
 const help = createHelp();
+const ending = createEnding({
+  onContinue() {
+    run.endedStory = true;
+    input.lock();
+    nextLevel();
+  },
+  onRestart: () => location.reload(),
+});
 // first-level hints, remembered so each is only ever shown once
 // lucid only: a faint arrow down the path to the nearest exit
 const arrow = document.createElement("div");
@@ -126,6 +136,9 @@ function showHints(time, travelled) {
 const codex = loadCodex();
 const codexScreen = createCodexScreen(codex);
 document.getElementById("codex-open").addEventListener("click", () => codexScreen.open());
+// game time only runs while you're playing, so pausing never lets a timer
+// run out behind your back
+let time = 0;
 let marks = new Map();
 // who has already turned on you, so each hunt stings once (reset per level)
 let sightings = createSightings();
@@ -147,7 +160,7 @@ function loadLevel() {
     });
   }
   if (level?.encounter) level.encounter.dispose();
-  const { director: plan, roster, archetype, shift, task: picked, pace } = levelPlan(run.seed, run.depth, tier);
+  const { director: plan, roster, archetype, shift, task: picked, pace, ending } = levelPlan(run.seed, run.depth, tier);
   const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
   const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
   const effects = shift?.effects ?? {};
@@ -199,7 +212,7 @@ function loadLevel() {
   phantoms = createPhantoms();
   sightings = createSightings();
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
-  level = { tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
+  level = { ending, radio: radioSchedule(run.depth, time + 4.5), tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt, tier,
@@ -400,6 +413,12 @@ function lightAt(x, z) {
 // land somewhere else. (callbacks read the live game clock, not a copy)
 function nextLevel() {
   if (transitioning) return;
+  // the last story level's door is the way out
+  if (level.ending && !run.endedStory) {
+    milestone({ type: "ending" });
+    ending.show({ deaths: run.deaths, depth: run.depth });
+    return;
+  }
   transitioning = true;
   fallingSince = time;
   milestone({
@@ -513,16 +532,13 @@ window.addEventListener("resize", () => {
 const clock = new THREE.Clock();
 let frames = 0;
 let bob = 0;
-// game time only runs while you're playing, so pausing never lets a timer
-// run out behind your back
-let time = 0;
 // 0..1, spikes when something sees you or touches you, then fades
 let fear = 0;
 let portraitTime = 0;
 let shake = 0;
 function frame() {
   const real = Math.min(clock.getDelta(), 0.1);
-  if (pause.shown || codexScreen.isOpen) {
+  if (pause.shown || codexScreen.isOpen || ending.shown) {
     input.read();
     post.render(scene, camera, { time });
     requestAnimationFrame(frame);
@@ -597,6 +613,11 @@ function frame() {
       audio.heartbeat(chase);
       level.beatAt = time + 60 / heartRate(chase);
     }
+  }
+  // elena, on the radio
+  while (level.radio.length && time >= level.radio[0].at && !screens.dead) {
+    hud.radio(level.radio.shift().text, time);
+    audio?.radio();
   }
   if (level.pace === "silence") phantomTells(time);
   stepPrints(time);
@@ -692,6 +713,7 @@ window.__noclip = {
   get hint() { return hintLine.textContent; },
   get bearing() { return level.bearing ?? null; },
   get chase() { return level.chase ?? 0; },
+  get endingShown() { return ending.shown; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
   marks: () => marks,
@@ -722,6 +744,10 @@ window.__noclip = {
       panel.level = 0;
       panel.mesh.material.color.setHex(0x3a3628);
     }
+  },
+  // test hook: is this point open floor (inside the level, no wall crossed from the player)?
+  clear(x, z) {
+    return x > 0 && z > 0 && x < level.layout.width * CELL && z < level.layout.height * CELL && lineOfSight(level.layout, player.x, player.z, x, z);
   },
   get litPanels() { return level.world.panels.filter((p) => p.state !== "dead").length; },
   get tracks() {
