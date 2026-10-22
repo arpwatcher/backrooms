@@ -155,8 +155,11 @@ export function fleshMaterial({ skin: s, color = 0xffffff, roughness = 0.72, rim
 // pushes every vertex in or out along its normal by noise: smooth primitives
 // become lumpy, uneven, organic. `squeeze` pinches, `swell` bloats.
 export function lumpy(geometry, { amount = 0.03, scale = 4, seed = 1, along = null } = {}) {
-  const g = geometry.index ? geometry.toNonIndexed() : geometry;
-  g.computeVertexNormals();
+  // displace along the smooth normals the primitive already has: copies of a
+  // vertex on a seam share a position and a normal, so they move together
+  // and the surface stays closed (per-face normals tore it into a grid)
+  const g = geometry;
+  if (!g.attributes.normal) g.computeVertexNormals();
   const pos = g.attributes.position;
   const normal = g.attributes.normal;
   const v = new THREE.Vector3();
