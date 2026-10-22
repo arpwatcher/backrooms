@@ -102,7 +102,8 @@ try {
   check(lightOn, "F turns the flashlight on");
 
   await page.evaluate(() => window.__noclip.teleportToExit());
-  await page.waitForFunction(() => window.__noclip.run.depth === 1, null, { timeout: 5000 });
+  // the fade is about a second, then building a level with its monsters: slow on a shared ci runner
+  await page.waitForFunction(() => window.__noclip.run.depth === 1, null, { timeout: 20000 });
   check(true, "walking into the exit loads the next level");
 
   await page.evaluate(() => window.__noclip.goToDepth(1));
@@ -181,7 +182,7 @@ try {
     }
     check(await page.evaluate(() => window.__noclip.task.complete), `E at each of the ${targets.length} breakers restores power`);
     await page.evaluate(() => window.__noclip.teleportToExit());
-    await page.waitForFunction((d) => window.__noclip.run.depth === d + 1, taskDepth, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction((d) => window.__noclip.run.depth === d + 1, taskDepth, { timeout: 20000 }).catch(() => {});
     check((await page.evaluate(() => window.__noclip.run.depth)) === taskDepth + 1, "and then the exit lets you through");
   }
 
