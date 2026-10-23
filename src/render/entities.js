@@ -465,7 +465,7 @@ export function partygoersMesh() {
 // An office worker with nothing where the face should be: not a mask, just
 // skin, with shallow dips where the eyes would go and a ridge where a nose
 // tried to grow. Creased shirt, stained trousers, arms a little too long.
-export function facelingsMesh() {
+export function facelingsBody() {
   const group = new THREE.Group();
   const flesh = fleshMaterial({ skin: skin({ base: "#c4ab98", blotch: "rgba(150,80,80,0.3)", veins: "rgba(90,80,140,0.25)", grime: 0.25, pores: 0.7, seed: "faceling" }), roughness: 0.55, rim: 0x3a3028 });
   const shirt = fleshMaterial({ skin: skin({ base: "#b4b2a6", blotch: "rgba(120,110,70,0.3)", veins: null, grime: 0.25, pores: 0, seed: "shirt" }), roughness: 0.9, rim: 0x202020, normalScale: 0.6 });
@@ -794,7 +794,7 @@ export function deadlineMesh() {
   }
   // figures in the smoke: black silhouettes that fade in and out
   const figures = [0, 1].map((i) => {
-    const figure = facelingsMesh();
+    const figure = facelingsBody();
     figure.traverse((o) => {
       if (o.material) {
         o.material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 });
@@ -832,6 +832,21 @@ export function houndMesh() {
     clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
     speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
   }) ?? houndBody();
+}
+
+// the Facelings are a real model now (assets/models/facelings.glb: "The
+// Wrapped" by codyanka, CC0): a person bound in grey cloth from head to
+// foot, nothing where the face should be. It walks nervously, stands and
+// watches, and once offended it runs at you, flailing.
+export function facelingsMesh() {
+  return modelInstance("facelings", {
+    clipFor: (e) => (e.state === "offended" ? "run" : e.state === "wander" ? "walk" : "idle"),
+    speedFor: (e) => (e.state === "wander" ? 0.8 : 1),
+    pose: (time, entity, bone) => {
+      // noticed: the blank head turns to you and tilts, slowly, like listening
+      if (entity.state === "noticed") bone("head")?.rotateZ(Math.min(0.5, (entity.stare ?? 0) * 0.2));
+    },
+  }) ?? facelingsBody();
 }
 
 // Stilts is a real model now (assets/models/stilts.glb: Noah Summers'
@@ -872,7 +887,7 @@ export function wretchMesh() {
     speedFor: (e) => (e.state === "chase" ? 1.15 : e.state === "wander" ? 0.7 : 1),
   });
   if (model) return model;
-  const fallback = facelingsMesh();
+  const fallback = facelingsBody();
   fallback.traverse((o) => o.material?.color?.setHex(0x2a2420));
   return fallback;
 }

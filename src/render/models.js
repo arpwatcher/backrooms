@@ -19,6 +19,10 @@ export const MODELS = {
     clips: { idle: "Idle", walk: "Walk", run: "Run", howl: "Howl", attack: "Attack" },
     scale: 1.25,
   },
+  facelings: {
+    base: "assets/models/facelings.glb",
+    clips: { idle: "Idle_Watchful", walk: "Walk_Nervous", run: "Run_Frantic", scream: "Scream.lol" },
+  },
   // no clips: the game poses its bones itself (see stiltsMesh)
   stilts: { base: "assets/models/stilts.glb", clips: {}, scale: 1.06 },
 };

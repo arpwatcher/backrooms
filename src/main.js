@@ -42,7 +42,7 @@ import { loadRecords, recordDepth, describeRecords } from "./game/records.js";
 import { createPhantoms, stepPhantoms } from "./game/phantoms.js";
 import { loadMilestones, checkMilestones, MILESTONES } from "./game/milestones.js";
 import { ENTITIES } from "./entities/index.js";
-import { facelingsMesh, smilerMesh } from "./render/entities.js";
+import { facelingsBody, smilerMesh } from "./render/entities.js";
 import { lineOfSight } from "./world/sight.js";
 import { checkpointFor } from "./game/run.js";
 
@@ -287,7 +287,7 @@ function useTask(time) {
 
 // the figures low lucidity puts at the edge of your vision: a dark shape of
 // a person, or a grin. One at a time, never straight ahead.
-const phantomMeshes = { figure: facelingsMesh(), grin: smilerMesh() };
+const phantomMeshes = { figure: facelingsBody(), grin: smilerMesh() };
 for (const mesh of Object.values(phantomMeshes)) {
   mesh.visible = false;
   scene.add(mesh);
