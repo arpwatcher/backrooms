@@ -50,6 +50,7 @@ try {
   await page.goto(`http://localhost:${port}/index.html?seed=smoke&smoke`);
   await page.waitForFunction(() => !document.getElementById("enter").disabled, null, { timeout: 60000 });
   await page.evaluate(() => document.getElementById("enter").click());
+  await page.evaluate(() => document.getElementById("view").addEventListener("webglcontextlost", () => { window.__glLost = true; console.error("webgl context lost"); }));
   await page.waitForFunction(() => window.__noclip && window.__noclip.frames > 5, null, { timeout: 30000 });
   check(true, "renders frames");
   const stats = await page.evaluate(() => {
@@ -396,6 +397,12 @@ try {
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
+  // say what the page was doing when it stopped: a lost gl context, an
+  // error, or frames still running
+  const state = await page
+    .evaluate(() => ({ frames: window.__noclip?.frames, depth: window.__noclip?.run?.depth, lost: window.__glLost ?? false }))
+    .catch((err) => ({ unreachable: err.message }));
+  console.log("     page state:", JSON.stringify(state), errors.length ? `errors: ${errors.join(" | ")}` : "no page errors");
 } finally {
   await browser.close();
   server.close();
