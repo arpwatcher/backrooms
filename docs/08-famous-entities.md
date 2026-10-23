@@ -25,7 +25,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 7 | **Howlers** | charge in a line at the last scream | a long howl from the direction it will come | sidestep, since it cannot turn | later |
 | 8 | **Clumps** | faster the more people stand together | many wet footsteps and breathing at once | split up | later |
 | 9 | **Dullers** | drain colour, then lucidity, from what they touch | the world greys out around a point | keep moving, because they are slow | later |
-| 10 | **Wretches** | follow whoever is lowest on lucidity | coughing, and a smell of mould | drink almond water to stop being the lowest | later |
+| 10 | **Wretches** | follow whoever is lowest on lucidity | coughing, and a smell of mould | drink almond water to stop being the lowest | built as one sight-and-sound stalker, the Wretch (§4, 21) |
 | 11 | **Windows** | can only reach you if you stand in front of them | a window where none should be, showing daylight | walk past along the far wall | later |
 | 12 | **The Keymaster** | trades, never attacks; lies once per trade | jingling keys and a polite voice | trade fairly and check the key on a door nearby | later (non-hostile) |
 | 13 | **Death Rats** | swarm anything that has stopped moving for 10 s | squeaking in the walls, getting louder | keep moving and never hide for long | later |

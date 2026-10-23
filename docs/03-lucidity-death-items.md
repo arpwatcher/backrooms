@@ -38,6 +38,15 @@ do:
 - **The death screen** names the entity, states its rule and says what works
   against it. Then you wake at the last checkpoint.
 
+## Hiding: lockers [built]
+
+Metal lockers stand in dead ends and corners: two on the first levels, one
+more every three levels, up to five, never two within four cells of each
+other, never near the start. Crouch inside one and anything that hunts by
+sight can't see you; the screen goes to the slats of the door. Sound still
+carries, so the Hounds and the Hushbaby don't care, and a thing that saw you
+go in may come and stand outside. In co-op a locker holds one player.
+
 ## Echo deaths (co-op) [later]
 
 A dead player in co-op becomes an Echo until the level ends:

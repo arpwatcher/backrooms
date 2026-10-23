@@ -1,4 +1,4 @@
-# 4. Entities: twenty in full
+# 4. Entities: twenty in full, and two more
 
 Every entity has to fit on one card. If its rule takes more than one sentence
 to state, the entity is redesigned. Each entry below uses the same fields:
@@ -228,3 +228,33 @@ sessions, and **[later]** is designed only.
 - **Counter:** watch the ceiling, and never stand under a dark gap for longer
   than a second.
 - **Pairs:** Deadline (you can't stop, but you have to look up).
+
+---
+
+## Added while building
+
+Two entities came out of play-testing rather than the original twenty. Both
+are real 3D models (credits in `assets/models/CREDITS.md`).
+
+### 21. The Wretch [built]
+- **Class:** stalker. Our take on the famous Wretches: one of them, alone.
+- **Tell:** slow bare footsteps and a wet rasping breath within 18 m, then a
+  shriek the moment it commits to a chase.
+- **Rule:** it hunts what it can see or hear, and forgets what it can't.
+- **Counter:** it runs at 3.5 m/s, slower than a sprint (4.6). Break its
+  line of sight, then go quiet in the dark or in a locker: it searches where
+  it last saw you for 10 s and gives up.
+- **Co-op:** it chases whoever it saw last; a second player can make noise
+  to pull it away.
+- **Pairs:** Hounds (running from one is how you call the other).
+
+### 22. The Drowned [built]
+- **Class:** stalker. An original, for the poolrooms.
+- **Tell:** water dripping where nothing should drip, and a slow wet retch.
+- **Rule:** he moves only while you move, and as fast as you do.
+- **Counter:** stand still and he stops dead. Cross the room in short,
+  crouched moves (0.7 m/s for him) and never sprint toward the exit while he
+  is close (a sprint brings him at 4 m/s).
+- **Co-op:** he answers to the fastest-moving player near him, so one
+  careless runner drags him onto everyone.
+- **Pairs:** Deadline (it makes you move, and he moves with you).
