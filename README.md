@@ -22,18 +22,19 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   | 3 | Electrical Station | the Smiler |
   | 4 | Abandoned Office | Facelings |
   | 6 | Lights Out | Deathmoths |
-  | 37 | The Poolrooms | the ending |
+  | 37 | The Poolrooms | the Drowned, and the way out |
 
   After the ending you can keep going down. Endless levels are generated
   from the seed, with more entities.
-- **Things that hunt you.** The Wretch is a real 3D model with walk and run
-  animations:
-  - It sees you in light, hears you when you're loud, and runs you down.
-  - Break its line of sight, hide in the dark and keep still, and it gives
-    up.
-
-  Eleven entities in all, each with one rule. Something new is always met
-  alone first.
+- **Things that hunt you.** Twelve entities, each with one rule. Something
+  new is always met alone first. Six are real animated 3D models:
+  - The Wretch sees you in light, hears you when you're loud, and runs you
+    down. Break its line of sight and keep still, and it gives up.
+  - The Hounds, a flayed dog that hunts by sound.
+  - The Facelings, bound in cloth with no face.
+  - Stilts, a faceless man in a suit, far too tall.
+  - Still Life, a plaster mannequin that moves only when you don't look.
+  - The Drowned, who moves only while you move, and as fast as you do.
 - **Scary, not punishing.**
   - Every entity gives a warning at least 5 seconds before it can reach you.
   - The first touch only knocks you down.
@@ -47,7 +48,7 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - Hallucinations at low lucidity.
   - Footsteps that sound like the floor.
 - Textures are painted on canvas and sounds are synthesized with WebAudio.
-  The one exception is the 3D model credited below.
+  The exceptions are the 3D models credited below.
 
 ## Controls
 
@@ -87,5 +88,7 @@ npm run smoke        # plays the real game in headless Chromium and checks it
 
 three.js and its glTF loader are vendored under `vendor/three/` (MIT, see its LICENSE).
 
-The Wretch model is CC0, by HorrorGameMaker.com via OpenGameArt. See
-[`assets/models/CREDITS.md`](assets/models/CREDITS.md).
+The monster models are free assets found online: CC0 models by
+HorrorGameMaker.com, codyanka, Noah Summers and burning_barb, and two models
+by bitkiln (free for commercial use, "Art by bitkiln"). Authors, licences and
+what was changed are in [`assets/models/CREDITS.md`](assets/models/CREDITS.md).
