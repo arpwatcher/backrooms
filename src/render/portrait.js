@@ -9,7 +9,7 @@ import { MESHES } from "./entities.js";
 const FACES = {
   hounds: [1.02, 1.3, 0.7],
   smiler: [1.62, 0.3, 1.3],
-  stillLife: [1.75, 0, 0.75],
+  stillLife: [1.62, 0.05, 0.75],
   deathmoths: [1.7, 0, 1.6],
   partygoers: [2.16, 0.3, 0.9],
   facelings: [1.77, 0, 0.7],

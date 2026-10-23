@@ -25,6 +25,7 @@ export const MODELS = {
   },
   // no clips: the game poses its bones itself (see stiltsMesh)
   stilts: { base: "assets/models/stilts.glb", clips: {}, scale: 1.06 },
+  stillLife: { base: "assets/models/stilllife.glb", clips: {}, scale: 1.04 },
 };
 
 // a clip is either its own file (a path ending in .glb) or the name of an
