@@ -20,6 +20,7 @@ export const TIPS = [
   "you hear them before you see them; play with headphones",
   "the first touch knocks you down. the second one, from the same thing, doesn't",
   "notes on the walls were left by people who came before you",
+  "lockers stand in dead ends: crouch inside one and nothing that hunts by sight can see you",
 ];
 
 export function createHelp() {
