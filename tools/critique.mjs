@@ -14,7 +14,7 @@ const pg = await b.newPage({ viewport: { width: 960, height: 540 } });
 pg.on("pageerror", (e) => console.log("pageerror", e.message));
 await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
 await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
-const shots = [["wretch", 1], ["hounds", 2], ["smiler", 3], ["facelings", 4], ["deathmoths", 5], ["drowned", 6], ["stillLife", 7], ["partygoers", 8], ["stilts", 9], ["hushbaby", 11], ["attendant", 12], ["deadline", 13]].filter(([k]) => !only || only.split(",").includes(k));
+const shots = [["wretch", 1], ["hounds", 2], ["smiler", 3], ["facelings", 4], ["deathmoths", 5], ["drowned", 6], ["stillLife", 7], ["partygoers", 8], ["stilts", 9], ["monochrome", 10], ["hushbaby", 11], ["attendant", 12], ["deadline", 13]].filter(([k]) => !only || only.split(",").includes(k));
 for (const [kind, depth] of shots) {
   for (const mode of ["lit", "dark"]) {
     const info = await pg.evaluate(([kind, depth, mode]) => {
@@ -28,6 +28,8 @@ for (const [kind, depth] of shots) {
       const p = n.player;
       // stand in the entity's own cell, offset toward the most open side
       const L = n.layout, cx = Math.floor(e.x / 2.4), cy = Math.floor(e.z / 2.4);
+      // frozen it can't drain: lay its grey around it by hand
+      if (kind === "monochrome") for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) e.grey.set(`${cx + dx},${cy + dy}`, 1e9);
       const opts = [[1, 0, !L.west[cy][cx + 1]], [-1, 0, !L.west[cy][cx]], [0, 1, !L.north[cy + 1][cx]], [0, -1, !L.north[cy][cx]]];
       const o = opts.find((v) => v[2]) || [1, 0];
       p.x = e.x + o[0] * 2.6; p.z = e.z + o[1] * 2.6;

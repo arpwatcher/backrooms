@@ -17,6 +17,7 @@ uniform sampler2D frame;
 uniform float time;
 uniform float fear;
 uniform float unease;
+uniform float grey;
 uniform vec2 resolution;
 varying vec2 vUv;
 
@@ -37,6 +38,8 @@ void main() {
   vec4 c = texture2D(frame, uv);
   c.r = texture2D(frame, uv + dir).r;
   c.b = texture2D(frame, uv - dir).b;
+  // colour drained away (Monochrome's grey)
+  c.rgb = mix(c.rgb, vec3(dot(c.rgb, vec3(0.299, 0.587, 0.114))), grey);
   // grain
   float grain = hash(uv * resolution) - 0.5;
   c.rgb += grain * (0.05 + fear * 0.08);
@@ -56,6 +59,7 @@ export function createPost(renderer) {
       time: { value: 0 },
       fear: { value: 0 },
       unease: { value: 0 },
+      grey: { value: 0 },
       resolution: { value: size.clone() },
     },
     vertexShader,
@@ -75,10 +79,11 @@ export function createPost(renderer) {
       target.setSize(size.x, size.y);
       material.uniforms.resolution.value.copy(size);
     },
-    render(scene, camera, { time, fear = 0, unease = 0 }) {
+    render(scene, camera, { time, fear = 0, unease = 0, grey = 0 }) {
       material.uniforms.time.value = time;
       material.uniforms.fear.value = fear;
       material.uniforms.unease.value = unease;
+      material.uniforms.grey.value = grey;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);

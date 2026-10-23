@@ -6,6 +6,7 @@ import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
 import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
+import { monochrome } from "./entities/monochrome.js";
 import { puddleCells, createTracks, stepTracks, shoesWet } from "./game/wet.js";
 import { itemKinds, BATTERY_CHARGE } from "./game/items.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
@@ -24,7 +25,7 @@ import { CELL } from "./world/units.js";
 import { Rng } from "./core/rng.js";
 import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
-import { contact } from "./entities/core.js";
+import { contact, cellAt } from "./entities/core.js";
 import { createTrail, stepTrail } from "./game/shifts.js";
 import { placeTask, interact, doneCount } from "./game/tasks.js";
 import { placeNotes } from "./game/notes.js";
@@ -611,6 +612,20 @@ function frame() {
       else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
     }
   }
+  // Monochrome's grey: standing in it drains the colour from your eyes; near
+  // its edge, some of it
+  let greyTarget = 0;
+  const here = cellAt(player.x, player.z);
+  for (const e of level.encounter.entities) {
+    if (e.def.id !== "monochrome") continue;
+    if (monochrome.isGrey(e, here, time)) greyTarget = 1;
+    else {
+      let near = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (monochrome.isGrey(e, { x: here.x + dx, y: here.y + dy }, time)) near++;
+      greyTarget = Math.max(greyTarget, Math.min(0.6, near * 0.06));
+    }
+  }
+  level.grey = (level.grey ?? 0) + (greyTarget - (level.grey ?? 0)) * Math.min(1, dt * 1.5);
   const nearest = Math.min(...level.encounter.entities.map((e) => Math.hypot(e.x - player.x, e.z - player.z)));
   const hunting = level.encounter.entities.filter((e) => e.def.hunting?.(e)).length;
   if (stepTension(tension, { nearest, hunting, time, tier }, dt) === "mercy") {
@@ -722,7 +737,7 @@ function frame() {
     time,
   });
   fear = Math.max(0, fear - dt * 1.2);
-  post.render(scene, camera, { time, fear, unease: Math.max(0, 0.5 - player.lucidity) * 2 });
+  post.render(scene, camera, { time, fear, unease: Math.max(0, 0.5 - player.lucidity) * 2, grey: level.grey ?? 0 });
   frames++;
   requestAnimationFrame(frame);
 }
@@ -740,6 +755,7 @@ window.__noclip = {
   get hint() { return hintLine.textContent; },
   get lockers() { return level.lockers.map((l) => ({ cell: { x: l.x, y: l.y }, ...insideOf(l) })); },
   get hidden() { return level.hidden; },
+  get grey() { return level.grey ?? 0; },
   get bearing() { return level.bearing ?? null; },
   get chase() { return level.chase ?? 0; },
   get endingShown() { return ending.shown; },

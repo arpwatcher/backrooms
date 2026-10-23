@@ -975,7 +975,30 @@ export function drownedMesh() {
   return model;
 }
 
+// Monochrome is a real model (assets/models/monochrome.glb, bitkiln's
+// shambler in a hospital gown) with every colour taken out of it in the
+// shader: a black-and-white man walking through a colour world.
+export function monochromeMesh() {
+  const model = modelInstance("monochrome", {
+    clipFor: (e) => (e.state === "hunt" ? "run" : "walk"),
+    speedFor: (e) => (e.state === "hunt" ? 1 : 0.45),
+  });
+  if (!model) return facelingsBody();
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <map_fragment>",
+        "#include <map_fragment>\n  diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))) * 1.15;",
+      );
+    };
+    o.material.customProgramCacheKey = () => "monochrome";
+  });
+  return model;
+}
+
 export const MESHES = {
+  monochrome: monochromeMesh,
   drowned: drownedMesh,
   wretch: wretchMesh,
   deadline: deadlineMesh,

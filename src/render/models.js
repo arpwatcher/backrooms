@@ -27,6 +27,10 @@ export const MODELS = {
     base: "assets/models/drowned.glb",
     clips: { idle: "Idle", walk: "Walk", run: "Run", retch: "Retch", attack: "Attack" },
   },
+  monochrome: {
+    base: "assets/models/monochrome.glb",
+    clips: { idle: "Idle", walk: "Walk", run: "Run", scream: "Scream" },
+  },
   // no clips: the game poses its bones itself (see stiltsMesh)
   stilts: { base: "assets/models/stilts.glb", clips: {}, scale: 1.06 },
   stillLife: { base: "assets/models/stilllife.glb", clips: {}, scale: 1.04 },

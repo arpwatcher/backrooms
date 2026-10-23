@@ -30,7 +30,7 @@ Columns: **Rule** (one sentence), **Tell** (5 s or more before contact),
 | 12 | **The Keymaster** | trades, never attacks; lies once per trade | jingling keys and a polite voice | trade fairly and check the key on a door nearby | later (non-hostile) |
 | 13 | **Death Rats** | swarm anything that has stopped moving for 10 s | squeaking in the walls, getting louder | keep moving and never hide for long | later |
 | 14 | **Bacteria / "the Entity"** | stalks the level, but only through cells you've walked | a black stain spreading on the carpet behind you | don't backtrack | later |
-| 15 | **Monochrome** | only exists in black-and-white parts of the level | colour drains from a room before it enters | stay in colour (under warm panels) | later |
+| 15 | **Monochrome** | only exists in black-and-white parts of the level | colour drains from a room before it enters | stay in colour (under warm panels) | built (§4, 23) |
 | 16 | **Smiler, Red** | a Smiler that only moves in red light | a red grin | white light, and get out of red rooms | later |
 | 17 | **Hounds, Alpha** | leads the pack and hears through one wall more | a deeper pant | the same as Hounds, but more careful | later |
 | 18 | **Crawlers** | move fast on all fours, but cannot climb | knuckles on carpet, very fast | get onto something (desks, shelves) | later |

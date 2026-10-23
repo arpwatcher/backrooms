@@ -221,6 +221,10 @@ export function createAudio() {
         burst({ duration: 0.5, frequency: 520, q: 2.5, type: "bandpass", level: 0.35 * volume, at: t, destination: dest });
         burst({ duration: 0.3, frequency: 300, q: 4, type: "bandpass", level: 0.25 * volume, at: t + 0.55, destination: dest });
         burst({ duration: 0.06, frequency: 180, level: 0.4 * volume, at: t + 0.2, destination: dest });
+      } else if (sound === "static") {
+        // the hiss of an old black-and-white set, swelling and gone
+        burst({ duration: 0.9, frequency: 4200, q: 0.7, type: "highpass", level: 0.16 * volume, at: t, destination: dest });
+        burst({ duration: 0.5, frequency: 2600, q: 2, type: "bandpass", level: 0.1 * volume, at: t + 0.3, destination: dest });
       } else if (sound === "gurgle") {
         // water running off a coat, then a slow retch through a throat full of it
         for (let i = 0; i < 4; i++) burst({ duration: 0.04, frequency: 1800 + i * 260, q: 6, type: "bandpass", level: 0.18 * volume, at: t + i * 0.13, destination: dest });

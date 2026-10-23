@@ -5,7 +5,7 @@ import { createPathfinder } from "../src/world/path.js";
 import { lineOfSight } from "../src/world/sight.js";
 import { CELL } from "../src/world/units.js";
 import { Rng } from "../src/core/rng.js";
-import { contact, spawn, nearestPlayer } from "../src/entities/core.js";
+import { contact, spawn, nearestPlayer, cellAt } from "../src/entities/core.js";
 import { smiler } from "../src/entities/smiler.js";
 import { hounds } from "../src/entities/hounds.js";
 import { stillLife, WAKE_TIME } from "../src/entities/stillLife.js";
@@ -18,6 +18,7 @@ import { attendant } from "../src/entities/attendant.js";
 import { deadline, START_DELAY as DEADLINE_DELAY } from "../src/entities/deadline.js";
 import { wretch, NOTICE, LOSE_AFTER, SEARCH_FOR } from "../src/entities/wretch.js";
 import { drowned, PACE } from "../src/entities/drowned.js";
+import { monochrome, CREEP } from "../src/entities/monochrome.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -611,4 +612,37 @@ test("he never outpaces you: walking away keeps the gap", () => {
     assert.ok(!events.some((ev) => ev.type === "contact"));
   }
   assert.ok(gap() >= before - 0.1, `${before} -> ${gap()}`);
+});
+
+test("monochrome greys the cells around it, but never under a working panel", () => {
+  const layout = open();
+  const e = spawn(monochrome, { x: 6, y: 6 }, { rng: new Rng("m"), grey: new Map(), ring: 0 });
+  // a panel lights the cell east of it
+  const light = (x, z) => (Math.floor(x / CELL) === 7 && Math.floor(z / CELL) === 6 ? "lit" : "dark");
+  const sense = senseFor(layout, { x: c(1), z: c(1) }, { light });
+  run(monochrome, e, sense, 6);
+  assert.ok(monochrome.isGrey(e, { x: 6, y: 5 }, sense.time), "the carpet around it goes grey");
+  assert.ok(!monochrome.isGrey(e, { x: 7, y: 6 }, sense.time), "but not under the panel");
+});
+
+test("monochrome cannot leave its grey: out in the colour you are out of reach", () => {
+  const layout = open(20, 4);
+  const e = spawn(monochrome, { x: 12, y: 1 }, { rng: new Rng("m"), grey: new Map(), ring: 0 });
+  const sense = senseFor(layout, { x: c(1), z: c(1) });
+  const events = run(monochrome, e, sense, 8);
+  assert.equal(e.state, "creep", "you're in the colour: it only creeps");
+  assert.ok(monochrome.isGrey(e, cellAt(e.x, e.z), sense.time), "it is always standing in grey");
+  assert.ok(!events.some((ev) => ev.type === "contact"));
+  assert.ok(e.x > c(1) + 4 * CELL, "it has not crossed the colour to you");
+});
+
+test("stand in its grey and it comes at you", () => {
+  const layout = open(20, 4);
+  const e = spawn(monochrome, { x: 8, y: 1 }, { rng: new Rng("m"), grey: new Map(), ring: 0 });
+  const sense = senseFor(layout, { x: c(6), z: c(1) });
+  const events = run(monochrome, e, sense, 8);
+  assert.equal(e.state, "hunt");
+  assert.ok(events.some((ev) => ev.type === "contact"));
+  assert.ok(events.some((ev) => ev.sound === "static"));
+  assert.ok(CREEP < 1, "and out of the grey it is slow");
 });

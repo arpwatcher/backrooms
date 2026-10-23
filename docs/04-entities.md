@@ -1,4 +1,4 @@
-# 4. Entities: twenty in full, and two more
+# 4. Entities: twenty in full, and three more
 
 Every entity has to fit on one card. If its rule takes more than one sentence
 to state, the entity is redesigned. Each entry below uses the same fields:
@@ -233,7 +233,7 @@ sessions, and **[later]** is designed only.
 
 ## Added while building
 
-Two entities came out of play-testing rather than the original twenty. Both
+Three entities came out of play-testing rather than the original twenty. All
 are real 3D models (credits in `assets/models/CREDITS.md`).
 
 ### 21. The Wretch [built]
@@ -258,3 +258,17 @@ are real 3D models (credits in `assets/models/CREDITS.md`).
 - **Co-op:** he answers to the fastest-moving player near him, so one
   careless runner drags him onto everyone.
 - **Pairs:** Deadline (it makes you move, and he moves with you).
+
+### 23. Monochrome [built]
+- **Class:** stalker. A famous one, debuting on level 10.
+- **Tell:** the colour drains out of the cells around it, a ring every 1.6 s
+  out to four cells, and a thin static like an old television. Near its
+  grey your own view loses colour; inside it, the world is black and white.
+- **Rule:** it only exists in the grey, and the grey can't touch warm light.
+- **Counter:** get back into the colour. A working panel's cell is never
+  greyed, so standing under one is safe. Out of its grey it can only creep
+  toward you (0.7 m/s); in it, it comes at 3.2 m/s.
+- **Co-op:** one player standing in colour under a panel is a safe island
+  the others can run to.
+- **Pairs:** Smiler (both want you under the panels, and the Smiler is
+  where the panels are dead), so the director treats it as a synergy.
