@@ -125,6 +125,40 @@ export function breakerBox() {
   return group;
 }
 
+// a tall metal locker against the wall, its door hanging open: room inside
+// for someone crouching, and slats in the door to look out through
+export function locker() {
+  const group = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: 0x5d6656, roughness: 0.55, metalness: 0.45 });
+  const inside = new THREE.MeshStandardMaterial({ color: 0x14150f, roughness: 0.9, side: THREE.DoubleSide });
+  const w = 0.9, h = 2.0, d = 0.6, t = 0.03;
+  const panel = (sx, sy, sz, x, y, z, m = paint) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+    return mesh;
+  };
+  panel(w, h, t, 0, h / 2, t / 2, inside);            // back
+  panel(t, h, d, -w / 2, h / 2, d / 2);               // sides
+  panel(t, h, d, w / 2, h / 2, d / 2);
+  panel(w, t, d, 0, h, d / 2);                        // top
+  panel(w, t, d, 0, 0.01, d / 2, inside);             // floor
+  // the door, hinged on the left and standing half open
+  const hinge = new THREE.Group();
+  hinge.position.set(-w / 2, 0, d);
+  hinge.rotation.y = -1.1;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(w, h - 0.04, t), paint);
+  door.position.set(w / 2, h / 2, 0);
+  hinge.add(door);
+  for (let i = 0; i < 6; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.025, t * 1.4), inside);
+    slat.position.set(w / 2, h - 0.25 - i * 0.06, 0);
+    hinge.add(slat);
+  }
+  group.add(hinge);
+  return group;
+}
+
 // a party balloon resting against the ceiling, string hanging down
 export function balloon(color = 0xc8202a) {
   const group = new THREE.Group();

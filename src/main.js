@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
-import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool } from "./render/props.js";
+import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
+import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
 import { puddleCells, createTracks, stepTracks, shoesWet } from "./game/wet.js";
 import { itemKinds, BATTERY_CHARGE } from "./game/items.js";
 import { createPlayer, stepPlayer } from "./game/player.js";
@@ -108,8 +109,14 @@ function showArrow() {
   if (bearing) arrow.style.transform = `translateX(-50%) rotate(${-bearing.angle}rad)`;
   return bearing;
 }
+// looking out through the slats of a locker door
+const slats = document.createElement("div");
+slats.id = "slats";
+slats.style.cssText = "position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .25s;background:repeating-linear-gradient(to bottom, rgba(0,0,0,.9) 0 22px, rgba(0,0,0,.12) 22px 36px);";
+document.body.appendChild(slats);
 const hintLine = document.createElement("div");
 hintLine.id = "hint";
+hintLine.style.zIndex = "5";
 document.body.appendChild(hintLine);
 const hints = createHints(loadSeenHints());
 const hintState = { walked: 0, toggledLight: false, crouched: false };
@@ -193,6 +200,13 @@ function loadLevel() {
     }
     for (const exit of exits) exit.door.userData.setLocked(true);
   }
+  // places to hide: crouch inside one and nothing sees you
+  const lockers = placeLockers(layout, run.depth, new Rng(`${levelSeed(run)}/lockers`)).map((spot) => {
+    const mesh = locker();
+    placeOnWall(mesh, spot.x, spot.y, spot.side);
+    world.group.add(mesh);
+    return { ...spot, mesh };
+  });
   const notes = placeNotes(layout, run.depth, new Rng(`${levelSeed(run)}/notes`)).map((note, i) => {
     const mesh = placeOnWall(wallNote(i + run.depth * 7 + 1), note.x, note.y, note.side);
     world.group.add(mesh);
@@ -212,7 +226,7 @@ function loadLevel() {
   phantoms = createPhantoms();
   sightings = createSightings();
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
-  level = { ending, radio: radioSchedule(run.depth, time + 4.5), tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
+  level = { lockers, ending, radio: radioSchedule(run.depth, time + 4.5), tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt, tier,
@@ -583,8 +597,11 @@ function frame() {
   lids.style.opacity = player.blinking ? "1" : "0";
   const down = (player.downUntil ?? 0) > time || screens.dead;
   const moved = stepPlayer(player, down ? { lookX: frameInput.lookX, lookY: frameInput.lookY } : frameInput, dt, level.layout);
+  level.hidden = Boolean(hiddenIn(level.lockers, player)) && !screens.dead;
+  slats.style.opacity = level.hidden ? "1" : "0";
   const sense = makeSense({
     player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells, prints: level.tracks.prints,
+    hidden: level.hidden,
   });
   if (!screens.dead) {
     for (const event of level.encounter.update(sense, dt)) {
@@ -609,6 +626,10 @@ function frame() {
     shake = Math.max(shake, 0.7);
   }
   showHints(time, moved.travelled);
+  if (level.hidden) {
+    hintLine.textContent = "inside the locker: nothing can see you while you stay down";
+    hintLine.style.opacity = "1";
+  }
   level.bearing = showArrow();
   // the chase: a drone that swells and your heart in your ears
   const chase = chaseIntensity(level.encounter.entities, player);
@@ -717,6 +738,8 @@ window.__noclip = {
   get time() { return time; },
   get helpShown() { return help.shown; },
   get hint() { return hintLine.textContent; },
+  get lockers() { return level.lockers.map((l) => ({ cell: { x: l.x, y: l.y }, ...insideOf(l) })); },
+  get hidden() { return level.hidden; },
   get bearing() { return level.bearing ?? null; },
   get chase() { return level.chase ?? 0; },
   get endingShown() { return ending.shown; },

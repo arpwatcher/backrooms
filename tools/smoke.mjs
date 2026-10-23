@@ -126,6 +126,16 @@ try {
   const moving = await page.evaluate(() => window.__noclip.entities.some((e) => e.state !== "idle"));
   check(moving, "and they run their behaviour");
 
+  // lockers: crouch inside one and you are hidden
+  const lockers = await page.evaluate(() => window.__noclip.lockers);
+  check(lockers.length > 0, `level 3 has lockers to hide in (${lockers.length})`);
+  await page.evaluate((l) => window.__noclip.stand(l.x, l.z), lockers[0]);
+  await page.keyboard.down("KeyC");
+  await frames(3);
+  const hidden = await page.evaluate(() => ({ hidden: window.__noclip.hidden, hint: window.__noclip.hint }));
+  await page.keyboard.up("KeyC");
+  check(hidden.hidden && /locker/.test(hidden.hint), `crouched inside one you are hidden (${hidden.hint})`);
+
   // every entity the director knows can be built and run in the real game
   const all = await page.evaluate(async () => {
     const kinds = new Set();

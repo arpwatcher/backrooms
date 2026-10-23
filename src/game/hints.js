@@ -8,6 +8,7 @@ export const HINTS = [
   { id: "exit", depth: 0, text: "find the red EXIT sign and walk into it", done: (s) => s.shownFor > 10 },
   { id: "help", depth: 0, text: "H shows every key, any time", done: (s) => s.shownFor > 7 },
   { id: "run-hide", depth: 1, text: "if something sees you: run (Shift), then hide somewhere dark and keep still", done: (s) => s.shownFor > 12 },
+  { id: "locker", depth: 1, text: "lockers stand in dead ends: crouch (C) inside one and nothing can see you", done: (s) => s.shownFor > 12 },
   { id: "crouch", depth: 2, text: "something here hunts by sound. C to crouch - slow, and almost silent", done: (s) => s.crouched || s.shownFor > 14 },
   { id: "flashlight-smiler", depth: 3, text: "where the panels are dead, keep your flashlight on what's waiting there", done: (s) => s.shownFor > 12 },
 ];

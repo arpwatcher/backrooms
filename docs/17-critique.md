@@ -10,17 +10,19 @@ lit and in the dark.
 
 ## Open (worst first)
 
-1. **Chases have nowhere to go.** There's now a drone, a heartbeat and a
-   lunge, but no escape tools: doors to shut behind you and nooks to duck
-   into.
-2. **Five monsters are still built from code** (Smiler, Partygoers,
+1. **Five monsters are still built from code** (Smiler, Partygoers,
    Hushbaby, Attendant, Deadline) next to six real models, and the gap
    shows. No free model fits them yet; Smiler and Deathmoths hold up best
    because you only see eyes and teeth in the dark.
-3. **The hound's textures are 256 px.** Fine at running distance, soft up
+2. **The hound's textures are 256 px.** Fine at running distance, soft up
    close and on the death screen.
 
 ## Fixed
+
+- 2026-10-23: chases with nowhere to go. Metal lockers now stand in dead
+  ends and corners (two on early levels, up to five deeper). Crouch inside
+  one and anything that hunts by sight can't see you; the screen goes to
+  the slats of the door. Doors you can shut behind you are still to come.
 
 - 2026-10-23: Deadline reading as a column. It is now a wall of dark the
   width of the corridor, three sheets of smoke with black behind them,
