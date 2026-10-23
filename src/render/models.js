@@ -19,6 +19,12 @@ export const MODELS = {
     clips: { idle: "Idle", walk: "Walk", run: "Run", howl: "Howl", attack: "Attack" },
     scale: 1.25,
   },
+  // the same dog, skinned black: packs mix the two
+  houndBlack: {
+    base: "assets/models/hound-black.glb",
+    clips: { idle: "Idle", walk: "Walk", run: "Run", howl: "Howl", attack: "Attack" },
+    scale: 1.18,
+  },
   facelings: {
     base: "assets/models/facelings.glb",
     clips: { idle: "Idle_Watchful", walk: "Walk_Nervous", run: "Run_Frantic", scream: "Scream.lol" },

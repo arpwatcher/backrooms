@@ -846,11 +846,14 @@ export function deadlineMesh() {
 }
 
 // the hound is a real model now (assets/models/hound.glb, by bitkiln): a
-// skinned dog, all muscle and teeth. It walks while it wanders, stops to
+// skinned dog, all muscle and teeth (and a black-skinned one beside it
+// in a pack). It walks while it wanders, stops to
 // howl when it hears you, and runs flat out once it hunts. Without the
 // model it is the procedural starved thing above.
+// every other hound in a pack is the black one, a little smaller
+let houndsMade = 0;
 export function houndMesh() {
-  return modelInstance("hound", {
+  return modelInstance(houndsMade++ % 2 ? "houndBlack" : "hound", {
     clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
     speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
   }) ?? houndBody();

@@ -3,7 +3,7 @@
 | File | What | Author | Licence | Source |
 |------|------|--------|---------|--------|
 | `creature.glb`, `creature-walk.glb`, `creature-run.glb`, `creature-jump.glb` | the Wretch: a gaunt humanoid with a split jaw, with idle, walk, run and jump animations | HorrorGameMaker.com (City Building Game Art) | CC0 1.0 (public domain) | https://opengameart.org/content/3d-horror-game-monster |
-| `hound.glb` | the Hounds: a flayed dog with idle, walk, run, howl and attack animations | bitkiln | free for commercial use, not for resale or redistribution as an asset pack ("Art by bitkiln") | https://bitkiln.itch.io/psx-horror-monsters-free-sampler |
+| `hound.glb`, `hound-black.glb` | the Hounds: a flayed dog and a black-skinned one with idle, walk, run, howl and attack animations | bitkiln | free for commercial use, not for resale or redistribution as an asset pack ("Art by bitkiln") | https://bitkiln.itch.io/psx-horror-monsters-free-sampler |
 | `stilts.glb` | Stilts: a faceless man in a suit, far too tall, with PBR skin and clothing | Noah Summers (repromancer) | CC0 1.0 | https://nsmmrs.itch.io/slender-man-character-model |
 | `facelings.glb` | the Facelings: a figure bound head to foot in grey cloth, no face, with idle, nervous walk, frantic run and scream | codyanka ("The Wrapped") | CC0 1.0 | https://codyanka.itch.io/the-wrapped |
 | `stilllife.glb` | Still Life: a shop mannequin with ball joints | burning_barb ("Prototyping Mannequin") | CC0 1.0 | https://burning-barb.itch.io/mannequin |
