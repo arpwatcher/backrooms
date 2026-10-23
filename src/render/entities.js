@@ -557,7 +557,7 @@ export function facelingsMesh() {
 // folded torso, arms hanging past its knees on fingers longer than hands,
 // and a pale stretched head pressed up against the tiles, looking out with
 // two pin-points of light. It never looks down.
-export function stiltsMesh() {
+function stiltsBody() {
   const group = new THREE.Group();
   const suit = fleshMaterial({ skin: skin({ base: "#18171b", blotch: "rgba(40,36,30,0.5)", veins: null, grime: 0.5, pores: 0, seed: "suit" }), roughness: 0.85, rim: 0x2a2830, rimPower: 2 });
   const pale = fleshMaterial({ skin: skin({ base: "#d2cabf", blotch: "rgba(140,100,100,0.35)", veins: "rgba(90,90,140,0.5)", grime: 0.35, pores: 0.2, seed: "stilts-skin" }), roughness: 0.55, rim: 0x5a5048 });
@@ -832,6 +832,35 @@ export function houndMesh() {
     clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
     speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
   }) ?? houndBody();
+}
+
+// Stilts is a real model now (assets/models/stilts.glb: Noah Summers'
+// slender man, CC0): too tall for the room, a suit, no face at all. It has
+// no clips, so its walk is made here: long slow steps, arms that hang and
+// barely swing, and a head that turns on its own, in jerks, toward wherever
+// it is looking. When it notices you it stops and the head tilts.
+export function stiltsMesh() {
+  return modelInstance("stilts", {
+    pose: (time, entity, bone) => {
+      const pace = entity.state === "stride" ? 3.2 : entity.state === "patrol" || entity.state === "search" ? 1.4 : 0;
+      const step = Math.sin(time * pace + entity.id);
+      const lift = (side) => Math.max(0, Math.sin(time * pace + entity.id + (side ? Math.PI : 0)));
+      bone("thigh.L")?.rotateX(pace ? step * 0.32 : 0);
+      bone("thigh.R")?.rotateX(pace ? -step * 0.32 : 0);
+      bone("shin.L")?.rotateX(pace ? -lift(0) * 0.55 : 0);
+      bone("shin.R")?.rotateX(pace ? -lift(1) * 0.55 : 0);
+      // the model stands in an A-pose: bring the arms in to hang by its sides
+      bone("upper_arm.L")?.rotateZ(-0.55).rotateX(pace ? -step * 0.12 : twitch(time, entity.id, 0.3, 0.04));
+      bone("upper_arm.R")?.rotateZ(0.55).rotateX(pace ? step * 0.12 : twitch(time, entity.id + 1, 0.3, 0.04));
+      bone("forearm.L")?.rotateX(0.12 + twitch(time, entity.id + 4, 0.8, 0.06));
+      bone("forearm.R")?.rotateX(0.12 + twitch(time, entity.id + 5, 0.8, 0.06));
+      // the head looks where it looks, not where the body walks
+      const relative = (entity.head ?? 0) - (entity.facing ?? 0);
+      bone("neck")?.rotateY(Math.sin(relative) * 0.5 + twitch(time, entity.id + 2, 0.7, 0.12));
+      bone("head")?.rotateZ(entity.state === "notice" ? 0.45 : twitch(time, entity.id + 3, 0.5, 0.1));
+      bone("chest")?.rotateX(Math.sin(time * 0.9 + entity.id) * 0.02 + (entity.state === "notice" ? 0.12 : 0));
+    },
+  }) ?? stiltsBody();
 }
 
 // the Wretch is a real model (assets/models/creature.glb, CC0) with its own

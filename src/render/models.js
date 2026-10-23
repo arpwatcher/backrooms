@@ -19,6 +19,8 @@ export const MODELS = {
     clips: { idle: "Idle", walk: "Walk", run: "Run", howl: "Howl", attack: "Attack" },
     scale: 1.25,
   },
+  // no clips: the game poses its bones itself (see stiltsMesh)
+  stilts: { base: "assets/models/stilts.glb", clips: {}, scale: 1.06 },
 };
 
 // a clip is either its own file (a path ending in .glb) or the name of an
@@ -54,8 +56,9 @@ export function hasModel(name) {
 }
 
 // a fresh copy of the model with its own mixer; `clipFor(entity)` names the
-// clip to play, `speedFor(entity)` how fast to play it
-export function modelInstance(name, { clipFor, speedFor = () => 1, scale = 1 } = {}) {
+// clip to play, `speedFor(entity)` how fast to play it, and `pose(time,
+// entity, bone)` may turn bones by hand after the clip has played
+export function modelInstance(name, { clipFor = () => "idle", speedFor = () => 1, scale = 1, pose = null } = {}) {
   const source = loaded.get(name);
   if (!source) return null;
   const group = new THREE.Group();
@@ -79,6 +82,11 @@ export function modelInstance(name, { clipFor, speedFor = () => 1, scale = 1 } =
   for (const [clip, c] of Object.entries(source.clips)) if (c) actions[clip] = mixer.clipAction(c);
   let current = null;
   let last = null;
+  // bones by their blender name ("upper_arm.L"); the loader strips the dots
+  const bones = new Map();
+  body.traverse((o) => o.isBone && bones.set(o.name, o));
+  const bone = (n) => bones.get(n) ?? bones.get(n.replace(/\./g, ""));
+  const rest = new Map([...bones].map(([n, b]) => [n, b.quaternion.clone()]));
   group.userData.body = body;
   group.userData.animate = (time, entity) => {
     const want = clipFor(entity) ?? "idle";
@@ -92,6 +100,10 @@ export function modelInstance(name, { clipFor, speedFor = () => 1, scale = 1 } =
     const dt = last === null ? 0 : Math.min(0.1, Math.max(0, time - last));
     last = time;
     mixer.update(dt);
+    if (pose) {
+      if (!actions[current]) for (const [n, q] of rest) bones.get(n).quaternion.copy(q);
+      pose(time, entity, bone);
+    }
   };
   return group;
 }
