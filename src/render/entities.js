@@ -391,15 +391,15 @@ export function deathmothsMesh() {
 export function partygoersMesh() {
   const group = new THREE.Group();
   const wax = fleshMaterial({ skin: skin({ base: "#c9ad3c", blotch: "rgba(150,90,30,0.4)", veins: "rgba(120,80,40,0.3)", grime: 0.35, pores: 0.8, seed: "party" }), roughness: 0.45, rim: 0x5a4a10 });
-  const body = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.95, 8, 18), { amount: 0.02, scale: 4, seed: 21,
-    along: (v) => -0.06 * Math.exp(-(((v.y + 0.1) / 0.18) ** 2)) }), wax);
-  body.position.y = 1.08;
+  const body = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.72, 8, 18), { amount: 0.02, scale: 4, seed: 21,
+    along: (v) => -0.06 * Math.exp(-(((v.y + 0.05) / 0.16) ** 2)) }), wax);
+  body.position.y = 1.36;
   body.scale.set(1, 1, 0.75);
   group.add(body);
-  const neck = new THREE.Mesh(tube([[0, 1.6, 0], [0, 1.82, 0.04], [0, 2.02, 0.06]], 0.06, 0.85, 10), wax);
+  const neck = new THREE.Mesh(tube([[0, 1.78, 0], [0, 1.98, 0.04], [0, 2.18, 0.06]], 0.06, 0.85, 10), wax);
   group.add(neck);
   const head = new THREE.Group();
-  head.position.set(0, 2.14, 0.06);
+  head.position.set(0, 2.3, 0.06);
   group.add(head);
   const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 26, 20), { amount: 0.01, scale: 8, seed: 5,
     along: (v) => (v.z > 0.1 && v.y > 0.02 && v.y < 0.07 && Math.abs(Math.abs(v.x) - 0.06) < 0.03 ? -0.035 : 0) }), wax);
@@ -428,17 +428,30 @@ export function partygoersMesh() {
   }
   const arm = (x) => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 1.5, 0);
-    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.2, -0.45, 0.04], [x * 0.15, -0.95, 0.06]], 0.05, 0.55, 8), wax));
+    pivot.position.set(x, 1.7, 0);
+    // a rounded shoulder, a full upper arm, an elbow, a long forearm
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), wax);
+    shoulder.scale.set(1, 0.8, 0.9);
+    pivot.add(shoulder);
+    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.12, -0.3, 0.02], [x * 0.18, -0.6, 0.04]], 0.075, 0.75, 10), wax));
+    pivot.add(new THREE.Mesh(tube([[x * 0.18, -0.6, 0.04], [x * 0.19, -0.9, 0.07], [x * 0.17, -1.15, 0.08]], 0.058, 0.7, 10), wax));
     for (let f = 0; f < 4; f++) {
-      pivot.add(new THREE.Mesh(tube([[x * 0.15, -0.95, 0.06], [x * 0.15 + (f - 1.5) * 0.015, -1.08, 0.08], [x * 0.15 + (f - 1.5) * 0.02, -1.18, 0.07]], 0.01, 0.6, 5), wax));
+      pivot.add(new THREE.Mesh(tube([[x * 0.17, -1.15, 0.08], [x * 0.17 + (f - 1.5) * 0.016, -1.28, 0.1], [x * 0.17 + (f - 1.5) * 0.022, -1.4, 0.09]], 0.012, 0.6, 5), wax));
     }
     group.add(pivot);
     return pivot;
   };
   const left = arm(-0.27);
   const right = arm(0.27);
-  for (const x of [-0.09, 0.09]) group.add(new THREE.Mesh(tube([[x, 0.62, 0], [x, 0.3, 0.02], [x, 0.02, 0]], 0.065, 0.7, 8), wax));
+  // long legs: thick thighs into the hips, knees, thin shins, flat feet
+  for (const x of [-0.1, 0.1]) {
+    group.add(new THREE.Mesh(tube([[x, 1.0, 0], [x * 1.05, 0.7, 0.03], [x * 1.05, 0.46, 0.04]], 0.095, 0.7, 10), wax));
+    group.add(new THREE.Mesh(tube([[x * 1.05, 0.46, 0.04], [x, 0.22, 0.01], [x, 0.04, 0]], 0.062, 0.75, 10), wax));
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), wax);
+    foot.scale.set(0.9, 0.5, 2);
+    foot.position.set(x, 0.03, 0.06);
+    group.add(foot);
+  }
   const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0xc8202a, emissive: 0x300508, roughness: 0.25 }));
   balloon.scale.y = 1.2;
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.55, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));

@@ -15,16 +15,18 @@ lit and in the dark.
    into.
 2. **Deadline still reads as a column.** It should be a wall of dark across
    the corridor, not a pillar of it.
-3. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
-   from the neck up but not below.
-4. **Five monsters are still built from code** (Smiler, Partygoers,
+3. **Five monsters are still built from code** (Smiler, Partygoers,
    Hushbaby, Attendant, Deadline) next to six real models, and the gap
    shows. No free model fits them yet; Smiler and Deathmoths hold up best
    because you only see eyes and teeth in the dark.
-5. **The hound's textures are 256 px.** Fine at running distance, soft up
+4. **The hound's textures are 256 px.** Fine at running distance, soft up
    close and on the death screen.
 
 ## Fixed
+
+- 2026-10-23: Partygoers with short legs and stick arms. A shorter torso on
+  long legs with knees and feet, full upper arms with shoulders and elbows,
+  hands down past the knees.
 
 - 2026-10-23: Still Life too clean at a distance. Darker, dirtier plaster,
   black joints, and when it settles the head can be turned further than a

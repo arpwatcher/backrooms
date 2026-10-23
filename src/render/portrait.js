@@ -11,7 +11,7 @@ const FACES = {
   smiler: [1.62, 0.3, 1.3],
   stillLife: [1.62, 0.05, 0.75],
   deathmoths: [1.7, 0, 1.6],
-  partygoers: [2.16, 0.3, 0.9],
+  partygoers: [2.32, 0.3, 0.9],
   facelings: [1.77, 0, 0.7],
   stilts: [2.66, 0.08, 0.8],
   hushbaby: [0.55, 0.3, 0.7],
