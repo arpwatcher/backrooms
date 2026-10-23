@@ -75,7 +75,9 @@ try {
   const firstHint = await page.evaluate(() => window.__noclip.hint);
   check(/walk/.test(firstHint), `level 0 opens with an on-screen hint (${firstHint})`);
   const radio = await page
-    .waitForFunction(() => document.getElementById("radio").textContent.length > 10, null, { timeout: 40000 })
+    // game time runs at most 0.1 s a frame, and a loaded runner can drop to
+    // a frame a second: give the first line (4.5 s in) room to arrive
+    .waitForFunction(() => document.getElementById("radio").textContent.length > 10, null, { timeout: 120000 })
     .then(() => page.evaluate(() => document.getElementById("radio").textContent), () => "");
   check(/RADIO/.test(radio), `the radio speaks on level 0 (${radio.slice(0, 50)}...)`);
   const home = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
