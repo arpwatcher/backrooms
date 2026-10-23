@@ -14,7 +14,18 @@ export const MODELS = {
     clips: { walk: "assets/models/creature-walk.glb", run: "assets/models/creature-run.glb", jump: "assets/models/creature-jump.glb" },
     height: 1.9,
   },
+  hound: {
+    base: "assets/models/hound.glb",
+    clips: { idle: "Idle", walk: "Walk", run: "Run", howl: "Howl", attack: "Attack" },
+    scale: 1.25,
+  },
 };
+
+// a clip is either its own file (a path ending in .glb) or the name of an
+// animation inside the base file
+function pick(base, ref) {
+  return base.animations.find((a) => a.name === ref || a.name.endsWith(`|${ref}`)) ?? null;
+}
 
 const loaded = new Map();
 
@@ -25,11 +36,10 @@ export async function preloadModels(root = "") {
       try {
         const base = await loader.loadAsync(root + spec.base);
         const clips = { idle: base.animations[0] };
-        for (const [clip, url] of Object.entries(spec.clips)) {
-          const g = await loader.loadAsync(root + url);
-          clips[clip] = g.animations[0];
+        for (const [clip, ref] of Object.entries(spec.clips)) {
+          clips[clip] = ref.endsWith(".glb") ? (await loader.loadAsync(root + ref)).animations[0] : pick(base, ref);
         }
-        for (const [clip, c] of Object.entries(clips)) if (c) c.name = clip;
+        for (const [clip, c] of Object.entries(clips)) if (c) clips[clip] = Object.assign(c.clone(), { name: clip });
         loaded.set(name, { scene: base.scene, clips, spec });
       } catch (error) {
         console.warn(`model ${name} could not load, using the procedural body`, error?.message ?? error);
@@ -50,7 +60,8 @@ export function modelInstance(name, { clipFor, speedFor = () => 1, scale = 1 } =
   if (!source) return null;
   const group = new THREE.Group();
   const body = clone(source.scene);
-  body.scale.setScalar(scale);
+  body.scale.setScalar(scale * (source.spec.scale ?? 1));
+  body.rotation.y = source.spec.yaw ?? 0;
   body.traverse((o) => {
     if (o.isMesh) {
       o.frustumCulled = false;

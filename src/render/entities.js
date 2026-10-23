@@ -105,7 +105,7 @@ export function smilerMesh() {
 // Hairless, starved and too long. A spine you can count, ribs pushing
 // through grey skin, legs that bend the wrong way, and on the end of a long
 // neck a head that is nearly a face: forward eyes, no lips, a jaw that hangs.
-export function houndMesh() {
+function houndBody() {
   const group = new THREE.Group();
   const hide = fleshMaterial({ skin: skin({ base: "#8d7f78", blotch: "rgba(90,40,40,0.4)", veins: "rgba(60,50,90,0.45)", grime: 0.6, seed: "hound" }), rim: 0x4a3c30 });
   const dark = fleshMaterial({ skin: skin({ base: "#4a3a36", blotch: "rgba(30,10,10,0.5)", veins: null, grime: 0.8, seed: "hound-dark" }), rim: 0x2a2018 });
@@ -821,6 +821,17 @@ export function deadlineMesh() {
     });
   };
   return group;
+}
+
+// the hound is a real model now (assets/models/hound.glb, by bitkiln): a
+// skinned dog, all muscle and teeth. It walks while it wanders, stops to
+// howl when it hears you, and runs flat out once it hunts. Without the
+// model it is the procedural starved thing above.
+export function houndMesh() {
+  return modelInstance("hound", {
+    clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
+    speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
+  }) ?? houndBody();
 }
 
 // the Wretch is a real model (assets/models/creature.glb, CC0) with its own
