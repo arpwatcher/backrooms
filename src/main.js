@@ -756,6 +756,7 @@ window.__noclip = {
   get lockers() { return level.lockers.map((l) => ({ cell: { x: l.x, y: l.y }, ...insideOf(l) })); },
   get hidden() { return level.hidden; },
   get grey() { return level.grey ?? 0; },
+  get radioState() { return { time, queued: level.radio.map((r) => r.at), paused: pause.shown, dead: Boolean(screens.dead), ending: ending.shown }; },
   get bearing() { return level.bearing ?? null; },
   get chase() { return level.chase ?? 0; },
   get endingShown() { return ending.shown; },

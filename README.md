@@ -26,8 +26,8 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
 
   After the ending you can keep going down. Endless levels are generated
   from the seed, with more entities.
-- **Things that hunt you.** Twelve entities, each with one rule. Something
-  new is always met alone first. Six are real animated 3D models:
+- **Things that hunt you.** Thirteen entities, each with one rule. Something
+  new is always met alone first. Seven are real animated 3D models:
   - The Wretch sees you in light, hears you when you're loud, and runs you
     down. Break its line of sight and keep still, and it gives up.
   - The Hounds, a flayed dog that hunts by sound.
@@ -35,6 +35,11 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - Stilts, a faceless man in a suit, far too tall.
   - Still Life, a plaster mannequin that moves only when you don't look.
   - The Drowned, who moves only while you move, and as fast as you do.
+  - Monochrome, who drains the colour from the rooms around it and can only
+    walk in its own grey. Stay under the warm panels.
+
+  When something is after you, lockers in dead ends are somewhere to hide:
+  crouch inside one and nothing that hunts by sight can see you.
 - **Scary, not punishing.**
   - Every entity gives a warning at least 5 seconds before it can reach you.
   - The first touch only knocks you down.

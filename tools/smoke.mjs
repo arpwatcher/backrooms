@@ -80,7 +80,8 @@ try {
     // a frame a second: give the first line (4.5 s in) room to arrive
     .waitForFunction(() => document.getElementById("radio").textContent.length > 10, null, { timeout: 120000 })
     .then(() => page.evaluate(() => document.getElementById("radio").textContent), () => "");
-  check(/RADIO/.test(radio), `the radio speaks on level 0 (${radio.slice(0, 50)}...)`);
+  const radioState = radio ? "" : ` state ${JSON.stringify(await page.evaluate(() => window.__noclip.radioState))}`;
+  check(/RADIO/.test(radio), `the radio speaks on level 0 (${radio.slice(0, 50)}...)${radioState}`);
   const home = await page.evaluate(() => ({ x: window.__noclip.player.x, z: window.__noclip.player.z }));
   const firstNote = await page.evaluate(() => window.__noclip.notes[0]);
   check(firstNote && /EXIT/.test(firstNote.text), "level 0 has a note by the start that teaches the way out");
