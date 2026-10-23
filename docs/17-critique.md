@@ -17,8 +17,27 @@ lit and in the dark.
    the corridor, not a pillar of it.
 3. **Partygoers: short legs, stick arms.** The proportions sell "too tall"
    from the neck up but not below.
+4. **Five monsters are still built from code** (Smiler, Partygoers,
+   Hushbaby, Attendant, Deadline) next to six real models, and the gap
+   shows. No free model fits them yet; Smiler and Deathmoths hold up best
+   because you only see eyes and teeth in the dark.
+5. **Still Life is too clean at a distance.** The plaster cracks only read
+   up close; across a lit room it is a tidy shop dummy. Needs dirt, a
+   darker base, and a pose that is wrong rather than just different.
+6. **The hound's textures are 256 px.** Fine at running distance, soft up
+   close and on the death screen.
 
 ## Fixed
+
+- 2026-10-23: monsters that looked like placeholder NPCs. Four now use real
+  rigged models found online (licences in `assets/models/CREDITS.md`): the
+  Hounds (a flayed dog that walks, howls and runs), the Facelings (bound in
+  cloth with no face), Stilts (a faceless man in a suit, 2.6 m tall, posed
+  by code) and Still Life (a jointed mannequin in cracked plaster). New on
+  the last story level: the Drowned, a real model too.
+- 2026-10-23: the Drowned looking like a cartoon in the bright poolrooms.
+  His colours are washed out and he looks wet, a dark shape against the
+  white tile.
 
 - 2026-10-22: the Deathmoths reading as confetti. They now have bodies,
   bigger wings and a fall of dust in the beam.

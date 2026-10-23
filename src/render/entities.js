@@ -937,10 +937,18 @@ export function wretchMesh() {
 // as the player is moving the water; when it goes still he stops and retches.
 // Without the model he is the wretch's fallback figure, soaked dark.
 export function drownedMesh() {
-  return modelInstance("drowned", {
+  const model = modelInstance("drowned", {
     clipFor: (e) => (e.state === "follow" ? (e.pace > 3 ? "run" : "walk") : e.state === "still" ? "retch" : "walk"),
     speedFor: (e) => (e.state === "follow" ? (e.pace > 3 ? 1.1 : Math.max(0.4, e.pace / 1.9)) : e.state === "wander" ? 0.4 : 1),
-  }) ?? wretchMesh();
+  });
+  if (!model) return wretchMesh();
+  // the poolrooms are bright: wash the colour out of him and make him wet
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material.color.setRGB(0.5, 0.56, 0.54);
+    o.material.roughness = 0.32;
+  });
+  return model;
 }
 
 export const MESHES = {
