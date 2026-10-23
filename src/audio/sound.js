@@ -221,6 +221,11 @@ export function createAudio() {
         burst({ duration: 0.5, frequency: 520, q: 2.5, type: "bandpass", level: 0.35 * volume, at: t, destination: dest });
         burst({ duration: 0.3, frequency: 300, q: 4, type: "bandpass", level: 0.25 * volume, at: t + 0.55, destination: dest });
         burst({ duration: 0.06, frequency: 180, level: 0.4 * volume, at: t + 0.2, destination: dest });
+      } else if (sound === "gurgle") {
+        // water running off a coat, then a slow retch through a throat full of it
+        for (let i = 0; i < 4; i++) burst({ duration: 0.04, frequency: 1800 + i * 260, q: 6, type: "bandpass", level: 0.18 * volume, at: t + i * 0.13, destination: dest });
+        burst({ duration: 0.7, frequency: 240, q: 3, type: "bandpass", level: 0.3 * volume, at: t + 0.6, destination: dest });
+        burst({ duration: 0.35, frequency: 150, q: 5, type: "bandpass", level: 0.22 * volume, at: t + 1.0, destination: dest });
       } else if (sound === "shriek") {
         // it has seen you: a human voice torn up into something else
         for (const [f, d] of [[880, 0], [1240, 0.02], [660, 0.05]]) {

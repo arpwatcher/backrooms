@@ -932,7 +932,19 @@ export function wretchMesh() {
   return fallback;
 }
 
+// the Drowned is a real model (assets/models/drowned.glb, by bitkiln): a
+// deckhand in an oilskin, grey and swollen. He walks or runs exactly as fast
+// as the player is moving the water; when it goes still he stops and retches.
+// Without the model he is the wretch's fallback figure, soaked dark.
+export function drownedMesh() {
+  return modelInstance("drowned", {
+    clipFor: (e) => (e.state === "follow" ? (e.pace > 3 ? "run" : "walk") : e.state === "still" ? "retch" : "walk"),
+    speedFor: (e) => (e.state === "follow" ? (e.pace > 3 ? 1.1 : Math.max(0.4, e.pace / 1.9)) : e.state === "wander" ? 0.4 : 1),
+  }) ?? wretchMesh();
+}
+
 export const MESHES = {
+  drowned: drownedMesh,
   wretch: wretchMesh,
   deadline: deadlineMesh,
   attendant: attendantMesh,

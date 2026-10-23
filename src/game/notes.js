@@ -32,7 +32,7 @@ export const TEACHING = {
     "batteries turn up on the floor if you're lucky. ration it.",
   ],
   6: [
-    "day 4012. the water is warm. i can see the door from here. i can't make myself walk to it.",
+    "day 4012. the water is warm. i can see the door from here. every time i move, he moves. so i don't.",
     "if you're reading this - go. don't wait for me. - e.",
   ],
 };

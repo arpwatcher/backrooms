@@ -17,6 +17,7 @@ import { hushbaby, CRY_AFTER, COME_AFTER } from "../src/entities/hushbaby.js";
 import { attendant } from "../src/entities/attendant.js";
 import { deadline, START_DELAY as DEADLINE_DELAY } from "../src/entities/deadline.js";
 import { wretch, NOTICE, LOSE_AFTER, SEARCH_FOR } from "../src/entities/wretch.js";
+import { drowned, PACE } from "../src/entities/drowned.js";
 
 function open(width = 12, height = 12) {
   return generateLayout({ seed: "arena", width, height, wallRuns: 0, rooms: 0, pillarChance: 0 });
@@ -568,4 +569,46 @@ test("a loud step draws it over to look, a crouch doesn't", () => {
   sense.player.noise = 0.45;
   run(wretch, e, sense, 0.2);
   assert.equal(e.state, "investigate");
+});
+
+test("the drowned stands still while you stand still", () => {
+  const layout = open();
+  const e = spawn(drowned, { x: 8, y: 2 }, { rng: new Rng("d") });
+  const sense = senseFor(layout, { x: c(2), z: c(2) });
+  const x = e.x;
+  const events = run(drowned, e, sense, 3);
+  assert.equal(e.state, "still");
+  assert.equal(e.x, x, "not a step");
+  assert.ok(events.some((ev) => ev.sound === "gurgle"), "but you can hear him dripping");
+});
+
+test("the drowned comes as fast as you move: a crouch barely, a sprint at a run", () => {
+  const layout = open(20, 4);
+  const moved = (player) => {
+    const e = spawn(drowned, { x: 12, y: 1 }, { rng: new Rng("d") });
+    const sense = senseFor(layout, { x: c(1), z: c(1), ...player });
+    const x = e.x;
+    run(drowned, e, sense, 1);
+    return x - e.x;
+  };
+  const crouch = moved({ crouching: true, noise: 0.15 });
+  const walk = moved({ noise: 0.45 });
+  const sprint = moved({ running: true, noise: 1 });
+  assert.ok(crouch > 0 && crouch < walk && walk < sprint, `${crouch} < ${walk} < ${sprint}`);
+  assert.ok(Math.abs(sprint - PACE.run) < 0.3, "a sprint brings him at his run");
+});
+
+test("he never outpaces you: walking away keeps the gap", () => {
+  const layout = open(20, 4);
+  const e = spawn(drowned, { x: 6, y: 1 }, { rng: new Rng("d") });
+  const sense = senseFor(layout, { x: c(10), z: c(1), noise: 0.45 });
+  const gap = () => Math.abs(sense.player.x - e.x);
+  const before = gap();
+  for (let t = 0; t < 3; t += 0.05) {
+    sense.time += 0.05;
+    sense.player.x += 2.3 * 0.05;
+    const events = drowned.update(e, sense, 0.05);
+    assert.ok(!events.some((ev) => ev.type === "contact"));
+  }
+  assert.ok(gap() >= before - 0.1, `${before} -> ${gap()}`);
 });

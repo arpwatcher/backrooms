@@ -11,8 +11,9 @@ import { hushbaby } from "./hushbaby.js";
 import { attendant } from "./attendant.js";
 import { deadline } from "./deadline.js";
 import { wretch } from "./wretch.js";
+import { drowned } from "./drowned.js";
 
-export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts, hushbaby, attendant, deadline, wretch];
+export const ENTITIES = [hounds, smiler, stillLife, deathmoths, partygoers, facelings, stilts, hushbaby, attendant, deadline, wretch, drowned];
 
 export function entityById(id) {
   return ENTITIES.find((d) => d.id === id) ?? null;

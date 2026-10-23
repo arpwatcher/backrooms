@@ -7,6 +7,7 @@
 | `stilts.glb` | Stilts: a faceless man in a suit, far too tall, with PBR skin and clothing | Noah Summers (repromancer) | CC0 1.0 | https://nsmmrs.itch.io/slender-man-character-model |
 | `facelings.glb` | the Facelings: a figure bound head to foot in grey cloth, no face, with idle, nervous walk, frantic run and scream | codyanka ("The Wrapped") | CC0 1.0 | https://codyanka.itch.io/the-wrapped |
 | `stilllife.glb` | Still Life: a shop mannequin with ball joints | burning_barb ("Prototyping Mannequin") | CC0 1.0 | https://burning-barb.itch.io/mannequin |
+| `drowned.glb` | the Drowned: a swollen deckhand in an oilskin, with idle, walk, run, retch and attack animations | bitkiln | free for commercial use, not for resale or redistribution as an asset pack ("Art by bitkiln") | https://bitkiln.itch.io/psx-sea-horror-monsters-free-sampler |
 
 Converted from the original FBX files with Blender 4.5: textures resized to
 1024 px (albedo as JPEG, normal map), one animation per file, the rig's IK

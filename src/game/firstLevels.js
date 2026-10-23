@@ -11,7 +11,7 @@ export const FIRST_LEVELS = [
   { depth: 3, archetype: "electrical", shift: null, task: null, why: "the station: the smiler debuts in the dead patches between sparking lights" },
   { depth: 4, archetype: "office", shift: null, task: null, why: "the abandoned office: facelings at the desks. walk past with your eyes down" },
   { depth: 5, archetype: "lightsout", shift: null, task: null, why: "checkpoint. no lights at all; the deathmoths come for your beam" },
-  { depth: 6, archetype: "poolrooms", shift: null, task: null, roster: ["wretch"], ending: true, why: "the poolrooms: warm water, the way out at the far end - and it followed you here" },
+  { depth: 6, archetype: "poolrooms", shift: null, task: null, roster: ["drowned"], ending: true, why: "the poolrooms: warm water, the way out at the far end - and something under it that feels you move" },
 ];
 
 export function firstLevel(depth) {

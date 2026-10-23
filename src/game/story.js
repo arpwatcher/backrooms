@@ -33,8 +33,8 @@ export const RADIO = {
   ],
   6: [
     "the pools. warm water, white tile. i used to think it was beautiful.",
-    "the door's at the far end. go to it. don't stop.",
-    "...it followed you. i'm sorry. it followed me too.",
+    "the door's at the far end. there's a man in the water. he can't see you. he feels it when you move.",
+    "when he gets close, stop. let the water go flat. then go again, slow.",
   ],
 };
 

@@ -362,7 +362,7 @@ try {
   const voices = await page.evaluate(() => {
     const a = window.__noclip.audio;
     const played = [];
-    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop", "tone", "rasp", "shriek"]) {
+    for (const sound of ["teeth", "panting", "scrape", "flutter", "party", "whine", "creak", "cry", "mop", "tone", "rasp", "shriek", "gurgle"]) {
       a.entity(sound, 3, 1.2, 3, 0.8);
       played.push(sound);
     }
@@ -382,7 +382,7 @@ try {
     a.setVolume(0.5);
     return played.length + 5;
   });
-  check(voices === 17, "every entity voice and player sound plays without an error");
+  check(voices === 18, "every entity voice and player sound plays without an error");
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
