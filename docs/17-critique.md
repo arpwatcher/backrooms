@@ -13,16 +13,19 @@ lit and in the dark.
 1. **Chases have nowhere to go.** There's now a drone, a heartbeat and a
    lunge, but no escape tools: doors to shut behind you and nooks to duck
    into.
-2. **Deadline still reads as a column.** It should be a wall of dark across
-   the corridor, not a pillar of it.
-3. **Five monsters are still built from code** (Smiler, Partygoers,
+2. **Five monsters are still built from code** (Smiler, Partygoers,
    Hushbaby, Attendant, Deadline) next to six real models, and the gap
    shows. No free model fits them yet; Smiler and Deathmoths hold up best
    because you only see eyes and teeth in the dark.
-4. **The hound's textures are 256 px.** Fine at running distance, soft up
+3. **The hound's textures are 256 px.** Fine at running distance, soft up
    close and on the death screen.
 
 ## Fixed
+
+- 2026-10-23: Deadline reading as a column. It is now a wall of dark the
+  width of the corridor, three sheets of smoke with black behind them,
+  always turned to face you. (The critique shot also had it hidden: the
+  tool now puts it in its coming state.)
 
 - 2026-10-23: Partygoers with short legs and stick arms. A shorter torso on
   long legs with knees and feet, full upper arms with shoulders and elbows,

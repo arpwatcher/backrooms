@@ -795,16 +795,25 @@ export function attendantMesh() {
 export function deadlineMesh() {
   const group = new THREE.Group();
   const layers = [];
-  for (const [radius, speed, opacity] of [[1.5, 0.05, 0.75], [1.2, -0.08, 0.85], [0.9, 0.12, 0.95]]) {
-    const map = smoke(`deadline-${radius}`).clone();
+  // a wall of dark across the whole corridor, facing you: three sheets of
+  // smoke one behind the other, and solid black behind them. It is wider
+  // than any corridor; the walls on either side cut it to the opening.
+  for (const [depth, speed, opacity] of [[0, 0.05, 0.7], [-0.7, -0.08, 0.85], [-1.4, 0.12, 0.95]]) {
+    const map = smoke(`deadline-${depth}`).clone();
     map.needsUpdate = true;
-    map.repeat.set(2, 1);
+    map.repeat.set(4, 1);
     const material = new THREE.MeshBasicMaterial({ map, color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, fog: false });
-    const shell = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.15, 2.7, 24, 1, true), material);
-    shell.position.y = 1.35;
+    const shell = new THREE.Mesh(new THREE.PlaneGeometry(12, 3.6, 24, 1), material);
+    // a slow bulge toward you in the middle
+    const pos = shell.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.cos((pos.getX(i) / 12) * Math.PI) * 0.5);
+    shell.position.set(0, 1.7, depth);
     group.add(shell);
     layers.push({ map, speed, shell });
   }
+  const behind = new THREE.Mesh(new THREE.BoxGeometry(12, 3.6, 6), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }));
+  behind.position.set(0, 1.7, -4.6);
+  group.add(behind);
   // figures in the smoke: black silhouettes that fade in and out
   const figures = [0, 1].map((i) => {
     const figure = facelingsBody();
@@ -823,7 +832,7 @@ export function deadlineMesh() {
     for (const { map, speed, shell } of layers) {
       map.offset.x = time * speed;
       map.offset.y = Math.sin(time * 0.3 + speed * 10) * 0.05;
-      shell.rotation.y = time * speed * 0.5;
+      shell.position.x = Math.sin(time * 0.4 + speed * 20) * 0.3;
     }
     figures.forEach((figure, i) => {
       const show = Math.max(0, Math.sin(time * 0.35 + i * 2.4) - 0.6) * 2.2;

@@ -61,6 +61,8 @@ export const deadline = {
         e.z = best.z;
       }
     }
+    // the wall of it always faces you
+    e.facing = Math.atan2(sense.player.x - e.x, sense.player.z - e.z);
     if (e.front >= 0 && (e.memory.toneAt ?? 0) <= sense.time) {
       const near = Math.max(0, Math.min(1, 1 - e.gap / 20));
       events.push({ type: "sound", sound: "tone", x: e.x, z: e.z, volume: 0.3 + near * 0.7 });
