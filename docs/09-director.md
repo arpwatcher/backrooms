@@ -104,6 +104,6 @@ in §4 and §8.
 | 27 | Wretches + the Guest | low lucidity draws one and opens the door for the other | later |
 | 28 | Keymaster + Intercom | two voices offering help, one of which is lying | later |
 | 29 | Crawlers + Hounds | getting up onto a desk is loud | later |
-| 30 | Monochrome + Smiler | warm light keeps both away, but warm light is rare | later |
+| 30 | Monochrome + Smiler | warm light keeps both away, but warm light is rare | built |
 | 31 | Neighborhood Watch + Deadline | you have to hurry, and you can't run | later |
 | 32 | Mold Men + Attendant | wet cells are where both of them are | later |

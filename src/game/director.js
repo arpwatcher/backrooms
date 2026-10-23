@@ -36,6 +36,10 @@ export const SYNERGIES = [
   { pair: ["attendant", "stillLife"], why: "backing away from the mannequin, you can't see where you're stepping" },
   { pair: ["deadline", "stillLife"], why: "you have to keep moving forward and keep looking back" },
   { pair: ["deadline", "stilts"], why: "crouching is slow, and the dark is coming" },
+  { pair: ["monochrome", "smiler"], why: "warm light keeps both away, but where the panels are dead the grin waits and the grey spreads" },
+  { pair: ["monochrome", "deadline"], why: "the dark behind you puts out the panels, and every panel that dies is grey it can walk on" },
+  { pair: ["drowned", "deadline"], why: "the dark makes you move, and every step you take brings him" },
+  { pair: ["drowned", "hounds"], why: "creeping keeps him slow and the pack deaf, but the exit is a long way off at a creep" },
 ];
 
 // pairs whose counters contradict outright; meeting both is unfair, not

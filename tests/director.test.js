@@ -138,3 +138,14 @@ test("harder tiers lean in harder, but nothing is ever sped up past a fair tell"
   for (const tier of order) assert.ok(tier.pace <= 1, `${tier.name} pace ${tier.pace}`);
   assert.ok(TIERS.lucid.pace < 1, "the easiest tier is a little slower");
 });
+
+test("every synergy names two entities the game actually has", async () => {
+  const { SYNERGIES } = await import("../src/game/director.js");
+  const { ENTITIES } = await import("../src/entities/index.js");
+  const ids = new Set(ENTITIES.map((d) => d.id));
+  for (const { pair, why } of SYNERGIES) {
+    for (const id of pair) assert.ok(ids.has(id), `${id} in ${pair}`);
+    assert.ok(why.length > 20);
+  }
+  assert.ok(synergyOf("smiler", "monochrome"), "the pair the gdd promises");
+});
