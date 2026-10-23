@@ -854,8 +854,9 @@ export function facelingsMesh() {
 // is never seen moving: each time it settles after being unwatched, every
 // joint has a new angle and the head is turned a little more your way.
 export function stillLifeMesh() {
-  const plaster = fleshMaterial({ skin: skin({ base: "#b8b2a4", blotch: "rgba(110,95,70,0.35)", veins: "rgba(40,34,28,0.75)", grime: 0.55, pores: 0.2, seed: "plaster" }), roughness: 0.82, rim: 0x3a3630, normalScale: 1.2 });
-  const joints = fleshMaterial({ skin: skin({ base: "#6e665a", blotch: "rgba(40,30,20,0.5)", veins: null, grime: 0.8, seed: "plaster-joint" }), roughness: 0.7, rim: 0x2a2620 });
+  // older and dirtier than the procedural one: it has stood here for years
+  const plaster = fleshMaterial({ skin: skin({ base: "#9a9282", blotch: "rgba(80,62,40,0.55)", veins: "rgba(30,24,18,0.85)", grime: 0.95, pores: 0.35, seed: "plaster-old" }), roughness: 0.88, rim: 0x3a3630, normalScale: 1.6 });
+  const joints = fleshMaterial({ skin: skin({ base: "#4a4238", blotch: "rgba(30,20,12,0.6)", veins: null, grime: 1, seed: "plaster-joint" }), roughness: 0.7, rim: 0x2a2620 });
   let pose = { arms: [[-0.2, 0.1, -0.5], [-0.6, -0.1, -0.9]], head: [0.18, 0.3, 0.22], knee: 0.1, lean: 0.04 };
   let lastState = null;
   const model = modelInstance("stillLife", {
@@ -865,7 +866,8 @@ export function stillLifeMesh() {
         const r = (k) => Math.sin(entity.x * 12.9898 + entity.z * 78.233 + k) * 0.5;
         pose = {
           arms: [0, 1].map((i) => [r(1 + i) * 1.6 - 0.3, r(3 + i) * 0.5, -Math.abs(r(5 + i)) * 1.6]),
-          head: [r(8) * 0.5, r(9) * 1.4, r(10) * 0.6],
+          // the head turns further than a neck should, and tips over
+          head: [r(8) * 0.6, r(9) * 3.4, r(10) * 1.1],
           knee: Math.abs(r(7)) * 0.5,
           lean: r(11) * 0.15,
         };

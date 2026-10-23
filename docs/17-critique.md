@@ -21,13 +21,14 @@ lit and in the dark.
    Hushbaby, Attendant, Deadline) next to six real models, and the gap
    shows. No free model fits them yet; Smiler and Deathmoths hold up best
    because you only see eyes and teeth in the dark.
-5. **Still Life is too clean at a distance.** The plaster cracks only read
-   up close; across a lit room it is a tidy shop dummy. Needs dirt, a
-   darker base, and a pose that is wrong rather than just different.
-6. **The hound's textures are 256 px.** Fine at running distance, soft up
+5. **The hound's textures are 256 px.** Fine at running distance, soft up
    close and on the death screen.
 
 ## Fixed
+
+- 2026-10-23: Still Life too clean at a distance. Darker, dirtier plaster,
+  black joints, and when it settles the head can be turned further than a
+  neck allows.
 
 - 2026-10-23: monsters that looked like placeholder NPCs. Four now use real
   rigged models found online (licences in `assets/models/CREDITS.md`): the
