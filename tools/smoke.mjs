@@ -124,9 +124,22 @@ try {
     planned: window.__noclip.plan.roster.map((d) => d.id).sort(),
   }));
   check(kinds.length > 0 && kinds.join() === planned.join(), `the director's roster spawns on level 3 (${kinds.join(", ")})`);
-  await page.waitForTimeout(1500);
+  // wait on frames, not the clock: a slow runner draws a frame or two a second
+  await frames(4);
   const moving = await page.evaluate(() => window.__noclip.entities.some((e) => e.state !== "idle"));
   check(moving, "and they run their behaviour");
+
+  // leaving a level frees what it put on the gpu: back on level 3 after two
+  // other levels, the texture count is where it was
+  // (textures upload on the first frame that draws them, so count after a few)
+  await frames(3);
+  const texturesBefore = await page.evaluate(() => window.__noclip.gpu.textures);
+  for (const depth of [8, 5, 3]) {
+    await page.evaluate((d) => window.__noclip.goToDepth(d), depth);
+    await frames(3);
+  }
+  const texturesAfter = await page.evaluate(() => window.__noclip.gpu.textures);
+  check(texturesAfter <= texturesBefore + 2, `levels free their textures when you leave (${texturesBefore} -> ${texturesAfter})`);
 
   // lockers: crouch inside one and you are hidden
   const lockers = await page.evaluate(() => window.__noclip.lockers);

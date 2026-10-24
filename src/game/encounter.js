@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { MESHES } from "../render/entities.js";
 import { groundShadow } from "../render/flesh.js";
+import { disposeTree } from "../render/dispose.js";
 import { balloon, paperSign, placeOnWall } from "../render/props.js";
 import { cellAt, nearestPlayer } from "../entities/core.js";
 import { driftToward } from "../world/path.js";
@@ -24,9 +25,15 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
   const driftRng = rng.fork("drift");
   const dark = darkCells(layout);
   const entities = [];
+  // balloons, signs: things an entity brings with it, gone with the level
+  const props = [];
   for (const def of roster) {
     const spawned = def.spawn(layout, rng.fork(def.id), { darkCells: dark });
-    for (const prop of def.props?.(spawned, layout, rng.fork(`${def.id}-props`)) ?? []) scene.add(propMesh(prop));
+    for (const prop of def.props?.(spawned, layout, rng.fork(`${def.id}-props`)) ?? []) {
+      const mesh = propMesh(prop);
+      scene.add(mesh);
+      props.push(mesh);
+    }
     for (const entity of spawned) {
       entity.spawnCell = cellAt(entity.x, entity.z);
       entity.mesh = MESHES[def.id]();
@@ -87,7 +94,14 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
       }
     },
     dispose() {
-      for (const entity of entities) scene.remove(entity.mesh);
+      for (const entity of entities) {
+        scene.remove(entity.mesh);
+        disposeTree(entity.mesh);
+      }
+      for (const mesh of props) {
+        scene.remove(mesh);
+        disposeTree(mesh);
+      }
     },
   };
 }

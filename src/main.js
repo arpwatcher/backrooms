@@ -6,6 +6,7 @@ import { generateLayout } from "./world/layout.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
 import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
+import { disposeTree } from "./render/dispose.js";
 import { monochrome } from "./entities/monochrome.js";
 import { puddleCells, createTracks, stepTracks, shoesWet } from "./game/wet.js";
 import { itemKinds, BATTERY_CHARGE } from "./game/items.js";
@@ -162,10 +163,7 @@ let transitioning = false;
 function loadLevel() {
   if (level) {
     scene.remove(level.world.group);
-    level.world.group.traverse((o) => {
-      o.geometry?.dispose?.();
-      if (o.material && !Array.isArray(o.material)) o.material.dispose?.();
-    });
+    disposeTree(level.world.group);
   }
   if (level?.encounter) level.encounter.dispose();
   const { director: plan, roster, archetype, shift, task: picked, pace, ending } = levelPlan(run.seed, run.depth, tier);
@@ -750,6 +748,7 @@ window.__noclip = {
   get layout() { return level.layout; },
   get player() { return player; },
   get frames() { return frames; },
+  get gpu() { return { ...renderer.info.memory, programs: renderer.info.programs?.length ?? 0 }; },
   get time() { return time; },
   get helpShown() { return help.shown; },
   get hint() { return hintLine.textContent; },
