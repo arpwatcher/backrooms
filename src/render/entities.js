@@ -969,13 +969,28 @@ export function drownedMesh() {
     speedFor: (e) => (e.state === "follow" ? (e.pace > 3 ? 1.1 : Math.max(0.4, e.pace / 1.9)) : e.state === "wander" ? 0.4 : 1),
   });
   if (!model) return wretchMesh();
-  // the poolrooms are bright: wash the colour out of him and make him wet
+  // the poolrooms are bright and the flashlight finds him: wash most of the
+  // colour out of his coat in the shader, darken him and make him wet
   model.traverse((o) => {
     if (!o.isMesh) return;
-    o.material.color.setRGB(0.5, 0.56, 0.54);
+    drain(o.material, 0.75, 0.62);
+    o.material.color.setRGB(0.62, 0.68, 0.66);
     o.material.roughness = 0.32;
   });
   return model;
+}
+
+// takes colour out of a model's texture in its shader: `amount` 0 leaves it,
+// 1 is black and white; `level` scales what's left
+function drain(material, amount, level = 1) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <map_fragment>",
+      `#include <map_fragment>
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))), ${amount.toFixed(3)}) * ${level.toFixed(3)};`,
+    );
+  };
+  material.customProgramCacheKey = () => `drain-${amount}-${level}`;
 }
 
 // Monochrome is a real model (assets/models/monochrome.glb, bitkiln's
@@ -988,14 +1003,7 @@ export function monochromeMesh() {
   });
   if (!model) return facelingsBody();
   model.traverse((o) => {
-    if (!o.isMesh) return;
-    o.material.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <map_fragment>",
-        "#include <map_fragment>\n  diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))) * 1.15;",
-      );
-    };
-    o.material.customProgramCacheKey = () => "monochrome";
+    if (o.isMesh) drain(o.material, 1, 1.15);
   });
   return model;
 }
