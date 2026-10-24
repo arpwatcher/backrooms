@@ -80,7 +80,9 @@ settled by them.
 2. **Per-player marks and Echo state** (§3), tested in node. **[built]**:
    `src/game/party.js`; the game runs as a party of one.
 3. **A loopback transport**: two simulated clients in one node process,
-   asserting identical level builds and that host snapshots converge.
+   asserting identical level builds and that host snapshots converge. **[built]**:
+   `src/net/protocol.js`, `loopback.js`, `session.js`; tested with a third of
+   the snapshots dropped.
 4. **Snapshot interpolation** in the renderer: other players as simple
    figures with a name.
 5. **WebRTC transport** behind the same interface as the loopback.
