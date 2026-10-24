@@ -13,6 +13,12 @@ export function createParty(ids = ["p1"]) {
   return { players: new Map(ids.map((id) => [id, { id, marks: new Map(), echo: null, reachedExit: false }])) };
 }
 
+// someone joins mid-run: they start unmarked and alive
+export function join(party, id) {
+  if (!party.players.has(id)) party.players.set(id, { id, marks: new Map(), echo: null, reachedExit: false });
+  return party.players.get(id);
+}
+
 export function member(party, id) {
   return party.players.get(id) ?? party.players.values().next().value;
 }

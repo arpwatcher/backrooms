@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createParty, touch, reachExit, startLevel, flick, alive, FLICK_EVERY } from "../src/game/party.js";
+import { createParty, touch, reachExit, startLevel, flick, alive, join, FLICK_EVERY } from "../src/game/party.js";
 
 test("alone, it is the old rule: a second touch from the same thing ends the run", () => {
   const party = createParty();
@@ -64,4 +64,13 @@ test("an Echo flicks one panel a minute", () => {
   assert.equal(flick(party, "a", 10), true);
   assert.equal(flick(party, "a", 10 + FLICK_EVERY - 1), false);
   assert.equal(flick(party, "a", 10 + FLICK_EVERY), true);
+});
+
+test("someone joining mid-run starts unmarked, and turns a solo death into an echo", () => {
+  const party = createParty(["p1"]);
+  touch(party, "p1", "x");
+  join(party, "p2");
+  assert.equal(party.players.get("p2").marks.size, 0);
+  const second = touch(party, "p1", "x");
+  assert.ok(second.fatal && !second.wipe, "p2 is still standing");
 });

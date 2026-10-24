@@ -50,6 +50,15 @@ export function createRemotes(scene) {
           figures.set(p.id, f);
         }
         f.position.set(p.x, 0, p.z);
+        // an Echo: a faint flicker where the player fell
+        const faint = p.echo ? 0.18 + Math.random() * 0.1 : 1;
+        f.traverse((o) => {
+          if (o.material && "opacity" in o.material && !o.isSprite) {
+            o.material.transparent = faint < 1;
+            o.material.opacity = faint;
+          }
+          if (o.isSpotLight) o.visible = !p.echo;
+        });
         // figures face +z; the game's yaw looks down -z
         f.rotation.y = p.yaw + Math.PI;
       }

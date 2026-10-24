@@ -60,7 +60,8 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         // wandering things lean toward whoever they're nearest; harder tiers lean more
         const goal = cellAt(player.x, player.z);
         const drifting = driftToward(sense.paths, goal, tier.drift, driftRng);
-        const own = { ...sense, player, paths: drifting };
+        // its own view of the world: its nearest player is the one it sees, hears and touches
+        const own = { ...sense, player, paths: drifting, canSee: (e, range) => sense.canSee(e, range, player) };
         const surge = lungeScale(entity, Math.hypot(entity.x - player.x, entity.z - player.z), sense.time);
         for (const event of entity.def.update(entity, own, dt * tier.pace * surge)) events.push({ ...event, entity, player });
       }

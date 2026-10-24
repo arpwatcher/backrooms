@@ -7,11 +7,13 @@ import { lineOfSight } from "../world/sight.js";
 // a little inside the real edge of the screen, so "I could see it" is true
 export const WATCH_HALF_ANGLE = 0.8;
 
-export function makeSense({ player, flashlight, camera, layout, paths, lightAt, time, darkCells: dark, prints = [], hidden = false }) {
+// `others` are the other players in the room (co-op), each { id, x, z,
+// noise, running, crouching, ... }; entities go for whoever is nearest
+export function makeSense({ player, flashlight, camera, layout, paths, lightAt, time, darkCells: dark, prints = [], hidden = false, others = [] }) {
   const forward = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
   return {
     player,
-    players: [player],
+    players: [player, ...others.filter((o) => !o.echo)],
     paths,
     time,
     darkCells: dark,
@@ -19,12 +21,12 @@ export function makeSense({ player, flashlight, camera, layout, paths, lightAt, 
     lightAt,
     flashlightOn: flashlight.on && flashlight.battery > 0,
     hidden,
-    // inside a locker, nothing sees you
-    canSee(entity, range) {
+    // can it see this player (you, by default)? inside a locker, nothing sees you
+    canSee(entity, range, target = player) {
       return (
-        !hidden &&
-        Math.hypot(entity.x - player.x, entity.z - player.z) <= range &&
-        lineOfSight(layout, entity.x, entity.z, player.x, player.z)
+        !(target === player && hidden) &&
+        Math.hypot(entity.x - target.x, entity.z - target.z) <= range &&
+        lineOfSight(layout, entity.x, entity.z, target.x, target.z)
       );
     },
     // is this spot on screen and in plain view? (a blink counts as not looking)

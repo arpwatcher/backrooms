@@ -32,7 +32,7 @@ import { Rng } from "./core/rng.js";
 import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
 import { cellAt } from "./entities/core.js";
-import { createParty, touch, reachExit, startLevel, member } from "./game/party.js";
+import { createParty, touch, reachExit, startLevel, member, join } from "./game/party.js";
 import { createTrail, stepTrail } from "./game/shifts.js";
 import { placeTask, interact, doneCount } from "./game/tasks.js";
 import { placeNotes } from "./game/notes.js";
@@ -258,8 +258,9 @@ function showMilestones() {
 }
 
 function onContact(entity, time) {
-  // fatal for the run only when nobody is left standing (alone: your second touch)
-  const { wipe: fatal } = touch(party, player.id, entity.kind, tier.contacts, time);
+  // your own second touch from the same thing ends it for you (an Echo of
+  // yourself has no screen yet, so it's the death screen even in a group)
+  const { fatal } = touch(party, player.id, entity.kind, tier.contacts, time);
   run.touches = (run.touches ?? 0) + 1;
   noteContact(tension, time);
   if (fatal) {
@@ -325,11 +326,20 @@ function startCoop() {
   const peer = createPeer(net.endpoint("me"), { host: "host", name: "me" });
   const s = cellCenter(level.layout.start.x, level.layout.start.y);
   const bot = createBot("bot", s.x + 0.6, s.z + 0.6, new Rng(`${levelSeed(run)}/bot`));
+  join(party, "bot");
   coop = { net, host, peer, bot, buffer: createBuffer() };
+}
+// something reached another player: their marks, their fall; the thing
+// backs off from them the way it does from you
+function otherContact(event, time) {
+  const { first } = touch(party, event.player.id, event.entity.kind, tier.contacts, time);
+  if (first) level.encounter.retreat(event.entity, time);
 }
 function stepCoop(dt) {
   if (!coop) return;
-  stepBot(coop.bot, level.paths, dt);
+  // an Echo stays where it fell
+  coop.bot.echo = member(party, "bot").echo;
+  if (!coop.bot.echo) stepBot(coop.bot, level.paths, dt);
   coop.host.tick(time, [coop.bot], []);
   coop.net.pump();
   if (coop.peer.state.view) pushSnapshot(coop.buffer, coop.peer.state.view);
@@ -641,11 +651,13 @@ function frame() {
   const sense = makeSense({
     player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells, prints: level.tracks.prints,
     hidden: level.hidden,
+    others: coop ? [coop.bot] : [],
   });
   if (!screens.dead) {
     for (const event of level.encounter.update(sense, dt)) {
       if (event.type === "sound") audio?.entity(event.sound, event.x, 1.2, event.z, event.volume);
       else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
+      else if (event.type === "contact" && event.player && event.player !== player) otherContact(event, time);
       else if (event.type === "contact" && !down) onContact(event.entity, time);
       else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
     }

@@ -53,3 +53,15 @@ test("hidden, nothing can see you, even right outside the door", () => {
   const hidden = makeSense({ player, flashlight, layout, paths: null, lightAt: () => "lit", time: 0, hidden: true });
   assert.ok(!hidden.canSee(entity, 10));
 });
+
+test("with others in the room, each is seen for themselves; a locker hides only you", () => {
+  const layout = generateLayout({ seed: "see", width: 6, height: 6, wallRuns: 0, rooms: 0, pillarChance: 0 });
+  const player = { id: "p1", x: 2.5 * CELL, z: 2.5 * CELL, yaw: 0 };
+  const friend = { id: "p2", x: 4.5 * CELL, z: 4.5 * CELL, yaw: 0 };
+  const gone = { id: "p3", x: 1.5 * CELL, z: 1.5 * CELL, echo: { since: 0 } };
+  const entity = { x: 4.5 * CELL, z: 3.5 * CELL };
+  const sense = makeSense({ player, flashlight: { on: false, battery: 1 }, layout, paths: null, lightAt: () => "lit", time: 0, hidden: true, others: [friend, gone] });
+  assert.deepEqual(sense.players.map((p) => p.id), ["p1", "p2"], "echoes aren't hunted");
+  assert.ok(!sense.canSee(entity, 10), "you're in a locker");
+  assert.ok(sense.canSee(entity, 10, friend), "your friend isn't");
+});
