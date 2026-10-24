@@ -14,10 +14,15 @@ lit and in the dark.
    Hushbaby, Attendant, Deadline) next to six real models, and the gap
    shows. No free model fits them yet; Smiler and Deathmoths hold up best
    because you only see eyes and teeth in the dark.
-2. **The hound's textures are 256 px.** Fine at running distance, soft up
-   close and on the death screen.
+2. **The PS1-era models are low-poly up close.** The hound, the Drowned and
+   Monochrome hold up at running distance and their textures are now
+   smoothed, but on the death screen you can count the polygons.
 
 ## Fixed
+
+- 2026-10-24: blocky pixels on the hound, the Drowned and Monochrome up
+  close (their textures asked for nearest filtering). They are smoothed
+  with mipmaps on load.
 
 - 2026-10-24: the Hushbaby looking like a cute egg with legs. It now stands
   on arms far too long for it, elbows above its back, legs dragging, its

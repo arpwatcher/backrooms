@@ -61,6 +61,20 @@ export async function preloadModels(root = "") {
           clips[clip] = ref.endsWith(".glb") ? (await loader.loadAsync(root + ref)).animations[0] : pick(base, ref);
         }
         for (const [clip, c] of Object.entries(clips)) if (c) clips[clip] = Object.assign(c.clone(), { name: clip });
+        // some of these are PS1-style models with blocky, nearest-filtered
+        // 256 px textures; under our light they look better smoothed
+        base.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          for (const key of ["map", "normalMap", "roughnessMap", "emissiveMap"]) {
+            const t = o.material?.[key];
+            if (!t || t.magFilter !== THREE.NearestFilter) continue;
+            t.magFilter = THREE.LinearFilter;
+            t.minFilter = THREE.LinearMipmapLinearFilter;
+            t.generateMipmaps = true;
+            t.anisotropy = 4;
+            t.needsUpdate = true;
+          }
+        });
         loaded.set(name, { scene: base.scene, clips, spec });
       } catch (error) {
         console.warn(`model ${name} could not load, using the procedural body`, error?.message ?? error);
