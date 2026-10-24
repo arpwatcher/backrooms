@@ -20,6 +20,10 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-24: the Deathmoths invisible in the dark: a few specks on black.
+  Their wing dust now glows faintly and the swarm carries a pale haze that
+  breathes with their wings, so you see them coming before you see moths.
+
 - 2026-10-24: blocky pixels on the hound, the Drowned and Monochrome up
   close (their textures asked for nearest filtering). They are smoothed
   with mipmaps on load.

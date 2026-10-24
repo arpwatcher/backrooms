@@ -333,7 +333,7 @@ export function deathmothsMesh() {
   const count = 46;
   const wing = new THREE.PlaneGeometry(0.16, 0.11);
   const material = new THREE.MeshLambertMaterial({
-    map: mothTexture(), side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, emissive: 0x2a2418,
+    map: mothTexture(), side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, emissive: 0x5c5638,
   });
   const moths = new THREE.InstancedMesh(wing, material, count);
   group.add(moths);
@@ -349,8 +349,22 @@ export function deathmothsMesh() {
   }
   const dustGeometry = new THREE.BufferGeometry();
   dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
-  const dust = new THREE.Points(dustGeometry, new THREE.PointsMaterial({ color: 0xcfc4a0, size: 0.012, transparent: true, opacity: 0.6, depthWrite: false }));
+  // the dust glows faintly, like the powder off a real moth's wing in a beam,
+  // so in the dark the swarm is a drifting smear of pale light before it is moths
+  const dust = new THREE.Points(dustGeometry, new THREE.PointsMaterial({ color: 0xe6dcae, size: 0.02, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }));
   group.add(dust);
+  const haloCanvas = document.createElement("canvas");
+  haloCanvas.width = haloCanvas.height = 64;
+  const hc = haloCanvas.getContext("2d");
+  const grad = hc.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(230,220,170,0.55)");
+  grad.addColorStop(1, "rgba(230,220,170,0)");
+  hc.fillStyle = grad;
+  hc.fillRect(0, 0, 64, 64);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(haloCanvas), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.35 }));
+  halo.scale.set(2.2, 1.6, 1);
+  halo.position.y = 1.6;
+  group.add(halo);
   const orbits = Array.from({ length: count }, (_, i) => ({
     radius: 0.25 + ((i * 37) % 11) / 14,
     height: 1.2 + ((i * 53) % 13) / 11,
@@ -379,6 +393,9 @@ export function deathmothsMesh() {
     dust.rotation.y = time * 0.3;
     dust.position.y = -((time * 0.05) % 0.4);
     dust.scale.setScalar(tight);
+    // the glow breathes with the beat of their wings
+    halo.material.opacity = 0.25 + Math.abs(Math.sin(time * 3.1)) * 0.15;
+    halo.scale.set(2.2 * tight, 1.6 * tight, 1);
   };
   return group;
 }
