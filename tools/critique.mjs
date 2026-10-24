@@ -10,12 +10,20 @@ const root = new URL("..", import.meta.url).pathname;
 const srv = http.createServer((q, r) => { const p = path.join(root, decodeURIComponent(new URL(q.url, "http://x").pathname)); fs.readFile(p, (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "content-type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : p.endsWith(".html") ? "text/html" : "application/octet-stream" }); r.end(b); }); });
 await new Promise((ok) => srv.listen(0, ok));
 const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
-const pg = await b.newPage({ viewport: { width: 960, height: 540 } });
-pg.on("pageerror", (e) => console.log("pageerror", e.message));
-await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
-await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
+// a fresh page for every entity: one page kept through all thirteen levels
+// and two dozen shots under software gl starts handing back black frames
+async function freshPage() {
+  const pg = await b.newPage({ viewport: { width: 960, height: 540 } });
+  pg.on("pageerror", (e) => console.log("pageerror", e.message));
+  pg.on("console", (m) => m.type() === "error" && console.log("console", m.text().slice(0, 200)));
+  pg.on("crash", () => console.log("page crashed"));
+  await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
+  await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
+  return pg;
+}
 const shots = [["wretch", 1], ["hounds", 2], ["smiler", 3], ["facelings", 4], ["deathmoths", 5], ["drowned", 6], ["stillLife", 7], ["partygoers", 8], ["stilts", 9], ["monochrome", 10], ["hushbaby", 11], ["attendant", 12], ["deadline", 13]].filter(([k]) => !only || only.split(",").includes(k));
 for (const [kind, depth] of shots) {
+  const pg = await freshPage();
   for (const mode of ["lit", "dark"]) {
     const info = await pg.evaluate(([kind, depth, mode]) => {
       const n = window.__noclip;
@@ -31,7 +39,10 @@ for (const [kind, depth] of shots) {
       // frozen it can't drain: lay its grey around it by hand
       if (kind === "monochrome") for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) e.grey.set(`${cx + dx},${cy + dy}`, 1e9);
       const opts = [[1, 0, !L.west[cy][cx + 1]], [-1, 0, !L.west[cy][cx]], [0, 1, !L.north[cy + 1][cx]], [0, -1, !L.north[cy][cx]]];
-      const o = opts.find((v) => v[2]) || [1, 0];
+      // never stand on an exit: walking into one starts the fall, and the
+      // shot would catch the screen black mid-fade
+      const exits = new Set((L.exits ?? []).map((x) => `${x.x},${x.y}`));
+      const o = opts.find((v) => v[2] && !exits.has(`${cx + v[0]},${cy + v[1]}`)) || opts.find((v) => v[2]) || [1, 0];
       p.x = e.x + o[0] * 2.6; p.z = e.z + o[1] * 2.6;
       p.yaw = Math.atan2(-(e.x - p.x), -(e.z - p.z)); p.pitch = 0.05;
       e.facing = Math.atan2(p.x - e.x, p.z - e.z);
@@ -42,8 +53,11 @@ for (const [kind, depth] of shots) {
       return "ok";
     }, [kind, depth, mode]);
     await pg.waitForTimeout(900);
+    const state = await pg.evaluate(() => ({ fade: getComputedStyle(document.getElementById("fade")).opacity, frames: window.__noclip.frames, dead: window.__noclip.dead, depth: window.__noclip.run.depth }));
     await pg.screenshot({ path: `${out}/${kind}-${mode}.png` });
+    if (process.env.CRIT_DEBUG) console.log(JSON.stringify(state));
     console.log(kind, mode, info);
   }
+  await pg.close();
 }
 await b.close(); srv.close();
