@@ -47,7 +47,15 @@ sight can't see you; the screen goes to the slats of the door. Sound still
 carries, so the Hounds and the Hushbaby don't care, and a thing that saw you
 go in may come and stand outside. In co-op a locker holds one player.
 
-## Echo deaths (co-op) [later]
+## Echo deaths (co-op) [partly built]
+
+Built (`src/game/party.js`, tested): per-player marks; in a group, a second
+touch makes that player an Echo instead of ending the run; Echoes return at
+the next exit if anyone living reaches it; a wipe sends everyone to the
+checkpoint; the one-flick-a-minute limit. Other players' Echoes are drawn as
+a faint flicker where they fell. Still to come: an Echo's own view (seeing
+through walls, pinging, flicking a panel) for the player who died.
+
 
 A dead player in co-op becomes an Echo until the level ends:
 
