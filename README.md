@@ -54,6 +54,13 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - Footsteps that sound like the floor.
 - Textures are painted on canvas and sounds are synthesized with WebAudio.
   The exceptions are the 3D models credited below.
+- **Co-op, on its way.** Four players is the goal. Built so far: every
+  player has their own marks, and in a group the dead become Echoes. There is
+  a wire protocol, a host and peers on a test transport, and other players
+  drawn from snapshots, smoothed between them. Monsters go for whoever is
+  nearest. Add `?bot` to the address to walk alongside a stand-in second
+  player and watch things hunt it. Networking between real browsers is next
+  (see `docs/16-coop-tech.md`).
 
 ## Controls
 
