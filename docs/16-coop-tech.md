@@ -74,10 +74,11 @@ settled by them.
 
 ## Rollout, in testable steps
 
-1. **`sense.players`** with a single player. A refactor with no behaviour
+1. **`sense.players`** with a single player. **[built]** A refactor with no behaviour
    change. All existing tests still pass, and new tests with two players
    assert each entity goes for the nearest.
-2. **Per-player marks and Echo state** (§3), tested in node.
+2. **Per-player marks and Echo state** (§3), tested in node. **[built]**:
+   `src/game/party.js`; the game runs as a party of one.
 3. **A loopback transport**: two simulated clients in one node process,
    asserting identical level builds and that host snapshots converge.
 4. **Snapshot interpolation** in the renderer: other players as simple

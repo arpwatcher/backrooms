@@ -26,7 +26,8 @@ import { CELL } from "./world/units.js";
 import { Rng } from "./core/rng.js";
 import { createPathfinder } from "./world/path.js";
 import { createEncounter, makeSense } from "./game/encounter.js";
-import { contact, cellAt } from "./entities/core.js";
+import { cellAt } from "./entities/core.js";
+import { createParty, touch, reachExit, startLevel, member } from "./game/party.js";
 import { createTrail, stepTrail } from "./game/shifts.js";
 import { placeTask, interact, doneCount } from "./game/tasks.js";
 import { placeNotes } from "./game/notes.js";
@@ -148,7 +149,9 @@ document.getElementById("codex-open").addEventListener("click", () => codexScree
 // game time only runs while you're playing, so pausing never lets a timer
 // run out behind your back
 let time = 0;
-let marks = new Map();
+// everyone in the run, each with their own marks (co-op step 2: one player for now)
+let party = createParty(["p1"]);
+let wiped = false;
 // who has already turned on you, so each hunt stings once (reset per level)
 let sightings = createSightings();
 let phantoms = createPhantoms();
@@ -189,7 +192,9 @@ function loadLevel() {
   const lucidity = player ? player.lucidity : 1;
   player = createPlayer(start.x, start.z, -Math.PI * 0.75);
   player.lucidity = lucidity;
-  marks = new Map();
+  player.id = "p1";
+  startLevel(party, { wiped });
+  wiped = false;
   tension = createTension();
   const task = picked ? placeTask(picked, layout, new Rng(`${levelSeed(run)}/task-place`)) : null;
   if (task) {
@@ -247,7 +252,8 @@ function showMilestones() {
 }
 
 function onContact(entity, time) {
-  const { fatal } = contact(marks, entity.kind, tier.contacts);
+  // fatal for the run only when nobody is left standing (alone: your second touch)
+  const { wipe: fatal } = touch(party, player.id, entity.kind, tier.contacts, time);
   run.touches = (run.touches ?? 0) + 1;
   noteContact(tension, time);
   if (fatal) {
@@ -257,6 +263,7 @@ function onContact(entity, time) {
     screens.die(entity.def, () => {
       run.depth = checkpointFor(run.depth);
       player = null;
+      wiped = true;
       loadLevel();
       input.lock();
     });
@@ -440,6 +447,7 @@ function nextLevel() {
   }
   transitioning = true;
   fallingSince = time;
+  reachExit(party, player.id);
   milestone({
     type: "left", depth: run.depth, touchesThisRun: run.touches ?? 0, pace: level.pace,
     roster: level.plan.roster.map((d) => d.id),
@@ -761,7 +769,7 @@ window.__noclip = {
   get endingShown() { return ending.shown; },
   get audio() { return audio; },
   get entities() { return level.encounter.entities; },
-  marks: () => marks,
+  marks: () => member(party, "p1").marks,
   // test hooks
   touch(index) {
     onContact(level.encounter.entities[index], time);
