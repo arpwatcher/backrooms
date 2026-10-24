@@ -2,7 +2,7 @@
 // player, lights, sound and HUD together.
 
 import * as THREE from "three";
-import { generateLayout } from "./world/layout.js";
+import { buildLevel } from "./game/build.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
 import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
@@ -169,9 +169,9 @@ function loadLevel() {
     disposeTree(level.world.group);
   }
   if (level?.encounter) level.encounter.dispose();
-  const { director: plan, roster, archetype, shift, task: picked, pace, ending } = levelPlan(run.seed, run.depth, tier);
-  const darkPatches = Math.max(archetype.layout.darkPatches ?? 0, ...roster.map((d) => d.layout?.darkPatches ?? 0));
-  const layout = generateLayout({ seed: levelSeed(run), ...archetype.layout, darkPatches });
+  const built = buildLevel(run.seed, run.depth, tier);
+  const { director: plan, roster, archetype, shift, task: picked, pace, ending } = built.plan;
+  const { layout } = built;
   const effects = shift?.effects ?? {};
   const world = buildWorld(scene, layout, { ...archetype.look, ...effects.look });
   const paths = createPathfinder(layout);
