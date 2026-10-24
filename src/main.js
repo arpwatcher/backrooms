@@ -3,6 +3,11 @@
 
 import * as THREE from "three";
 import { buildLevel } from "./game/build.js";
+import { createLoopback } from "./net/loopback.js";
+import { createHost, createPeer } from "./net/session.js";
+import { createBuffer, push as pushSnapshot, sample as sampleSnapshots } from "./net/interpolate.js";
+import { createBot, stepBot } from "./game/bot.js";
+import { createRemotes } from "./render/remotes.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
 import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
@@ -231,6 +236,7 @@ function loadLevel() {
   sightings = createSightings();
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
   level = { lockers, ending, radio: radioSchedule(run.depth, time + 4.5), tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
+  if (coop) startCoop();
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt, tier,
@@ -307,6 +313,31 @@ function useTask(time) {
 
 // the figures low lucidity puts at the edge of your vision: a dark shape of
 // a person, or a grin. One at a time, never straight ahead.
+// co-op without a second person: ?bot (or __noclip.addBot()) puts a stand-in
+// player on a host behind a loopback; it reaches this page as snapshots, the
+// way a real peer would, and is drawn interpolated like one
+const remotes = createRemotes(scene);
+let coop = null;
+function startCoop() {
+  remotes.clear();
+  const net = createLoopback({ delay: 2 });
+  const host = createHost(net.endpoint("host"), { seed: run.seed, depth: run.depth, tier: tier.name });
+  const peer = createPeer(net.endpoint("me"), { host: "host", name: "me" });
+  const s = cellCenter(level.layout.start.x, level.layout.start.y);
+  const bot = createBot("bot", s.x + 0.6, s.z + 0.6, new Rng(`${levelSeed(run)}/bot`));
+  coop = { net, host, peer, bot, buffer: createBuffer() };
+}
+function stepCoop(dt) {
+  if (!coop) return;
+  stepBot(coop.bot, level.paths, dt);
+  coop.host.tick(time, [coop.bot], []);
+  coop.net.pump();
+  if (coop.peer.state.view) pushSnapshot(coop.buffer, coop.peer.state.view);
+  const newest = coop.buffer.snapshots.at(-1);
+  const seen = newest ? sampleSnapshots(coop.buffer, newest.t) : null;
+  remotes.update(seen ? seen.players : []);
+}
+
 const phantomMeshes = { figure: facelingsBody(), grin: smilerMesh() };
 for (const mesh of Object.values(phantomMeshes)) {
   mesh.visible = false;
@@ -472,6 +503,7 @@ let fallingSince = null;
 // real models first (a second or two), then the first level
 await preloadModels();
 loadLevel();
+if (params.has("bot")) startCoop();
 const enterButton = document.getElementById("enter");
 enterButton.disabled = false;
 enterButton.textContent = "enter";
@@ -618,6 +650,7 @@ function frame() {
       else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
     }
   }
+  stepCoop(dt);
   // Monochrome's grey: standing in it drains the colour from your eyes; near
   // its edge, some of it
   let greyTarget = 0;
@@ -763,6 +796,8 @@ window.__noclip = {
   get lockers() { return level.lockers.map((l) => ({ cell: { x: l.x, y: l.y }, ...insideOf(l) })); },
   get hidden() { return level.hidden; },
   get grey() { return level.grey ?? 0; },
+  addBot() { startCoop(); },
+  get remotes() { return [...remotes.figures].map(([id, f]) => ({ id, x: f.position.x, z: f.position.z })); },
   get radioState() { return { time, queued: level.radio.map((r) => r.at), paused: pause.shown, dead: Boolean(screens.dead), ending: ending.shown }; },
   get bearing() { return level.bearing ?? null; },
   get chase() { return level.chase ?? 0; },

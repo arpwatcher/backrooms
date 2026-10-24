@@ -84,7 +84,9 @@ settled by them.
    `src/net/protocol.js`, `loopback.js`, `session.js`; tested with a third of
    the snapshots dropped.
 4. **Snapshot interpolation** in the renderer: other players as simple
-   figures with a name.
+   figures with a name. **[built]**: `src/net/interpolate.js`,
+   `src/render/remotes.js`. `?bot` (or `__noclip.addBot()`) puts a stand-in
+   second player on a loopback host to see it working in the real game.
 5. **WebRTC transport** behind the same interface as the loopback.
 6. **Voice**, then voice as noise.
 7. **Co-op entities**: Census Taker, Clump, Skin-stealer.

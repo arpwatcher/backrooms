@@ -141,6 +141,15 @@ try {
   const texturesAfter = await page.evaluate(() => window.__noclip.gpu.textures);
   check(texturesAfter <= texturesBefore + 2, `levels free their textures when you leave (${texturesBefore} -> ${texturesAfter})`);
 
+  // co-op over a loopback: a stand-in player arrives as snapshots and is drawn
+  await page.evaluate(() => window.__noclip.addBot());
+  await frames(8);
+  const bot1 = await page.evaluate(() => window.__noclip.remotes);
+  await frames(8);
+  const bot2 = await page.evaluate(() => window.__noclip.remotes);
+  const botMoved = bot1.length === 1 && bot2.length === 1 && Math.hypot(bot2[0].x - bot1[0].x, bot2[0].z - bot1[0].z) > 0.05;
+  check(botMoved, `a second player reaches the page as snapshots and walks (${JSON.stringify(bot2[0] ?? null)})`);
+
   // lockers: crouch inside one and you are hidden
   const lockers = await page.evaluate(() => window.__noclip.lockers);
   check(lockers.length > 0, `level 3 has lockers to hide in (${lockers.length})`);
