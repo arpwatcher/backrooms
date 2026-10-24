@@ -654,50 +654,70 @@ function stiltsBody() {
 // a mouth that opens much further than a mouth should.
 export function hushbabyMesh() {
   const group = new THREE.Group();
-  const pale = fleshMaterial({ skin: skin({ base: "#b9b1ac", blotch: "rgba(120,90,110,0.35)", veins: "rgba(80,90,150,0.5)", grime: 0.4, pores: 0.05, seed: "hush" }), roughness: 0.6, rim: 0x4a4458 });
+  const pale = fleshMaterial({ skin: skin({ base: "#a49fa6", blotch: "rgba(110,80,110,0.45)", veins: "rgba(70,80,150,0.65)", grime: 0.55, pores: 0.05, seed: "hush" }), roughness: 0.55, rim: 0x4a4458 });
+  // an infant's body held up off the floor on arms far too long for it,
+  // elbows above its back like a spider's, legs dragging behind
   const body = new THREE.Group();
-  body.position.y = 0.42;
+  body.position.y = 0.5;
   group.add(body);
-  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.11, 0.26, 6, 14), { amount: 0.012, scale: 8, seed: 41,
-    along: (v) => (v.z > 0 && Math.abs(v.y) < 0.12 ? Math.max(0, Math.sin(v.y * 60)) * 0.01 : 0) }), pale);
+  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.13, 0.3, 6, 14), { amount: 0.014, scale: 8, seed: 41,
+    along: (v) => (v.z > 0 && Math.abs(v.y) < 0.14 ? Math.max(0, Math.sin(v.y * 60)) * 0.012 : 0) }), pale);
   torso.rotation.x = Math.PI / 2;
   body.add(torso);
+  // the neck stretches forward and the head hangs upside down on it
+  body.add(new THREE.Mesh(tube([[0, 0.04, 0.2], [0, 0.0, 0.34], [0, -0.06, 0.44]], 0.05, 0.8, 8), pale));
   const head = new THREE.Group();
-  head.position.set(0, 0.12, 0.27);
+  head.position.set(0, -0.1, 0.52);
   body.add(head);
-  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 24, 20), { amount: 0.01, scale: 7, seed: 43,
+  const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.17, 24, 20), { amount: 0.012, scale: 7, seed: 43,
     along: (v) => {
       if (v.z < 0.06) return 0;
-      const socket = Math.exp(-(((Math.abs(v.x) - 0.06) / 0.03) ** 2 + ((v.y - 0.03) / 0.03) ** 2)) * -0.045;
+      const socket = Math.exp(-(((Math.abs(v.x) - 0.06) / 0.028) ** 2 + ((v.y - 0.03) / 0.022) ** 2)) * -0.06;
       return socket;
     } }), pale);
-  skull.scale.set(1, 1.05, 0.95);
+  skull.scale.set(1, 1.1, 0.95);
   head.add(skull);
   const black = new THREE.MeshBasicMaterial({ color: 0x030202 });
+  // sunken eyes: dark slits at the back of deep sockets, a dull red point in each
   for (const x of [-0.06, 0.06]) {
-    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), black);
-    socket.position.set(x, 0.03, 0.125);
+    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), black);
+    socket.scale.set(1.3, 0.55, 0.6);
+    socket.position.set(x, 0.03, 0.105);
     head.add(socket);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    glint.position.set(x + 0.008, 0.04, 0.152);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 4), new THREE.MeshBasicMaterial({ color: 0x8a1a12 }));
+    glint.position.set(x, 0.03, 0.118);
     head.add(glint);
   }
-  // the mouth: a hole that stretches open, lips pulled thin around it
+  // the mouth: a long hole down past where a chin should be, milk teeth round it
   const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), black);
-  mouth.scale.set(0.8, 1, 0.4);
-  mouth.position.set(0, -0.07, 0.13);
+  mouth.scale.set(0.7, 1.4, 0.45);
+  mouth.position.set(0, -0.09, 0.125);
   head.add(mouth);
-  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 20), pale);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 6, 20), pale);
   lip.position.copy(mouth.position);
   lip.position.z += 0.012;
   head.add(lip);
+  const tooth = new THREE.MeshStandardMaterial({ color: 0xe8e0cc, roughness: 0.4 });
+  const teeth = [];
+  for (let i = 0; i < 6; i++) {
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.016, 5), tooth);
+    const a = Math.PI * (0.2 + (i / 5) * 0.6);
+    t.position.set(Math.cos(a) * 0.035, -0.09 + Math.sin(a) * 0.05, 0.14);
+    t.rotation.z = Math.PI;
+    head.add(t);
+    teeth.push(t);
+  }
   const limbs = [];
-  for (const [x, z, length] of [[-0.1, 0.12, 0.62], [0.1, 0.12, 0.62], [-0.09, -0.15, 0.42], [0.09, -0.15, 0.42]]) {
+  // [shoulder x, shoulder z, elbow, hand] for the two arms, then the dragged legs
+  const arm = (x) => [[0, 0, 0], [x * 2.4, 0.2, 0.08], [x * 3.4, -0.47, 0.24]];
+  const leg = (x) => [[0, 0, 0], [x * 1.6, -0.22, -0.18], [x * 1.3, -0.48, -0.42]];
+  for (const [x, z, path, front] of [[-0.11, 0.14, arm(-0.11), true], [0.11, 0.14, arm(0.11), true], [-0.08, -0.16, leg(-0.08), false], [0.08, -0.16, leg(0.08), false]]) {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0, z);
-    const elbow = length * 0.5;
-    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 1.6, -elbow * 0.6, 0.06], [x * 0.8, -0.42, 0.12]], 0.025, 0.6, 6), pale));
-    for (let f = -1; f <= 1; f++) pivot.add(new THREE.Mesh(tube([[x * 0.8, -0.42, 0.12], [x * 0.8 + f * 0.02, -0.43, 0.17]], 0.008, 0.5, 4), pale));
+    pivot.add(new THREE.Mesh(tube(path, front ? 0.028 : 0.034, 0.6, 7), pale));
+    const end = path[2];
+    // long fingers splayed on the carpet
+    for (let f = -1.5; f <= 1.5; f++) pivot.add(new THREE.Mesh(tube([end, [end[0] + f * 0.025, end[1] - 0.02, end[2] + 0.05], [end[0] + f * 0.035, end[1] - 0.03, end[2] + 0.11]], 0.007, 0.5, 4), pale));
     body.add(pivot);
     limbs.push(pivot);
   }
@@ -706,12 +726,15 @@ export function hushbabyMesh() {
     group.visible = entity.state === "coming";
     // it crawls in fits: a burst of limbs, a freeze, a burst
     const burst = Math.sin(time * 2.3 + entity.id) > -0.2 ? 1 : 0;
-    limbs.forEach((l, i) => (l.rotation.x = burst * Math.sin(time * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.7));
-    head.rotation.z = twitch(time, entity.id, 2.4, 0.6);
-    head.rotation.x = -0.25 + twitch(time, entity.id + 1, 1.7, 0.3);
-    const open = 1 + Math.abs(Math.sin(time * 7)) * 1.4;
-    mouth.scale.set(0.8, open, 0.4);
-    lip.scale.set(1, open * 0.9, 1);
+    limbs.forEach((l, i) => (l.rotation.x = burst * Math.sin(time * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * (i > 1 ? 0.25 : 0.55)));
+    body.position.y = 0.5 + burst * Math.abs(Math.sin(time * 16)) * 0.03;
+    // upside down, and never still
+    head.rotation.z = Math.PI + twitch(time, entity.id, 2.4, 0.5);
+    head.rotation.x = 0.2 + twitch(time, entity.id + 1, 1.7, 0.3);
+    const open = 1 + Math.abs(Math.sin(time * 7)) * 1.2;
+    mouth.scale.set(0.7, 1.4 * open, 0.45);
+    lip.scale.set(1, open * 1.3, 1);
+    teeth.forEach((t, i) => (t.position.y = -0.09 + Math.sin(Math.PI * (0.2 + (i / 5) * 0.6)) * 0.05 * open));
   };
   return group;
 }

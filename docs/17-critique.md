@@ -19,6 +19,16 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-24: the Hushbaby looking like a cute egg with legs. It now stands
+  on arms far too long for it, elbows above its back, legs dragging, its
+  head hanging upside down on a stretched neck, with sunken slit eyes and a
+  long mouth ringed with milk teeth.
+- 2026-10-24: levels never giving back their textures (99 after ten level
+  changes), which eventually blacked out the screen. Old levels, their
+  monsters and props are now freed.
+- 2026-10-24: the Drowned's coat lighting up bright green in the
+  flashlight beam. The colour now comes out in the shader.
+
 - 2026-10-23: chases with nowhere to go. Metal lockers now stand in dead
   ends and corners (two on early levels, up to five deeper). Crouch inside
   one and anything that hunts by sight can't see you; the screen goes to
