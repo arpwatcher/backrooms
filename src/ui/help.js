@@ -21,6 +21,7 @@ export const TIPS = [
   "the first touch knocks you down. the second one, from the same thing, doesn't",
   "notes on the walls were left by people who came before you",
   "lockers stand in dead ends: crouch inside one and nothing that hunts by sight can see you",
+  "to play with friends: Esc, then co-op - you swap two codes by any chat",
 ];
 
 export function createHelp() {

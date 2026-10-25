@@ -27,18 +27,23 @@ export function createCoopScreen({ onHost, onJoin, onClose }) {
   const status = screen.querySelector("#coop-status");
   let pending = null; // what "use their code" does next
   const say = (text) => (status.textContent = text);
+  // the code goes onto the clipboard as well, where the browser allows it
+  const offer = (code) => {
+    out.value = code;
+    out.select();
+    navigator.clipboard?.writeText(code).catch(() => {});
+  };
   screen.querySelector("#coop-host").onclick = async () => {
     say("making an invite...");
     try {
       const invite = await onHost();
-      out.value = invite.code;
-      out.select();
+      offer(invite.code);
       pending = async (code) => {
         say("connecting...");
         await invite.accept(code);
         say("connected - they're in your level");
       };
-      say("send this invite to a friend, then paste their answer below");
+      say("invite copied - send it to a friend, then paste their answer below");
     } catch (e) {
       say(e.message);
     }
@@ -48,9 +53,8 @@ export function createCoopScreen({ onHost, onJoin, onClose }) {
     pending = async (code) => {
       say("answering...");
       const answer = await onJoin(code);
-      out.value = answer.code;
-      out.select();
-      say("send this answer back to the host; you'll join their level when they use it");
+      offer(answer.code);
+      say("answer copied - send it back to the host; you join their level when they use it");
       pending = null;
     };
     say("paste the host's invite below, then press use their code");
