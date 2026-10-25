@@ -20,7 +20,8 @@ const settle = (net, n = 5) => { for (let i = 0; i < n; i++) net.pump(); };
 test("both peers are told the same run, and build the same level from it", () => {
   const { net, a, b } = room();
   settle(net);
-  assert.deepEqual(a.state.start, b.state.start);
+  const run = (s) => ({ seed: s.seed, depth: s.depth, tier: s.tier });
+  assert.deepEqual(run(a.state.start), run(b.state.start));
   const { seed, depth, tier } = a.state.start;
   const one = buildLevel(seed, depth, TIERS[tier]);
   const two = buildLevel(b.state.start.seed, b.state.start.depth, TIERS[b.state.start.tier]);
@@ -65,4 +66,28 @@ test("with a third of the snapshots lost, both peers still converge on the host'
     assert.ok(Math.abs(seen.x - entity.x) < 0.3, `${seen.x} vs ${entity.x}`);
     assert.equal(seen.state, "chase");
   }
+});
+
+test("each peer is told which player it is, and a new level moves everyone", () => {
+  const { net, host, a, b } = room();
+  settle(net);
+  assert.equal(a.state.start.you, "a");
+  assert.equal(b.state.start.you, "b");
+  host.tick(1, [{ id: "host", x: 1, z: 1, yaw: 0 }], []);
+  settle(net);
+  assert.ok(a.state.view);
+  host.restart(5);
+  settle(net);
+  assert.equal(a.state.start.depth, 5);
+  assert.equal(b.state.start.depth, 5);
+  assert.equal(a.state.view, null, "the old level's snapshot is dropped");
+});
+
+test("events from the host reach the peer in order", () => {
+  const { net, host, a } = room();
+  settle(net);
+  host.send("a", { type: "event", kind: "contact", entity: "hounds", fatal: false });
+  host.send("a", { type: "event", kind: "contact", entity: "hounds", fatal: true });
+  settle(net);
+  assert.deepEqual(a.state.events.map((e) => e.fatal), [false, true]);
 });

@@ -45,6 +45,9 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
       }
       entity.mesh.position.set(entity.x, 0, entity.z);
       scene.add(entity.mesh);
+      // its place in the level's spawn order: the same on every player's
+      // machine for the same seed, so snapshots can name it
+      entity.slot = entities.length;
       entities.push(entity);
     }
   }
@@ -71,6 +74,18 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         entity.mesh.userData.animate?.(sense.time, entity, lightAt(entity.x, entity.z));
       }
       return events;
+    },
+    // co-op, on a peer: the host runs the entities; here they only take the
+    // places and states its snapshot gives them, then move and animate as usual
+    mirror(list, time) {
+      const bySlot = new Map(list.map((e) => [e.id, e]));
+      for (const entity of entities) {
+        const seen = bySlot.get(entity.slot);
+        if (seen) Object.assign(entity, { x: seen.x, z: seen.z, facing: seen.facing, state: seen.state });
+        entity.mesh.position.set(entity.x, 0, entity.z);
+        if (entity.facing !== undefined) entity.mesh.rotation.y = entity.facing;
+        entity.mesh.userData.animate?.(time, entity, lightAt(entity.x, entity.z));
+      }
     },
     // after a first contact the thing backs off to where it started, so the
     // player gets a moment to stand up and think about what they did wrong
