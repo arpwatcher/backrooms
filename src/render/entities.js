@@ -62,24 +62,37 @@ export function smilerMesh() {
   group.add(face);
   // the grin: two rows of teeth along a wide arc, gums barely there
   const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e2cc, emissive: 0x9a9480, emissiveIntensity: 0.55, roughness: 0.35 });
-  const gum = new THREE.MeshBasicMaterial({ color: 0x1a0505 });
+  // wet dark gums with a dull red shine
+  const gum = new THREE.MeshStandardMaterial({ color: 0x2a0606, emissive: 0x1a0202, roughness: 0.15 });
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.035, 8, 40, Math.PI * 0.9), gum);
   mouth.rotation.z = Math.PI + Math.PI * 0.05;
   mouth.scale.set(1, 0.55, 0.6);
   face.add(mouth);
+  // no two teeth alike: long and short, leaning, some yellowed
+  const yellowed = toothMaterial.clone();
+  yellowed.color.setHex(0xc9b98a);
   const teeth = [];
+  const jag = (i, k) => Math.abs(Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1;
   for (let i = 0; i < 26; i++) {
     const a = Math.PI + Math.PI * 0.08 + (i / 25) * Math.PI * 0.84;
     const x = Math.cos(a) * 0.26;
     const y = Math.sin(a) * 0.26 * 0.55;
     for (const row of [1, -1]) {
-      const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.05 + (i % 3) * 0.008, 4), toothMaterial);
+      const length = 0.035 + jag(i, row) * 0.045;
+      const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.011 + jag(i, row + 3) * 0.008, length, 4), jag(i, row + 5) > 0.7 ? yellowed : toothMaterial);
       tooth.position.set(x, y + row * 0.018, 0.02);
-      tooth.rotation.z = row > 0 ? Math.PI : 0;
+      tooth.rotation.z = (row > 0 ? Math.PI : 0) + (jag(i, row + 7) - 0.5) * 0.5;
+      tooth.userData.row = row;
+      tooth.userData.y = tooth.position.y;
       face.add(tooth);
       teeth.push(tooth);
     }
   }
+  // behind the teeth, a throat that goes back further than the head does
+  const throat = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 10), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  throat.scale.set(1, 0.25, 0.3);
+  throat.position.set(0, -0.12, -0.01);
+  face.add(throat);
   const gaze = eyes({ color: 0xf6f2e0, spacing: 0.24, size: 0.016, halo: 0.13, intensity: 1.1 });
   gaze.position.y = 0.2;
   face.add(gaze);
@@ -96,6 +109,11 @@ export function smilerMesh() {
     face.scale.x = (flinch ? 0.75 : 1) * (hunting ? 1.25 + Math.sin(time * 3) * 0.05 : 1);
     body.rotation.z = Math.sin(time * 0.7 + entity.id) * 0.05 + twitch(time, entity.id, 1.2, 0.12);
     face.position.x = twitch(time, entity.id + 5, 2.2, 0.06);
+    // closing in, the jaws part: the lower teeth drop away from the upper
+    const gape = hunting ? 0.03 + Math.max(0, Math.sin(time * 1.7 + entity.id)) * 0.06 : 0;
+    for (const t of teeth) t.position.y = t.userData.y - (t.userData.row < 0 ? gape : 0);
+    throat.scale.y = 0.25 + gape * 6;
+    yellowed.emissiveIntensity = toothMaterial.emissiveIntensity;
     face.rotation.z = twitch(time, entity.id + 9, 0.8, 0.35);
     group.position.y = Math.sin(time * 1.3 + entity.id) * 0.03;
   };

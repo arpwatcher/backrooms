@@ -20,6 +20,11 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-25: the Smiler's grin like a row of identical cones. The teeth
+  are now all different, long and short, leaning, some yellowed, on wet
+  dark red gums, and as it closes in the jaws part on a throat that goes
+  back further than the head does.
+
 - 2026-10-25: the Partygoers like cheerful clay mascots. Now shiny wax
   run in places like a candle, wax dripping off the chin, eyes that don't
   match (one higher and bigger), and a smile wider than the face with
