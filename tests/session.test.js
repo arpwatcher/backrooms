@@ -91,3 +91,11 @@ test("events from the host reach the peer in order", () => {
   settle(net);
   assert.deepEqual(a.state.events.map((e) => e.fatal), [false, true]);
 });
+
+test("the host hears what a peer did, and from whom", () => {
+  const { net, host, a } = room();
+  settle(net);
+  a.send({ type: "event", kind: "task", index: 2 });
+  settle(net);
+  assert.deepEqual(host.events.map((e) => [e.from, e.kind, e.index]), [["a", "task", 2]]);
+});

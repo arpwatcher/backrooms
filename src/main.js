@@ -36,7 +36,7 @@ import { createEncounter, makeSense } from "./game/encounter.js";
 import { cellAt } from "./entities/core.js";
 import { createParty, touch, reachExit, startLevel, member, join } from "./game/party.js";
 import { createTrail, stepTrail } from "./game/shifts.js";
-import { placeTask, interact, doneCount } from "./game/tasks.js";
+import { placeTask, doneCount } from "./game/tasks.js";
 import { placeNotes } from "./game/notes.js";
 import { TIERS, createTension, stepTension, noteContact } from "./game/director.js";
 import { levelPlan } from "./game/plan.js";
@@ -298,9 +298,21 @@ function onContact(entity, time, verdict = null) {
 }
 
 function useTask(time) {
+  const near = new THREE.Vector3(player.x, 0, player.z);
+  const i = level.task.targets.findIndex((t) => !t.done && t.mesh.position.distanceTo(near) < 1.3);
+  if (i < 0) return;
+  throwBreaker(i, time);
+  // in co-op everyone's level has the same breakers: tell the others
+  if (net?.role === "host") for (const name of net.session.peers.keys()) net.session.send(name, { type: "event", kind: "task", index: i });
+  else if (net?.role === "peer") net.session.send({ type: "event", kind: "task", index: i });
+}
+
+function throwBreaker(i, time) {
   const { task, world } = level;
-  const target = interact(task, (t) => t.mesh.position.distanceTo(new THREE.Vector3(player.x, 0, player.z)) < 1.3);
-  if (!target) return;
+  const target = task?.targets[i];
+  if (!target || target.done) return;
+  target.done = true;
+  task.complete = task.targets.every((t) => t.done);
   target.mesh.userData.setOn(true);
   audio?.clunk(target.mesh.position.x, 1.4, target.mesh.position.z);
   // the breaker brings its corner of the floor back
@@ -388,6 +400,13 @@ function stepNet() {
       others.push({ id: name, x: i.x, z: i.z, yaw: i.yaw, noise: i.noise ?? 0, running: Boolean(i.running), crouching: Boolean(i.crouching), humming: Boolean(i.humming), echo: member(party, name).echo });
     }
     net.others = others;
+    // a friend threw a breaker: throw it here, and tell the rest
+    while (net.session.events.length) {
+      const e = net.session.events.shift();
+      if (e.kind !== "task") continue;
+      throwBreaker(e.index, time);
+      for (const name of net.session.peers.keys()) if (name !== e.from) net.session.send(name, { type: "event", kind: "task", index: e.index });
+    }
     const me = { id: "host", x: player.x, z: player.z, yaw: player.yaw, noise: player.noise, echo: null };
     net.session.tick(time, [me, ...others], level.encounter.entities.map((e) => ({ id: e.slot, x: e.x, z: e.z, facing: e.facing ?? 0, state: e.state })));
     frameRemotes.push(...others);
@@ -427,7 +446,8 @@ function stepNet() {
     const e = s.events[(net.seenEvents = (net.seenEvents ?? 0) + 1) - 1];
     const thing = level.encounter.entities.find((x) => x.kind === e.entity);
     if (e.kind === "contact" && thing && !screens.dead) onContact(thing, time, { fatal: e.fatal });
-    if (e.kind === "darken") {
+    if (e.kind === "task") throwBreaker(e.index, time);
+        if (e.kind === "darken") {
       const deadline = level.encounter.entities.find((x) => x.slot === e.slot);
       if (deadline?.dist) darkenTo(deadline.dist, e.front);
     }

@@ -12,6 +12,8 @@ export const SNAPSHOT_EVERY = 1 / 15;
 export function createHost(endpoint, { seed, depth, tier, build = "dev" }) {
   const peers = new Map();
   const run = { seed, depth, tier };
+  // things a peer did that the host has to know about (a breaker thrown)
+  const events = [];
   let lastSnapshot = -Infinity;
   endpoint.onMessage((from, text) => {
     const m = parse(text);
@@ -21,6 +23,8 @@ export function createHost(endpoint, { seed, depth, tier, build = "dev" }) {
       peers.set(from, { name: m.name, input: null });
       // the start tells each peer the run, and which of the players is them
       endpoint.send(from, { ...start(run.seed, run.depth, run.tier), you: from });
+    } else if (m.type === "event" && peers.has(from)) {
+      events.push({ ...m, from });
     } else if (m.type === "input" && peers.has(from)) {
       const p = peers.get(from);
       if (!p.input || m.t > p.input.t) p.input = m;
@@ -28,6 +32,7 @@ export function createHost(endpoint, { seed, depth, tier, build = "dev" }) {
   });
   return {
     peers,
+    events,
     inputOf: (name) => peers.get(name)?.input ?? null,
     // a new level (or the checkpoint): everyone goes there together
     restart(depth, tier = run.tier) {
@@ -67,6 +72,9 @@ export function createPeer(endpoint, { host, name, build = "dev" }) {
     state,
     sendInput(t, keys) {
       endpoint.send(host, inputMessage(name, t, keys));
+    },
+    send(message) {
+      endpoint.send(host, message);
     },
   };
 }
