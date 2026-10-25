@@ -31,7 +31,8 @@ The simulation is already split from rendering:
 
 - **Transport:** WebRTC data channels, unordered and unreliable for
   snapshots, reliable for events. Signalling goes through a tiny stateless
-  relay: a room code and an SDP exchange, nothing stored. **[later]**
+  relay: a room code and an SDP exchange, nothing stored. **[later]** -
+  until then the SDP travels as copy-paste codes.
 - **No dedicated server.** The host is a player. If the host leaves, the
   lowest-numbered remaining peer becomes host. All state needed to take over
   is in the last snapshot, plus the seed.
@@ -87,7 +88,14 @@ settled by them.
    figures with a name. **[built]**: `src/net/interpolate.js`,
    `src/render/remotes.js`. `?bot` (or `__noclip.addBot()`) puts a stand-in
    second player on a loopback host to see it working in the real game.
-5. **WebRTC transport** behind the same interface as the loopback.
+5. **WebRTC transport** behind the same interface as the loopback. **[built]**:
+   `src/net/rtc.js` and `codes.js`. Signalling is by hand, for now: the host's
+   invite code and the joiner's answer code, swapped by any chat (no relay
+   server yet). In the game: Esc, co-op. The host runs the level and the
+   monsters; a peer switches to the host's seed and depth, mirrors the
+   monsters from snapshots by spawn slot, and sends its own position (peer
+   movement is trusted, for now). The smoke test plays two game pages
+   together over real WebRTC.
 6. **Voice**, then voice as noise.
 7. **Co-op entities**: Census Taker, Clump, Skin-stealer.
 
