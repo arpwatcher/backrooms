@@ -20,6 +20,11 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-25: the Partygoers like cheerful clay mascots. Now shiny wax
+  run in places like a candle, wax dripping off the chin, eyes that don't
+  match (one higher and bigger), and a smile wider than the face with
+  thirty small teeth in it.
+
 - 2026-10-25: the Attendant a small hunched man you'd walk past. He is two
   metres now, bent double, arms hanging past his knees to the mop, a deep
   hole under the cap with two dull points at the bottom. On your trail he

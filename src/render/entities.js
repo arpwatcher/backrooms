@@ -407,7 +407,8 @@ export function deathmothsMesh() {
 // balloon like it was told to.
 export function partygoersMesh() {
   const group = new THREE.Group();
-  const wax = fleshMaterial({ skin: skin({ base: "#c9ad3c", blotch: "rgba(150,90,30,0.4)", veins: "rgba(120,80,40,0.3)", grime: 0.35, pores: 0.8, seed: "party" }), roughness: 0.45, rim: 0x5a4a10 });
+  // wax, not skin: smooth, a little shiny, run in places like a candle
+  const wax = fleshMaterial({ skin: skin({ base: "#d6b938", blotch: "rgba(150,90,30,0.45)", veins: "rgba(120,80,40,0.25)", grime: 0.25, pores: 0.15, seed: "party" }), roughness: 0.28, rim: 0x5a4a10 });
   const body = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.72, 8, 18), { amount: 0.02, scale: 4, seed: 21,
     along: (v) => -0.06 * Math.exp(-(((v.y + 0.05) / 0.16) ** 2)) }), wax);
   body.position.y = 1.36;
@@ -423,25 +424,40 @@ export function partygoersMesh() {
   skull.scale.set(0.95, 1.15, 0.95);
   head.add(skull);
   // small black wet eyes, set in hollows
+  // the eyes don't match: one higher and bigger, both just wet black holes
   const wet = new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 0.08 });
-  for (const x of [-0.06, 0.06]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), wet);
-    eye.position.set(x, 0.05, 0.135);
+  for (const [x, y, r] of [[-0.065, 0.06, 0.026], [0.06, 0.035, 0.018]]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), wet);
+    eye.position.set(x, y, 0.135);
     head.add(eye);
   }
   // the smile, wider than the face
   const gum = new THREE.MeshBasicMaterial({ color: 0x2a0806 });
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.02, 6, 30, Math.PI * 0.95), gum);
   mouth.rotation.z = Math.PI * 1.025;
-  mouth.scale.set(1.15, 0.6, 0.6);
+  mouth.scale.set(1.5, 0.62, 0.6);
   mouth.position.set(0, -0.02, 0.14);
   head.add(mouth);
   const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xf0ead6, roughness: 0.3 });
-  for (let i = 0; i < 18; i++) {
-    const a = Math.PI * 1.05 + (i / 17) * Math.PI * 0.9;
-    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.022, 0.01), toothMaterial);
-    tooth.position.set(Math.cos(a) * 0.13 * 1.15, -0.02 + Math.sin(a) * 0.13 * 0.6 + 0.008, 0.15);
+  // a smile wider than the face, with too many small teeth in it
+  for (let i = 0; i < 30; i++) {
+    const a = Math.PI * 1.05 + (i / 29) * Math.PI * 0.9;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.018, 0.01), toothMaterial);
+    tooth.position.set(Math.cos(a) * 0.13 * 1.5, -0.02 + Math.sin(a) * 0.13 * 0.62 + 0.008, 0.15 - Math.abs(Math.cos(a)) * 0.03);
     head.add(tooth);
+  }
+  // wax running off the chin and down the body
+  for (const [x, y, z, len] of [[0.03, -0.17, 0.08, 0.07], [-0.05, -0.15, 0.1, 0.05], [0.12, -0.04, 0.11, 0.04]]) {
+    const drip = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), wax);
+    drip.scale.set(1, len / 0.012, 1);
+    drip.position.set(x, y - len / 2, z);
+    head.add(drip);
+  }
+  for (const [x, y] of [[0.1, 1.62], [-0.12, 1.4], [0.05, 1.05]]) {
+    const drip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), wax);
+    drip.scale.set(1, 4.5, 0.8);
+    drip.position.set(x, y, 0.15);
+    group.add(drip);
   }
   const arm = (x) => {
     const pivot = new THREE.Group();
