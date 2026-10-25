@@ -11,12 +11,18 @@ lit and in the dark.
 ## Open (worst first)
 
 1. **Five monsters are still built from code** (Smiler, Partygoers,
-   Hushbaby, Attendant, Deadline) next to six real models, and the gap
-   shows. No free model fits them yet; Smiler and Deathmoths hold up best
-   because you only see eyes and teeth in the dark.
+   Hushbaby, Attendant, Deadline) next to seven real models. All five were
+   reworked on 10-24/25 and read as frightening now, but a real sculpted,
+   rigged model would still beat each of them. Two good CC0 candidates
+   (codyanka's Clawman and Ridgeback) cost $5 each.
 2. **The PS1-era models are low-poly up close.** The hound, the Drowned and
    Monochrome hold up at running distance and their textures are now
    smoothed, but on the death screen you can count the polygons.
+3. **Other players in co-op are plain figures.** A coat, a head, swinging
+   limbs and a name; fine for finding each other, not yet a character.
+4. **Critique shots are framed by chance.** The stand spot is the
+   entity's cell plus the most open side, so a crate pillar sometimes
+   blocks the view (the Attendant on level 12).
 
 ## Fixed
 
