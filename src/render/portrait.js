@@ -15,7 +15,7 @@ const FACES = {
   facelings: [1.77, 0, 0.7],
   stilts: [2.66, 0.08, 0.8],
   hushbaby: [0.42, 0.52, 0.6],
-  attendant: [1.32, 0.42, 0.8],
+  attendant: [1.62, 0.2, 0.8],
   deadline: [1.5, 0, 2.2],
   wretch: [1.68, 0.15, 0.8],
   drowned: [1.62, 0.1, 0.8],

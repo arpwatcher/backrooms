@@ -20,6 +20,12 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-25: the Attendant a small hunched man you'd walk past. He is two
+  metres now, bent double, arms hanging past his knees to the mop, a deep
+  hole under the cap with two dull points at the bottom. On your trail he
+  comes backwards, his back to you, his head turned right round over his
+  shoulder to watch you, his hands still mopping.
+
 - 2026-10-24: the Deathmoths invisible in the dark: a few specks on black.
   Their wing dust now glows faintly and the swarm carries a pale haze that
   breathes with their wings, so you see them coming before you see moths.

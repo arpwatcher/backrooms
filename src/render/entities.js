@@ -764,16 +764,19 @@ export function attendantMesh() {
   const group = new THREE.Group();
   const overalls = fleshMaterial({ skin: skin({ base: "#4d5455", blotch: "rgba(40,50,30,0.5)", veins: null, grime: 0.8, pores: 0, seed: "overalls" }), roughness: 0.92, rim: 0x202628 });
   const flesh = fleshMaterial({ skin: skin({ base: "#9a8478", blotch: "rgba(110,60,60,0.4)", veins: "rgba(70,60,100,0.4)", grime: 0.5, pores: 0.3, seed: "janitor" }), roughness: 0.6, rim: 0x2a2018 });
+  // everything turns together: on a trail he comes backwards, his back to you
+  const rig = new THREE.Group();
+  group.add(rig);
   const body = new THREE.Group();
-  group.add(body);
+  rig.add(body);
   const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.21, 0.5, 6, 14), { amount: 0.012, scale: 5, seed: 51 }), overalls);
-  torso.position.set(0, 1.12, 0.08);
-  torso.rotation.x = 0.4;
+  torso.position.set(0, 1.36, 0.1);
+  torso.rotation.x = 0.55;
   torso.scale.set(1.1, 1, 0.8);
   body.add(torso);
   // the neck bends forward and down, too far
   const neck = new THREE.Group();
-  neck.position.set(0, 1.42, 0.22);
+  neck.position.set(0, 1.68, 0.3);
   body.add(neck);
   neck.add(new THREE.Mesh(tube([[0, 0, 0], [0, 0.04, 0.08], [0, -0.04, 0.16]], 0.05, 0.85, 8), flesh));
   const head = new THREE.Group();
@@ -782,48 +785,61 @@ export function attendantMesh() {
   const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.12, 18, 14), { amount: 0.008, seed: 3 }), flesh);
   skull.scale.set(0.9, 1.1, 0.95);
   head.add(skull);
-  const void_ = new THREE.Mesh(new THREE.CircleGeometry(0.075, 16), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-  void_.position.set(0, -0.01, 0.115);
+  // no face: a hole where it should be, going back into the head, and at the
+  // bottom of it two dull points that might be eyes
+  const void_ = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  void_.scale.set(1, 1.15, 0.7);
+  void_.position.set(0, -0.01, 0.075);
   head.add(void_);
+  for (const x of [-0.025, 0.025]) {
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 4), new THREE.MeshBasicMaterial({ color: 0x7a1408 }));
+    glint.position.set(x, 0.005, 0.1);
+    head.add(glint);
+  }
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 16), fleshMaterial({ color: 0x1e2a40, roughness: 0.8, rim: 0x101820 }));
   cap.position.y = 0.09;
   const peak = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.012, 0.12), fleshMaterial({ color: 0x18223a, roughness: 0.8 }));
   peak.position.set(0, 0.06, 0.13);
   head.add(cap, peak);
-  for (const x of [-0.1, 0.1]) body.add(new THREE.Mesh(tube([[x, 0.86, 0], [x, 0.45, 0.04], [x, 0.04, 0.02]], 0.07, 0.75, 8), overalls));
+  // long thin legs with a knee that bends a little the wrong way
+  for (const x of [-0.1, 0.1]) body.add(new THREE.Mesh(tube([[x, 1.12, 0], [x, 0.58, -0.05], [x, 0.04, 0.03]], 0.065, 0.7, 8), overalls));
   // arms down to the mop handle, too long
   const arms = [-0.24, 0.24].map((x) => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 1.32, 0.2);
-    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.3, -0.35, 0.22], [-x * 0.4, -0.62, 0.4]], 0.045, 0.6, 8), overalls));
+    pivot.position.set(x, 1.56, 0.26);
+    // arms down past his knees to the mop
+    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.35, -0.5, 0.2], [-x * 0.4, -0.98, 0.42]], 0.042, 0.6, 8), overalls));
     const hand = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.045, 10, 8), { amount: 0.006 }), flesh);
     hand.scale.set(0.8, 1.4, 0.6);
-    hand.position.set(-x * 0.4, -0.66, 0.4);
+    hand.position.set(-x * 0.4, -1.02, 0.42);
     pivot.add(hand);
     body.add(pivot);
     return pivot;
   });
   const mop = new THREE.Group();
-  mop.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.5, 6), fleshMaterial({ color: 0x6a5232, roughness: 0.7 })));
-  mop.children[0].position.y = 0.75;
+  mop.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.7, 6), fleshMaterial({ color: 0x6a5232, roughness: 0.7 })));
+  mop.children[0].position.y = 0.85;
   const strands = new THREE.Mesh(lumpy(new THREE.CylinderGeometry(0.1, 0.2, 0.16, 14, 2, true), { amount: 0.03, scale: 12, seed: 9 }), fleshMaterial({ skin: skin({ base: "#6f6a58", blotch: "rgba(50,45,20,0.6)", veins: null, grime: 0.9, pores: 0, seed: "mop" }), roughness: 1, side: THREE.DoubleSide }));
   strands.position.y = 0.07;
   mop.add(strands);
   mop.position.set(0, 0, 0.62);
   mop.rotation.x = -0.35;
-  group.add(mop);
+  rig.add(mop);
   const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.3, 14), fleshMaterial({ skin: skin({ base: "#6a5a1a", blotch: "rgba(30,25,5,0.6)", veins: null, grime: 0.8, pores: 0, seed: "bucket" }), roughness: 0.5, rim: 0x2a2408 }));
   bucket.position.set(-0.45, 0.15, 0.25);
-  group.add(bucket);
+  rig.add(bucket);
   group.userData.animate = (time, entity) => {
     const following = entity.state === "follow";
     const pace = following ? 6 : 2.2;
     mop.position.x = Math.sin(time * pace + entity.id) * 0.25;
     mop.rotation.z = Math.sin(time * pace + entity.id) * 0.3;
     arms.forEach((arm) => (arm.rotation.z = Math.sin(time * pace + entity.id) * 0.25));
-    // hanging head; it lifts, slowly and not all the way, when he's on a trail
+    // hanging head; on a trail it turns right round over his shoulder to
+    // look back along it, at you, while his hands keep mopping
     neck.rotation.x = following ? 0.15 + twitch(time, entity.id, 1.3, 0.15) : 0.75 + twitch(time, entity.id, 0.5, 0.1);
-    head.rotation.z = following ? Math.sin(time * 0.9) * 0.2 : 0.35;
+    rig.rotation.y = following ? Math.PI : 0;
+    neck.rotation.y = following ? Math.PI * 0.82 + twitch(time, entity.id + 2, 0.8, 0.12) : 0;
+    head.rotation.z = following ? Math.PI * 0.12 + Math.sin(time * 0.9) * 0.12 : 0.35;
     body.rotation.y = twitch(time, entity.id + 4, 0.6, 0.15);
   };
   return group;
