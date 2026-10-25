@@ -374,6 +374,13 @@ function stepNet() {
   if (!net) return;
   if (net.role === "host") {
     const others = [];
+    // a friend whose connection died leaves the game
+    for (const [name, l] of net.endpoint.links) {
+      if (!["failed", "closed"].includes(l.state)) continue;
+      net.endpoint.links.delete(name);
+      net.session.peers.delete(name);
+      hud.say(`${name} has gone`, 4, time);
+    }
     for (const name of net.session.peers.keys()) {
       const i = net.session.inputOf(name);
       if (!i) continue;
@@ -387,6 +394,13 @@ function stepNet() {
     return;
   }
   const s = net.session.state;
+  // the host has gone: carry on alone in their level, the monsters yours now
+  const link = net.endpoint.links.get("host");
+  if (["failed", "closed"].includes(link?.state) && s.start) {
+    hud.say("the host is gone - you're on your own now", 5, time);
+    net = null;
+    return;
+  }
   if (!s.start) return;
   const key = `${s.start.seed}/${s.start.depth}/${s.start.tier}`;
   if (key !== net.startKey) {
@@ -413,6 +427,10 @@ function stepNet() {
     const e = s.events[(net.seenEvents = (net.seenEvents ?? 0) + 1) - 1];
     const thing = level.encounter.entities.find((x) => x.kind === e.entity);
     if (e.kind === "contact" && thing && !screens.dead) onContact(thing, time, { fatal: e.fatal });
+    if (e.kind === "darken") {
+      const deadline = level.encounter.entities.find((x) => x.slot === e.slot);
+      if (deadline?.dist) darkenTo(deadline.dist, e.front);
+    }
   }
 }
 async function inviteFriend(options) {
@@ -743,7 +761,11 @@ function frame() {
       else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
       else if (event.type === "contact" && event.player && event.player !== player) otherContact(event, time);
       else if (event.type === "contact" && !down) onContact(event.entity, time);
-      else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
+      else if (event.type === "darken") {
+        darkenTo(event.entity.dist, event.front);
+        // friends' panels go out with yours
+        if (net?.role === "host") for (const name of net.session.peers.keys()) net.session.send(name, { type: "event", kind: "darken", slot: event.entity.slot, front: event.front });
+      }
     }
   }
   frameRemotes = [];
