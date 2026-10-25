@@ -60,6 +60,14 @@ export const monochrome = {
     }
   },
 
+  // on a co-op peer it only stands where the host says, but its grey follows
+  // from where it stands and where the panels are, so the peer drains it too
+  mirror(e, { time, lightAt }) {
+    if ((e.memory.drainAt ?? 0) > time) return;
+    monochrome.drain(e, { time, lightAt });
+    e.memory.drainAt = time + DRAIN_EVERY;
+  },
+
   update(e, sense, dt) {
     const events = [];
     const p = sense.player;

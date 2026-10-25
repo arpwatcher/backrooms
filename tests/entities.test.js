@@ -646,3 +646,10 @@ test("stand in its grey and it comes at you", () => {
   assert.ok(events.some((ev) => ev.sound === "static"));
   assert.ok(CREEP < 1, "and out of the grey it is slow");
 });
+
+test("on a co-op peer, monochrome's grey spreads from where the host puts it", () => {
+  const e = spawn(monochrome, { x: 4, y: 4 }, { rng: new Rng("m"), grey: new Map(), ring: 0 });
+  for (let t = 0; t < 6; t += 0.5) monochrome.mirror(e, { time: t, lightAt: () => "dark" });
+  assert.ok(monochrome.isGrey(e, { x: 4, y: 3 }, 6));
+  assert.ok(monochrome.isGrey(e, { x: 6, y: 4 }, 6), "a few rings out");
+});

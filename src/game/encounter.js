@@ -82,6 +82,8 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
       for (const entity of entities) {
         const seen = bySlot.get(entity.slot);
         if (seen) Object.assign(entity, { x: seen.x, z: seen.z, facing: seen.facing, state: seen.state });
+        // anything that changes the world around it by itself does so here too
+        entity.def.mirror?.(entity, { time, lightAt });
         entity.mesh.position.set(entity.x, 0, entity.z);
         if (entity.facing !== undefined) entity.mesh.rotation.y = entity.facing;
         entity.mesh.userData.animate?.(time, entity, lightAt(entity.x, entity.z));
