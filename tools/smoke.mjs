@@ -417,37 +417,27 @@ try {
     return played.length + 5;
   });
   check(voices === 19, "every entity voice and player sound plays without an error");
-  // co-op over real webrtc: two more pages, an invite code one way and an
-  // answer code back, then a start and a snapshot down and an input up
-  const host = await browser.newPage();
-  const guest = await browser.newPage();
-  for (const p of [host, guest]) await p.goto(`http://localhost:${port}/tools/studio.html?kind=hounds`);
-  const invite = await host.evaluate(async () => {
-    const rtc = await import("/src/net/rtc.js");
-    window.invite = await rtc.createInvite({ iceServers: [] });
-    window.ep = rtc.rtcEndpoint("host");
-    window.got = [];
-    window.ep.add("p2", window.invite.link);
-    window.ep.onMessage((from, text) => window.got.push(from + " " + JSON.parse(text).type));
-    return window.invite.code;
-  });
-  const answer = await guest.evaluate(async (code) => {
-    const rtc = await import("/src/net/rtc.js");
-    window.answer = await rtc.answerInvite(code, { iceServers: [] });
-    window.ep = rtc.rtcEndpoint("p2");
-    window.got = [];
-    window.ep.add("host", window.answer.link);
-    window.ep.onMessage((from, text) => window.got.push(from + " " + JSON.parse(text).type));
-    return window.answer.code;
-  }, invite);
-  await host.evaluate((code) => window.invite.accept(code), answer);
-  await guest.evaluate(() => window.answer.link.open);
-  await host.evaluate(() => { window.ep.send("p2", { type: "start", seed: "s", depth: 3, tier: "uneasy" }); window.ep.send("p2", { type: "snapshot", t: 1, players: [], entities: [] }); });
-  await guest.evaluate(() => window.ep.send("host", { type: "input", id: "p2", t: 1 }));
-  await host.waitForFunction(() => window.got.length > 0, null, { timeout: 10000 }).catch(() => {});
-  await guest.waitForFunction(() => window.got.length > 1, null, { timeout: 10000 }).catch(() => {});
-  const heard = [await host.evaluate(() => window.got.join()), await guest.evaluate(() => window.got.join())];
-  check(heard[0] === "p2 input" && heard[1] === "host start,host snapshot", `two browsers connect over webrtc with invite and answer codes (${heard.join(" / ")})`);
+  // co-op over real webrtc: two more game pages on different seeds; an invite
+  // code one way and an answer back, and the guest ends up in the host's
+  // level, with the host's monsters where the host has them
+  const game = async (seed) => {
+    const p = await browser.newPage({ viewport: { width: 480, height: 270 } });
+    p.on("pageerror", (e) => errors.push(`${seed}: ${e.message}`));
+    await p.goto(`http://localhost:${port}/index.html?seed=${seed}&smoke&depth=3`);
+    await p.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 90000 });
+    return p;
+  };
+  const host = await game("coop-host");
+  const guest = await game("coop-guest");
+  const invite = await host.evaluate(() => window.__noclip.coopInvite());
+  const answer = await guest.evaluate((code) => window.__noclip.coopJoin(code), invite);
+  await host.evaluate((code) => window.__noclip.coopAccept(code), answer);
+  await guest.waitForFunction(() => window.__noclip.coop?.seed === "coop-host" && window.__noclip.remotes.length === 1, null, { timeout: 60000 }).catch(() => {});
+  await host.waitForFunction(() => window.__noclip.remotes.length === 1, null, { timeout: 60000 }).catch(() => {});
+  const look = (p) => p.evaluate(() => ({ coop: window.__noclip.coop, start: window.__noclip.layout.start, things: window.__noclip.entities.map((e) => `${e.kind}@${e.x.toFixed(0)},${e.z.toFixed(0)}`).join(), others: window.__noclip.remotes.map((r) => r.id).join() }));
+  const [h, g] = [await look(host), await look(guest)];
+  const together = g.coop?.seed === "coop-host" && g.coop?.you === "p2" && JSON.stringify(g.start) === JSON.stringify(h.start) && g.things === h.things && h.others === "p2" && g.others === "host";
+  check(together, `two browsers play one level over webrtc (host ${JSON.stringify(h)} / guest ${JSON.stringify(g)})`);
   await host.close();
   await guest.close();
 

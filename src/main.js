@@ -8,6 +8,8 @@ import { createHost, createPeer } from "./net/session.js";
 import { createBuffer, push as pushSnapshot, sample as sampleSnapshots } from "./net/interpolate.js";
 import { createBot, stepBot } from "./game/bot.js";
 import { createRemotes } from "./render/remotes.js";
+import { createInvite, answerInvite, rtcEndpoint } from "./net/rtc.js";
+import { createCoopScreen } from "./ui/coop.js";
 import { buildWorld, updateLights, cellCenter } from "./render/world.js";
 import { almondWater, battery, exitDoor, placeInCell, breakerBox, placeOnWall, wallNote, puddle, printPool, locker } from "./render/props.js";
 import { placeLockers, hiddenIn, insideOf } from "./game/lockers.js";
@@ -237,6 +239,8 @@ function loadLevel() {
   for (const mesh of Object.values(phantomMeshes)) mesh.visible = false;
   level = { lockers, ending, radio: radioSchedule(run.depth, time + 4.5), tracks: createTracks(puddles), prints, layout, world, items, exits, paths, plan, archetype, shift, effects, task, pace, notes, trail: createTrail() };
   if (coop) startCoop();
+  // hosting: everyone goes to the new level with you
+  if (net?.role === "host") net.session.restart(run.depth, tier.name);
   if (effects.noFlashlight) flashlight.on = false;
   level.encounter = createEncounter({
     scene: world.group, layout, roster, rng: new Rng(`${levelSeed(run)}/entities`), paths, lightAt, tier,
@@ -257,10 +261,11 @@ function showMilestones() {
   list.textContent = MILESTONES.filter((m) => earned.has(m.id)).map((m) => m.text).join("\n");
 }
 
-function onContact(entity, time) {
+function onContact(entity, time, verdict = null) {
   // your own second touch from the same thing ends it for you (an Echo of
-  // yourself has no screen yet, so it's the death screen even in a group)
-  const { fatal } = touch(party, player.id, entity.kind, tier.contacts, time);
+  // yourself has no screen yet, so it's the death screen even in a group);
+  // in someone else's game their host decides, and says so in `verdict`
+  const { fatal } = verdict ?? touch(party, player.id, entity.kind, tier.contacts, time);
   run.touches = (run.touches ?? 0) + 1;
   noteContact(tension, time);
   if (fatal) {
@@ -268,7 +273,8 @@ function onContact(entity, time) {
     hud.hush();
     portrait.show(entity.kind, window.innerWidth / window.innerHeight);
     screens.die(entity.def, () => {
-      run.depth = checkpointFor(run.depth);
+      // in someone else's game you wake where they are
+      run.depth = net?.role === "peer" ? net.session.state.start.depth : checkpointFor(run.depth);
       player = null;
       wiped = true;
       loadLevel();
@@ -332,8 +338,12 @@ function startCoop() {
 // something reached another player: their marks, their fall; the thing
 // backs off from them the way it does from you
 function otherContact(event, time) {
-  const { first } = touch(party, event.player.id, event.entity.kind, tier.contacts, time);
-  if (first) level.encounter.retreat(event.entity, time);
+  const verdict = touch(party, event.player.id, event.entity.kind, tier.contacts, time);
+  if (verdict.first) level.encounter.retreat(event.entity, time);
+  // a real friend: tell their game what happened to them
+  if (net?.role === "host" && net.session.peers.has(event.player.id)) {
+    net.session.send(event.player.id, { type: "event", kind: "contact", entity: event.entity.kind, fatal: verdict.fatal });
+  }
 }
 function stepCoop(dt) {
   if (!coop) return;
@@ -345,8 +355,81 @@ function stepCoop(dt) {
   if (coop.peer.state.view) pushSnapshot(coop.buffer, coop.peer.state.view);
   const newest = coop.buffer.snapshots.at(-1);
   const seen = newest ? sampleSnapshots(coop.buffer, newest.t) : null;
-  remotes.update(seen ? seen.players : []);
+  if (seen) frameRemotes.push(...seen.players);
 }
+
+// real co-op over webrtc; null while you play alone. The host runs the
+// level and sends it out; a peer builds the same level from the seed and
+// shows the host's monsters where the snapshots put them.
+let net = null;
+let frameRemotes = [];
+function hostNet() {
+  if (net?.role !== "host") {
+    const endpoint = rtcEndpoint("host");
+    net = { role: "host", endpoint, session: createHost(endpoint, { seed: run.seed, depth: run.depth, tier: tier.name }), others: [] };
+  }
+  return net;
+}
+function stepNet() {
+  if (!net) return;
+  if (net.role === "host") {
+    const others = [];
+    for (const name of net.session.peers.keys()) {
+      const i = net.session.inputOf(name);
+      if (!i) continue;
+      join(party, name);
+      others.push({ id: name, x: i.x, z: i.z, yaw: i.yaw, noise: i.noise ?? 0, running: Boolean(i.running), crouching: Boolean(i.crouching), humming: Boolean(i.humming), echo: member(party, name).echo });
+    }
+    net.others = others;
+    const me = { id: "host", x: player.x, z: player.z, yaw: player.yaw, noise: player.noise, echo: null };
+    net.session.tick(time, [me, ...others], level.encounter.entities.map((e) => ({ id: e.slot, x: e.x, z: e.z, facing: e.facing ?? 0, state: e.state })));
+    frameRemotes.push(...others);
+    return;
+  }
+  const s = net.session.state;
+  if (!s.start) return;
+  const key = `${s.start.seed}/${s.start.depth}/${s.start.tier}`;
+  if (key !== net.startKey) {
+    net.startKey = key;
+    run.seed = s.start.seed;
+    run.depth = s.start.depth;
+    tier = TIERS[s.start.tier] ?? tier;
+    net.buffer = createBuffer();
+    loadLevel();
+    return;
+  }
+  if (time - (net.sentAt ?? -1) > 1 / 30) {
+    net.sentAt = time;
+    net.session.sendInput(time, { x: player.x, z: player.z, yaw: player.yaw, noise: player.noise, running: player.running, crouching: player.crouching, humming: player.humming });
+  }
+  if (s.view) pushSnapshot(net.buffer, s.view);
+  const newest = net.buffer.snapshots.at(-1);
+  const seen = newest ? sampleSnapshots(net.buffer, newest.t) : null;
+  if (seen) {
+    level.encounter.mirror(seen.entities, time);
+    frameRemotes.push(...seen.players.filter((p) => p.id !== s.start.you));
+  }
+  while ((net.seenEvents ?? 0) < s.events.length) {
+    const e = s.events[(net.seenEvents = (net.seenEvents ?? 0) + 1) - 1];
+    const thing = level.encounter.entities.find((x) => x.kind === e.entity);
+    if (e.kind === "contact" && thing && !screens.dead) onContact(thing, time, { fatal: e.fatal });
+  }
+}
+async function inviteFriend(options) {
+  const n = hostNet();
+  if (n.endpoint.links.size >= 3) throw new Error("four players is the most");
+  const invite = await createInvite(options);
+  n.endpoint.add(`p${n.endpoint.links.size + 2}`, invite.link);
+  return invite;
+}
+async function joinFriend(code, options) {
+  const answer = await answerInvite(code, options);
+  const endpoint = rtcEndpoint("me");
+  endpoint.add("host", answer.link);
+  net = { role: "peer", endpoint, session: createPeer(endpoint, { host: "host", name: "friend" }) };
+  return answer;
+}
+const coopScreen = createCoopScreen({ onHost: () => inviteFriend(), onJoin: (code) => joinFriend(code), onClose: () => coopScreen.hide() });
 
 const phantomMeshes = { figure: facelingsBody(), grin: smilerMesh() };
 for (const mesh of Object.values(phantomMeshes)) {
@@ -479,7 +562,7 @@ function lightAt(x, z) {
 // walking into an exit: the world stretches away from you, you fall, and you
 // land somewhere else. (callbacks read the live game clock, not a copy)
 function nextLevel() {
-  if (transitioning) return;
+  if (transitioning || net?.role === "peer") return;
   // the last story level's door is the way out
   if (level.ending && !run.endedStory) {
     milestone({ type: "ending" });
@@ -582,6 +665,7 @@ const pause = createPauseScreen({
     audio?.ctx.resume();
   },
   onCodex: () => codexScreen.open(),
+  onCoop: () => coopScreen.show(),
 });
 // letting go of the mouse mid-level pauses the game
 document.addEventListener("pointerlockchange", () => {
@@ -651,10 +735,10 @@ function frame() {
   const sense = makeSense({
     player, flashlight, camera, layout: level.layout, paths: level.paths, lightAt, time, darkCells: level.encounter.darkCells, prints: level.tracks.prints,
     hidden: level.hidden,
-    others: coop ? [coop.bot] : [],
+    others: [...(coop ? [coop.bot] : []), ...(net?.others ?? [])],
   });
   if (!screens.dead) {
-    for (const event of level.encounter.update(sense, dt)) {
+    for (const event of net?.role === "peer" ? [] : level.encounter.update(sense, dt)) {
       if (event.type === "sound") audio?.entity(event.sound, event.x, 1.2, event.z, event.volume);
       else if (event.type === "drain" && event.what === "battery") flashlight.battery = Math.max(0, flashlight.battery - event.amount);
       else if (event.type === "contact" && event.player && event.player !== player) otherContact(event, time);
@@ -662,7 +746,10 @@ function frame() {
       else if (event.type === "darken") darkenTo(event.entity.dist, event.front);
     }
   }
+  frameRemotes = [];
   stepCoop(dt);
+  stepNet();
+  remotes.update(frameRemotes);
   // Monochrome's grey: standing in it drains the colour from your eyes; near
   // its edge, some of it
   let greyTarget = 0;
@@ -809,6 +896,11 @@ window.__noclip = {
   get hidden() { return level.hidden; },
   get grey() { return level.grey ?? 0; },
   addBot() { startCoop(); },
+  // co-op over webrtc without the buttons (no stun: the test pages share a machine)
+  async coopInvite() { window.__invite = await inviteFriend({ iceServers: [] }); return window.__invite.code; },
+  async coopAccept(code) { await window.__invite.accept(code); },
+  async coopJoin(code) { return (await joinFriend(code, { iceServers: [] })).code; },
+  get coop() { return net ? { role: net.role, peers: net.role === "host" ? [...net.session.peers.keys()] : null, you: net.session.state?.start?.you ?? null, seed: run.seed, depth: run.depth } : null; },
   get remotes() { return [...remotes.figures].map(([id, f]) => ({ id, x: f.position.x, z: f.position.z })); },
   get radioState() { return { time, queued: level.radio.map((r) => r.at), paused: pause.shown, dead: Boolean(screens.dead), ending: ending.shown }; },
   get bearing() { return level.bearing ?? null; },

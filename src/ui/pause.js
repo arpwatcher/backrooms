@@ -1,6 +1,6 @@
 // Esc lets go of the mouse; that is the pause. The level waits for you.
 
-export function createPauseScreen({ settings, onChange, onResume, onCodex }) {
+export function createPauseScreen({ settings, onChange, onResume, onCodex, onCoop }) {
   const screen = document.createElement("div");
   screen.id = "pause";
   screen.className = "screen hidden";
@@ -12,6 +12,7 @@ export function createPauseScreen({ settings, onChange, onResume, onCodex }) {
     <div class="row">
       <button id="pause-resume">resume</button>
       <button id="pause-codex">codex</button>
+      <button id="pause-coop">co-op</button>
     </div>`;
   document.body.appendChild(screen);
   const sensitivity = screen.querySelector("#set-sensitivity");
@@ -22,6 +23,7 @@ export function createPauseScreen({ settings, onChange, onResume, onCodex }) {
   volume.oninput = () => onChange({ ...settings, volume: Number(volume.value) });
   screen.querySelector("#pause-resume").onclick = onResume;
   screen.querySelector("#pause-codex").onclick = onCodex;
+  screen.querySelector("#pause-coop").onclick = onCoop;
   return {
     show() {
       screen.classList.remove("hidden");

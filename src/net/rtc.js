@@ -24,12 +24,18 @@ function gathered(pc, ms = 4000) {
 function link(pc) {
   const channels = {};
   const handlers = [];
+  // reliable messages sent before the channel opens wait for it (a peer says
+  // hello the moment it exists); snapshots that early are just dropped
+  const waiting = [];
   let opened;
   const open = new Promise((resolve) => (opened = resolve));
   const adopt = (channel) => {
     channels[channel.label] = channel;
     channel.onmessage = (e) => handlers.forEach((fn) => fn(e.data));
-    channel.onopen = () => channels.reliable?.readyState === "open" && channels.fast?.readyState === "open" && opened();
+    channel.onopen = () => {
+      if (channels.reliable?.readyState === "open") while (waiting.length) channels.reliable.send(waiting.shift());
+      if (channels.reliable?.readyState === "open" && channels.fast?.readyState === "open") opened();
+    };
   };
   return {
     pc,
@@ -38,6 +44,7 @@ function link(pc) {
     send(text, fast = false) {
       const c = fast ? channels.fast : channels.reliable;
       if (c?.readyState === "open") c.send(text);
+      else if (!fast) waiting.push(text);
     },
     onMessage(fn) {
       handlers.push(fn);

@@ -58,3 +58,5 @@ button:disabled { opacity: 0.4; cursor: wait; }
 #ending .row { display: flex; gap: 14px; margin-top: 26px; }
 #radio { position: fixed; left: 16px; bottom: 70px; max-width: 460px; font-size: 14px; line-height: 1.45; color: #cfe3d8; text-shadow: 0 0 6px #000; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
 #radio b { color: #7fb89a; font-weight: normal; letter-spacing: 0.2em; margin-right: 8px; font-size: 11px; }
+#coop { z-index: 10; }
+#coop textarea { width: min(640px, 90vw); margin: 6px 0; background: rgba(20,17,6,0.85); color: #f3e6a2; border: 1px solid #6e6232; font: 12px monospace; word-break: break-all; }
