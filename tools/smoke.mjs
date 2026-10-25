@@ -417,6 +417,40 @@ try {
     return played.length + 5;
   });
   check(voices === 19, "every entity voice and player sound plays without an error");
+  // co-op over real webrtc: two more pages, an invite code one way and an
+  // answer code back, then a start and a snapshot down and an input up
+  const host = await browser.newPage();
+  const guest = await browser.newPage();
+  for (const p of [host, guest]) await p.goto(`http://localhost:${port}/tools/studio.html?kind=hounds`);
+  const invite = await host.evaluate(async () => {
+    const rtc = await import("/src/net/rtc.js");
+    window.invite = await rtc.createInvite({ iceServers: [] });
+    window.ep = rtc.rtcEndpoint("host");
+    window.got = [];
+    window.ep.add("p2", window.invite.link);
+    window.ep.onMessage((from, text) => window.got.push(from + " " + JSON.parse(text).type));
+    return window.invite.code;
+  });
+  const answer = await guest.evaluate(async (code) => {
+    const rtc = await import("/src/net/rtc.js");
+    window.answer = await rtc.answerInvite(code, { iceServers: [] });
+    window.ep = rtc.rtcEndpoint("p2");
+    window.got = [];
+    window.ep.add("host", window.answer.link);
+    window.ep.onMessage((from, text) => window.got.push(from + " " + JSON.parse(text).type));
+    return window.answer.code;
+  }, invite);
+  await host.evaluate((code) => window.invite.accept(code), answer);
+  await guest.evaluate(() => window.answer.link.open);
+  await host.evaluate(() => { window.ep.send("p2", { type: "start", seed: "s", depth: 3, tier: "uneasy" }); window.ep.send("p2", { type: "snapshot", t: 1, players: [], entities: [] }); });
+  await guest.evaluate(() => window.ep.send("host", { type: "input", id: "p2", t: 1 }));
+  await host.waitForFunction(() => window.got.length > 0, null, { timeout: 10000 }).catch(() => {});
+  await guest.waitForFunction(() => window.got.length > 1, null, { timeout: 10000 }).catch(() => {});
+  const heard = [await host.evaluate(() => window.got.join()), await guest.evaluate(() => window.got.join())];
+  check(heard[0] === "p2 input" && heard[1] === "host start,host snapshot", `two browsers connect over webrtc with invite and answer codes (${heard.join(" / ")})`);
+  await host.close();
+  await guest.close();
+
   check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } catch (e) {
   check(false, e.message);
