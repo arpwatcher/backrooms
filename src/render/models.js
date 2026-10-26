@@ -121,6 +121,7 @@ export function modelInstance(name, { clipFor = () => "idle", speedFor = () => 1
   const bone = (n) => bones.get(n) ?? bones.get(n.replace(/\./g, ""));
   const rest = new Map([...bones].map(([n, b]) => [n, b.quaternion.clone()]));
   group.userData.body = body;
+  group.userData.bone = bone;
   group.userData.animate = (time, entity) => {
     const want = clipFor(entity) ?? "idle";
     if (want !== current && actions[want]) {

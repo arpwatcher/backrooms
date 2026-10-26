@@ -1004,11 +1004,33 @@ export function deadlineMesh() {
 // every other hound in a pack is the black one, a little smaller
 let houndsMade = 0;
 export function houndMesh() {
-  return modelInstance(houndsMade++ % 2 ? "houndBlack" : "hound", {
+  const hound = modelInstance(houndsMade++ % 2 ? "houndBlack" : "hound", {
     clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
     speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
-  }) ?? houndBody();
+  });
+  if (!hound) return houndBody();
+  // eyeshine: a dog's eyes throw your light back, green-gold, out of the
+  // dark long before the rest of it shows. Set at the rest pose in the
+  // model's own space, then carried on the head bone.
+  const head = hound.userData.bone("Head");
+  if (head) {
+    const shine = eyes({ color: 0xd8f0a0, spacing: 0.075, size: 0.011, halo: 0.1, intensity: 1.3 });
+    hound.updateMatrixWorld(true);
+    const at = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+    shine.position.set(at.x, at.y + HOUND_EYES.up, at.z + HOUND_EYES.forward);
+    hound.add(shine);
+    head.attach(shine);
+    const animate = hound.userData.animate;
+    hound.userData.animate = (time, entity) => {
+      animate(time, entity);
+      // brightest when it has you; a slow blink while it listens
+      shine.userData.setOpen(entity.state === "hunt" ? 1 : Math.sin(time * 0.9 + entity.id * 3) > -0.85 ? 0.7 : 0);
+    };
+  }
+  return hound;
 }
+// where the eyes sit from the head bone, in metres, model facing +z
+export const HOUND_EYES = { up: 0.06, forward: 0.14 };
 
 // the Facelings are a real model now (assets/models/facelings.glb: "The
 // Wrapped" by codyanka, CC0): a person bound in grey cloth from head to
