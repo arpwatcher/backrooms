@@ -30,11 +30,36 @@ measured against it.
   far panels are lost in the fog.
 - **Entities are readable silhouettes.** Each has one shape that reads at 20
   m: the Smiler's grin, the Hounds' low long body, the Still Life's
-  mannequin posture, the Deathmoths' cloud, the Partygoer's balloon and the
-  Faceling's office clothes.
+  mannequin posture, the Deathmoths' cloud, the Partygoer's balloon and paper hat,
+  the Faceling's grey wrappings, the Hushbaby's arms with their elbows
+  above its back, and the Attendant bent double over his mop.
+- **Every entity has one thing that reads in the dark** (see the table
+  below), so a dead level hides the body but never the warning.
 - **Low lucidity distorts what you see, never the rules.** It brings
   vignette, desaturation, a breathing field of view and blinking. It never
   hides a real tell.
+
+**What reads in the dark.** With the panels dead and the flashlight off,
+this is what you see of each thing, and from how far.
+
+| Entity | In the dark | Range |
+|--------|-------------|-------|
+| Smiler | the grin and two pale points | across a room |
+| Hounds | eyeshine, green-gold, slow blink while they listen **[built]** | 15 m |
+| Still Life | pale cracked plaster, barely | 6 m |
+| Deathmoths | the glowing dust and a breathing smear of light | 12 m |
+| Partygoers | the grin, whose teeth catch any light, and the balloon | 10 m |
+| Facelings | nothing: they are only seen in light, and only do harm if looked at | - |
+| Hushbaby | nothing until it comes; then the glint on two wet black eyes | 5 m |
+| Stilts | the pale head, far above where a head should be | 10 m |
+| The Attendant | two dull red points in the hole of his face, when following | 6 m |
+| Deadline | it is the dark: the panels going out is the tell | - |
+| The Wretch | its red, flayed body, faintly | 5 m |
+| The Drowned | the wet shine on his oilskin | 6 m |
+| Monochrome | the colour draining from the floor round it | the grey patch |
+
+Where an entry says nothing, the tell is a sound (see `04-entities.md`).
+The ranges are targets; the critique shots (`17-critique.md`) check them.
 
 ## Sound
 
