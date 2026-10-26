@@ -10,6 +10,7 @@ import { cellAt, nearestPlayer } from "../entities/core.js";
 import { driftToward } from "../world/path.js";
 import { lungeScale } from "./sighting.js";
 import { darkCells } from "../world/layout.js";
+import { place } from "./place.js";
 import { CELL } from "../world/units.js";
 
 function propMesh(prop) {
@@ -69,8 +70,7 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         for (const event of entity.def.update(entity, own, dt * tier.pace * surge)) events.push({ ...event, entity, player });
       }
       for (const entity of entities) {
-        entity.mesh.position.set(entity.x, 0, entity.z);
-        if (entity.facing !== undefined) entity.mesh.rotation.y = entity.facing;
+        place(entity, dt);
         entity.mesh.userData.animate?.(sense.time, entity, lightAt(entity.x, entity.z));
       }
       return events;
@@ -84,8 +84,8 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         if (seen) Object.assign(entity, { x: seen.x, z: seen.z, facing: seen.facing, state: seen.state });
         // anything that changes the world around it by itself does so here too
         entity.def.mirror?.(entity, { time, lightAt });
-        entity.mesh.position.set(entity.x, 0, entity.z);
-        if (entity.facing !== undefined) entity.mesh.rotation.y = entity.facing;
+        place(entity, Math.min(0.1, Math.max(0, time - (entity.mirroredAt ?? time))));
+        entity.mirroredAt = time;
         entity.mesh.userData.animate?.(time, entity, lightAt(entity.x, entity.z));
       }
     },

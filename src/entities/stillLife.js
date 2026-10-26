@@ -22,6 +22,8 @@ export const stillLife = {
   counter: "keep it in view and back away - it cannot move while anyone is looking at it",
   rule: "it only moves while nobody is looking at it",
   lore: "Nobody has seen it move. Everybody who has turned around has seen that it did.",
+  // drawn exactly where it is, never easing into place (encounter.js place)
+  snap: true,
   speed: 5,
   reach: 0.8,
 
