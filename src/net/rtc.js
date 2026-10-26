@@ -27,13 +27,21 @@ export function link(pc) {
   // reliable messages sent before the channel opens wait for it (a peer says
   // hello the moment it exists); snapshots that early are just dropped
   const waiting = [];
+  // counts on the reliable channel, for the debug view
+  const count = { sent: 0, got: 0 };
   let opened;
   const open = new Promise((resolve) => (opened = resolve));
   const adopt = (channel) => {
     channels[channel.label] = channel;
-    channel.onmessage = (e) => handlers.forEach((fn) => fn(e.data));
+    channel.onmessage = (e) => {
+      if (channel.label === "reliable") count.got++;
+      handlers.forEach((fn) => fn(e.data));
+    };
     channel.onopen = () => {
-      if (channels.reliable?.readyState === "open") while (waiting.length) channels.reliable.send(waiting.shift());
+      if (channels.reliable?.readyState === "open") while (waiting.length) {
+        channels.reliable.send(waiting.shift());
+        count.sent++;
+      }
       if (channels.reliable?.readyState === "open" && channels.fast?.readyState === "open") opened();
     };
     // the joiner can be handed a channel that is already open, and then the
@@ -46,8 +54,10 @@ export function link(pc) {
     open,
     send(text, fast = false) {
       const c = fast ? channels.fast : channels.reliable;
-      if (c?.readyState === "open") c.send(text);
-      else if (!fast) waiting.push(text);
+      if (c?.readyState === "open") {
+        c.send(text);
+        if (!fast) count.sent++;
+      } else if (!fast) waiting.push(text);
     },
     onMessage(fn) {
       handlers.push(fn);
@@ -55,9 +65,10 @@ export function link(pc) {
     get state() {
       return pc.connectionState;
     },
-    // for debugging: each channel's state, and how much is still queued
+    // for debugging: each channel's state, how much is still queued, and
+    // how many reliable messages went out and came in
     get channels() {
-      return `${channels.reliable?.readyState ?? "none"}/${channels.fast?.readyState ?? "none"}/${waiting.length}`;
+      return `${channels.reliable?.readyState ?? "none"}/${channels.fast?.readyState ?? "none"}/${waiting.length} sent ${count.sent} got ${count.got}`;
     },
     close() {
       pc.close();
