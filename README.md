@@ -52,7 +52,9 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - A chase drone and a heartbeat when something is after you.
   - Hallucinations at low lucidity.
   - Footsteps that sound like the floor.
-- Textures are painted on canvas and sounds are synthesized with WebAudio.
+- Textures are painted on canvas. Sounds are synthesized with WebAudio, with
+  real CC0 recordings (growls, screams, moans; `assets/sfx/CREDITS.md`)
+  layered on top, and everything in the level rings in a shared reverb.
   The exceptions are the 3D models credited below.
 - **Co-op.** Up to four players, browser to browser, no server. Press Esc,
   then co-op: the host makes an invite code, a friend pastes it into join
