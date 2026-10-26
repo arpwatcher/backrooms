@@ -20,7 +20,8 @@ export function createHost(endpoint, { seed, depth, tier, build = "dev" }) {
     if (!m) return;
     if (m.type === "hello") {
       if (m.build !== build) return;
-      peers.set(from, { name: m.name, input: null });
+      // a peer says hello again until it hears back: the same player
+      if (!peers.has(from)) peers.set(from, { name: m.name, input: null });
       // the start tells each peer the run, and which of the players is them
       endpoint.send(from, { ...start(run.seed, run.depth, run.tier), you: from });
     } else if (m.type === "event" && peers.has(from)) {
@@ -68,8 +69,23 @@ export function createPeer(endpoint, { host, name, build = "dev" }) {
     else if (m.type === "snapshot" && state.start && (!state.view || m.t > state.view.t)) state.view = readSnapshot(m);
   });
   endpoint.send(host, hello(name, build));
+  // a hello can go missing while a link is still coming up (seen over
+  // webrtc: sent on an open channel, never delivered), so until the host
+  // answers, say it again every second
+  let helloAt = null;
   return {
     state,
+    // call every frame with the time; true when it said hello again
+    greet(now) {
+      if (state.start) return false;
+      if (helloAt === null || now - helloAt < 1) {
+        helloAt ??= now;
+        return false;
+      }
+      helloAt = now;
+      endpoint.send(host, hello(name, build));
+      return true;
+    },
     sendInput(t, keys) {
       endpoint.send(host, inputMessage(name, t, keys));
     },

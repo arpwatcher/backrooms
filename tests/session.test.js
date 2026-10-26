@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createLoopback } from "../src/net/loopback.js";
 import { createHost, createPeer } from "../src/net/session.js";
+import { hello } from "../src/net/protocol.js";
 import { buildLevel } from "../src/game/build.js";
 import { TIERS } from "../src/game/director.js";
 import { Rng } from "../src/core/rng.js";
@@ -98,4 +99,29 @@ test("the host hears what a peer did, and from whom", () => {
   a.send({ type: "event", kind: "task", index: 2 });
   settle(net);
   assert.deepEqual(host.events.map((e) => [e.from, e.kind, e.index]), [["a", "task", 2]]);
+});
+
+test("a lost hello is said again until the host answers, and counts as one player", () => {
+  const net = createLoopback({ delay: 1 });
+  const host = createHost(net.endpoint("host"), { seed: "coop-run", depth: 4, tier: "uneasy" });
+  // the first hello never arrives
+  const guest = net.endpoint("p2");
+  const send = guest.send;
+  let lost = 0;
+  guest.send = (to, m) => (m.type === "hello" && lost++ === 0 ? undefined : send(to, m));
+  const peer = createPeer(guest, { host: "host", name: "friend" });
+  settle(net);
+  assert.equal(peer.state.start, null);
+  assert.equal(peer.greet(0), false);
+  assert.equal(peer.greet(0.5), false);
+  assert.equal(peer.greet(1.1), true);
+  settle(net);
+  assert.equal(peer.state.start.you, "p2");
+  assert.equal(peer.greet(5), false, "quiet once answered");
+  // a late duplicate hello doesn't make a second player or reset its input
+  host.peers.get("p2").input = { t: 3 };
+  send("host", hello("friend", "dev"));
+  settle(net);
+  assert.equal(host.peers.size, 1);
+  assert.deepEqual(host.peers.get("p2").input, { t: 3 });
 });

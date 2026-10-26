@@ -420,6 +420,7 @@ function stepNet() {
     net = null;
     return;
   }
+  net.session.greet(time);
   if (!s.start) return;
   const key = `${s.start.seed}/${s.start.depth}/${s.start.tier}`;
   if (key !== net.startKey) {
