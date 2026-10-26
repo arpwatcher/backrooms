@@ -1,4 +1,8 @@
-// All sound is synthesised - no audio files. The hum is the Backrooms: mains
+// Most sound is synthesised. Where a real throat is needed (growls, screams,
+// a drowned man's retch, moans far off) a recording is layered on top, from
+// assets/sfx (CC0, see CREDITS.md there); until they load, or if they can't,
+// the synthesis plays alone. Everything placed in the level also goes to a
+// shared reverb, so it sounds like it is in these rooms. The hum is the Backrooms: mains
 // frequency and its harmonics, a buzzing ballast through a resonant filter,
 // and a slow beat between two near-identical tones so it never quite sits
 // still. Some entities live in the hum; when it stops, something is wrong.
@@ -8,7 +12,78 @@ export function createAudio() {
   const ctx = new Context();
   const master = ctx.createGain();
   master.gain.value = 0.9;
-  master.connect(ctx.destination);
+  // a limiter at the end, so a scream on top of a chase never clips
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.knee.value = 6;
+  limiter.ratio.value = 12;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.25;
+  master.connect(limiter).connect(ctx.destination);
+
+  // --- the rooms: a reverb every placed sound is sent to. The impulse is
+  // made here: two seconds of noise dying away, its top end dying first, a
+  // little different in each ear, like a long low office with soft walls
+  const reverb = ctx.createConvolver();
+  reverb.buffer = (() => {
+    const length = Math.floor(ctx.sampleRate * 2.2);
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = impulse.getChannelData(c);
+      let low = 0;
+      for (let i = 0; i < length; i++) {
+        const t = i / ctx.sampleRate;
+        // darker as it goes: a one-pole lowpass whose cutoff falls with time
+        const k = Math.min(1, 0.55 * Math.exp(-t * 1.6) + 0.04);
+        low += k * ((Math.random() * 2 - 1) - low);
+        d[i] = low * Math.exp(-t * 2.6) * (i < 40 ? i / 40 : 1);
+      }
+    }
+    return impulse;
+  })();
+  const send = ctx.createGain();
+  send.gain.value = 0.55;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.5;
+  send.connect(reverb).connect(wet).connect(master);
+
+  // --- recordings, fetched in the background; each name is a group of takes
+  const SAMPLES = { growl: 6, scream: 2, gurgle: 2, roar: 1, moan: 4 };
+  const takes = new Map();
+  const sfxBase = new URL("../../assets/sfx/", import.meta.url);
+  for (const [group, n] of Object.entries(SAMPLES)) {
+    for (let i = 1; i <= n; i++) {
+      fetch(new URL(`${group}${i}.mp3`, sfxBase))
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+        .then((b) => ctx.decodeAudioData(b))
+        .then((buffer) => {
+          if (!takes.has(group)) takes.set(group, []);
+          takes.get(group).push(buffer);
+        })
+        .catch(() => {});
+    }
+  }
+  // play one take of a group, a little off pitch each time; false if none
+  // has loaded yet, so the caller can fall back to synthesis
+  function sample(group, destination, { rate = 1, spread = 0.08, level = 1, at = ctx.currentTime, lowpass = 0 } = {}) {
+    const list = takes.get(group);
+    if (!list?.length) return false;
+    const src = ctx.createBufferSource();
+    src.buffer = list[Math.floor(Math.random() * list.length)];
+    src.playbackRate.value = rate * (1 - spread + Math.random() * spread * 2);
+    const gain = ctx.createGain();
+    gain.gain.value = level;
+    let tail = src;
+    if (lowpass) {
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = lowpass;
+      tail = tail.connect(f);
+    }
+    tail.connect(gain).connect(destination);
+    src.start(at);
+    return true;
+  }
 
   // --- the hum ---
   const hum = ctx.createGain();
@@ -78,6 +153,7 @@ export function createAudio() {
     node.positionY.value = y;
     node.positionZ.value = z;
     node.connect(master);
+    node.connect(send);
     return node;
   }
 
@@ -88,6 +164,10 @@ export function createAudio() {
   return {
     ctx,
     master,
+    // how many takes of each recording have loaded
+    get recordings() {
+      return Object.fromEntries([...takes].map(([group, list]) => [group, list.length]));
+    },
     resume() {
       return ctx.state === "suspended" ? ctx.resume() : Promise.resolve();
     },
@@ -152,6 +232,8 @@ export function createAudio() {
           burst({ duration: 0.22, frequency: 900, q: 1.5, type: "bandpass", level: 0.35 * volume, at: t + i * 0.32, destination: dest });
         }
         burst({ duration: 0.05, frequency: 2600, q: 5, type: "bandpass", level: 0.2 * volume, at: t + 0.15, destination: dest });
+        // and now and then a low growl under the breath
+        if (Math.random() < 0.35) sample("growl", dest, { rate: 0.7, level: 0.45 * volume, at: t + 0.2, lowpass: 2200 });
       } else if (sound === "flutter") {
         // dozens of papery wingbeats
         for (let i = 0; i < 9; i++) {
@@ -216,6 +298,9 @@ export function createAudio() {
         wobble.start(t);
         osc.stop(t + 1);
         wobble.stop(t + 1);
+      } else if (sound === "rasp" && sample("growl", dest, { rate: 1, level: 0.55 * volume })) {
+        // a real throat when it has loaded
+        burst({ duration: 0.3, frequency: 300, q: 4, type: "bandpass", level: 0.2 * volume, at: t + 0.5, destination: dest });
       } else if (sound === "rasp") {
         // a wet, catching breath and bare feet on carpet
         burst({ duration: 0.5, frequency: 520, q: 2.5, type: "bandpass", level: 0.35 * volume, at: t, destination: dest });
@@ -225,11 +310,15 @@ export function createAudio() {
         // the hiss of an old black-and-white set, swelling and gone
         burst({ duration: 0.9, frequency: 4200, q: 0.7, type: "highpass", level: 0.16 * volume, at: t, destination: dest });
         burst({ duration: 0.5, frequency: 2600, q: 2, type: "bandpass", level: 0.1 * volume, at: t + 0.3, destination: dest });
+      } else if (sound === "gurgle" && sample("gurgle", dest, { rate: 0.72, level: 0.7 * volume })) {
+        for (let i = 0; i < 4; i++) burst({ duration: 0.04, frequency: 1800 + i * 260, q: 6, type: "bandpass", level: 0.12 * volume, at: t + i * 0.13, destination: dest });
       } else if (sound === "gurgle") {
         // water running off a coat, then a slow retch through a throat full of it
         for (let i = 0; i < 4; i++) burst({ duration: 0.04, frequency: 1800 + i * 260, q: 6, type: "bandpass", level: 0.18 * volume, at: t + i * 0.13, destination: dest });
         burst({ duration: 0.7, frequency: 240, q: 3, type: "bandpass", level: 0.3 * volume, at: t + 0.6, destination: dest });
         burst({ duration: 0.35, frequency: 150, q: 5, type: "bandpass", level: 0.22 * volume, at: t + 1.0, destination: dest });
+      } else if (sound === "shriek" && sample("scream", dest, { rate: 0.8, level: 0.8 * volume })) {
+        sample("growl", dest, { rate: 0.6, level: 0.4 * volume, at: t + 0.05 });
       } else if (sound === "shriek") {
         // it has seen you: a human voice torn up into something else
         for (const [f, d] of [[880, 0], [1240, 0.02], [660, 0.05]]) {
@@ -318,6 +407,8 @@ export function createAudio() {
       } else if (kind === "steps") {
         // someone walking, a long way off, who stops when you do
         for (let i = 0; i < 6; i++) burst({ duration: 0.12, frequency: 420, level: 0.4, at: t + i * 0.55, destination: dest });
+      } else if (kind === "moan" && sample("moan", dest, { rate: 0.85, level: 0.35, lowpass: 1400 })) {
+        // someone, or something, a long way off, through the walls
       } else if (kind === "vent") {
         for (let i = 0; i < 7; i++) burst({ duration: 0.05, frequency: 700 + (i % 3) * 200, q: 3, type: "bandpass", level: 0.25, at: t + i * 0.07, destination: dest });
       }
@@ -438,6 +529,8 @@ export function createAudio() {
     sting(x, y, z) {
       const t = ctx.currentTime;
       const dest = panner(x, y, z, 2.5);
+      // a real roar, slowed until it is too big for the thing making it
+      sample("roar", dest, { rate: 0.55, level: 0.5 });
       for (const f of [146.8, 155.6, 207.7, 311.1, 329.6]) {
         const osc = ctx.createOscillator();
         osc.type = "sawtooth";

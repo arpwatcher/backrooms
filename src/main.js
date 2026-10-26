@@ -566,7 +566,7 @@ function groundOf(look) {
 }
 
 // every level: now and then the building makes a sound somewhere far off
-const AMBIENT = ["slam", "ring", "steps", "vent"];
+const AMBIENT = ["slam", "ring", "steps", "vent", "moan"];
 function ambience(time) {
   if (time < (level.ambientAt ??= time + 20 + Math.random() * 25)) return;
   level.ambientAt = time + 30 + Math.random() * 45;
