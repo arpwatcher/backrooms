@@ -16,6 +16,7 @@
 // at a model closely: studio.html?kind=hounds&state=hunt&angle=0.6&dist=2.4&light=1
 import * as THREE from "three";
 import { MESHES } from "../src/render/entities.js";
+import { createRemotes } from "../src/render/remotes.js";
 import { preloadModels } from "../src/render/models.js";
 import { createPost } from "../src/render/post.js";
 import { wallpaperTexture, carpetTexture } from "../src/render/textures.js";
@@ -54,7 +55,11 @@ camera.add(beam, beam.target);
 beam.target.position.set(0, 0, -1);
 scene.add(camera);
 await preloadModels("../");
-const mesh = MESHES[kind]();
+// kind=player&id=p2&noise=0.3: another player in co-op, as the others see them
+const remotes = kind === "player" ? createRemotes(scene) : null;
+if (remotes) remotes.update([{ id: q.get("id") || "p2", x: 0, z: 0, yaw: -Math.PI, noise: Number(q.get("noise") ?? 0.3) }]);
+const mesh = remotes ? [...remotes.figures.values()][0] : MESHES[kind]();
+if (remotes) mesh.userData.animate = (t) => mesh.userData.walk(t * 1.6, Number(q.get("noise") ?? 0.3));
 scene.add(mesh);
 const entity = { id: 3, state, facing: 0, head: 0, stare: 2, x: 0, z: 0, memory: {} };
 let time = 0;
