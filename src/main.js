@@ -983,6 +983,10 @@ window.__noclip = {
   clear(x, z) {
     return x > 0 && z > 0 && x < level.layout.width * CELL && z < level.layout.height * CELL && lineOfSight(level.layout, player.x, player.z, x, z);
   },
+  // tool hook: an unbroken line between two points (walls and pillars block)
+  sees(ax, az, bx, bz) {
+    return lineOfSight(level.layout, ax, az, bx, bz);
+  },
   get litPanels() { return level.world.panels.filter((p) => p.state !== "dead").length; },
   get tracks() {
     const [first] = level.tracks.wet;
