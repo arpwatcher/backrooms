@@ -942,7 +942,7 @@ window.__noclip = {
   async coopInvite() { window.__invite = await inviteFriend({ iceServers: [] }); return window.__invite.code; },
   async coopAccept(code) { await window.__invite.accept(code); },
   async coopJoin(code) { return (await joinFriend(code, { iceServers: [] })).code; },
-  get coop() { return net ? { role: net.role, peers: net.role === "host" ? [...net.session.peers.keys()] : null, you: net.session.state?.start?.you ?? null, seed: run.seed, depth: run.depth } : null; },
+  get coop() { return net ? { role: net.role, peers: net.role === "host" ? [...net.session.peers.keys()] : null, you: net.session.state?.start?.you ?? null, seed: run.seed, depth: run.depth, links: [...net.endpoint.links].map(([n, l]) => `${n}:${l.state}:${l.channels}`) } : null; },
   get remotes() { return [...remotes.figures].map(([id, f]) => ({ id, x: f.position.x, z: f.position.z })); },
   get radioState() { return { time, queued: level.radio.map((r) => r.at), paused: pause.shown, dead: Boolean(screens.dead), ending: ending.shown }; },
   get bearing() { return level.bearing ?? null; },

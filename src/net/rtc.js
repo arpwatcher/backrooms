@@ -55,6 +55,10 @@ export function link(pc) {
     get state() {
       return pc.connectionState;
     },
+    // for debugging: each channel's state, and how much is still queued
+    get channels() {
+      return `${channels.reliable?.readyState ?? "none"}/${channels.fast?.readyState ?? "none"}/${waiting.length}`;
+    },
     close() {
       pc.close();
     },
