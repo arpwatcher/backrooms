@@ -21,7 +21,7 @@ function gathered(pc, ms = 4000) {
   });
 }
 
-function link(pc) {
+export function link(pc) {
   const channels = {};
   const handlers = [];
   // reliable messages sent before the channel opens wait for it (a peer says
@@ -36,6 +36,9 @@ function link(pc) {
       if (channels.reliable?.readyState === "open") while (waiting.length) channels.reliable.send(waiting.shift());
       if (channels.reliable?.readyState === "open" && channels.fast?.readyState === "open") opened();
     };
+    // the joiner can be handed a channel that is already open, and then the
+    // open event never comes
+    if (channel.readyState === "open") channel.onopen();
   };
   return {
     pc,
