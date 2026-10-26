@@ -423,7 +423,10 @@ try {
   const game = async (seed) => {
     const p = await browser.newPage({ viewport: { width: 480, height: 270 } });
     p.on("pageerror", (e) => errors.push(`${seed}: ${e.message}`));
-    await p.goto(`http://localhost:${port}/index.html?seed=${seed}&smoke&depth=3`);
+    // a third and fourth game page on a busy runner can take longer than
+    // the default 30 s to fire load (the models); the frame wait below is
+    // what matters, and it allows 90
+    await p.goto(`http://localhost:${port}/index.html?seed=${seed}&smoke&depth=3`, { waitUntil: "domcontentloaded", timeout: 90000 });
     await p.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 90000 });
     return p;
   };
