@@ -319,27 +319,63 @@ function stillLifeBody() {
   return group;
 }
 
+// a moth seen from above: swept forewings with veins and a dark band, small
+// rounded hindwings, a furred body, and on its back the pale skull mark of a
+// death's-head moth
 function mothTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 44;
+  canvas.width = 128;
+  canvas.height = 88;
   const g = canvas.getContext("2d");
-  const wing = (cx, cy, rx, ry, tilt, shade) => {
-    g.fillStyle = shade;
-    g.beginPath();
-    g.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2);
-    g.fill();
-  };
   for (const side of [-1, 1]) {
-    wing(32 + side * 15, 16, 15, 10, side * 0.5, "#a89c80");
-    wing(32 + side * 11, 30, 9, 8, side * -0.4, "#8e8268");
-    g.fillStyle = "#3a3226";
+    const x = (v) => 64 + side * v;
+    // hindwing, under the forewing
+    g.fillStyle = "#7e6e52";
     g.beginPath();
-    g.arc(32 + side * 17, 15, 3, 0, Math.PI * 2);
+    g.moveTo(x(4), 40);
+    g.quadraticCurveTo(x(40), 44, x(36), 66);
+    g.quadraticCurveTo(x(20), 80, x(4), 58);
     g.fill();
+    g.fillStyle = "#3a2e20";
+    g.beginPath();
+    g.ellipse(x(24), 60, 7, 4, side * 0.4, 0, Math.PI * 2);
+    g.fill();
+    // forewing: swept back to a point
+    g.fillStyle = "#a6987a";
+    g.beginPath();
+    g.moveTo(x(4), 22);
+    g.quadraticCurveTo(x(34), 6, x(62), 20);
+    g.lineTo(x(58), 30);
+    g.quadraticCurveTo(x(30), 46, x(4), 44);
+    g.fill();
+    // a dark band across it and the veins
+    g.strokeStyle = "rgba(50,38,26,0.8)";
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(x(30), 14);
+    g.quadraticCurveTo(x(36), 28, x(26), 42);
+    g.stroke();
+    g.strokeStyle = "rgba(60,48,34,0.55)";
+    g.lineWidth = 1;
+    for (const [ex, ey] of [[60, 21], [54, 30], [44, 36], [34, 41]]) {
+      g.beginPath();
+      g.moveTo(x(6), 30);
+      g.quadraticCurveTo(x(ex * 0.5), 26, x(ex), ey);
+      g.stroke();
+    }
   }
-  g.fillStyle = "#4a4030";
-  g.fillRect(30, 8, 4, 28);
+  // furred body
+  g.fillStyle = "#3e3224";
+  g.beginPath();
+  g.ellipse(64, 46, 6, 24, 0, 0, Math.PI * 2);
+  g.fill();
+  // the skull on its back
+  g.fillStyle = "#d8cca8";
+  g.beginPath();
+  g.ellipse(64, 30, 4.5, 5.5, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#2a2018";
+  for (const dx of [-2, 2]) g.fillRect(64 + dx - 1, 29, 2, 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -349,7 +385,7 @@ function mothTexture() {
 export function deathmothsMesh() {
   const group = new THREE.Group();
   const count = 46;
-  const wing = new THREE.PlaneGeometry(0.16, 0.11);
+  const wing = new THREE.PlaneGeometry(0.17, 0.117);
   const material = new THREE.MeshLambertMaterial({
     map: mothTexture(), side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, emissive: 0x5c5638,
   });
@@ -388,6 +424,9 @@ export function deathmothsMesh() {
     height: 1.2 + ((i * 53) % 13) / 11,
     speed: 2 + ((i * 29) % 7) / 2,
     phase: i * 2.399,
+    // most are the size of a thumb; every seventh is as big as a hand, and
+    // those are the ones you see coming
+    size: i % 7 === 0 ? 2.8 : 0.9 + ((i * 17) % 5) / 10,
   }));
   const dummy = new THREE.Object3D();
   group.userData.animate = (time, entity) => {
@@ -397,10 +436,12 @@ export function deathmothsMesh() {
       const a = o.phase + time * o.speed;
       dummy.position.set(Math.cos(a) * o.radius * tight, o.height + lift + Math.sin(time * 7 + o.phase) * 0.12, Math.sin(a * 1.3) * o.radius * tight);
       dummy.rotation.set(-1.2 + Math.sin(time * 34 + i) * 0.7, a, 0);
-      dummy.scale.set(0.6 + Math.abs(Math.sin(time * 34 + i)) * 0.4, 1, 1);
+      // the big ones beat slower
+      const beat = Math.abs(Math.sin(time * (o.size > 2 ? 14 : 34) + i));
+      dummy.scale.set((0.6 + beat * 0.4) * o.size, o.size, o.size);
       dummy.updateMatrix();
       moths.setMatrixAt(i, dummy.matrix);
-      dummy.scale.set(1, 1, 1);
+      dummy.scale.set(o.size * 0.6, o.size, o.size * 0.6);
       dummy.rotation.set(Math.PI / 2, a, 0);
       dummy.updateMatrix();
       bodies.setMatrixAt(i, dummy.matrix);
