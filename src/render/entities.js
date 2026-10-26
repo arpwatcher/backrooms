@@ -426,7 +426,7 @@ export function deathmothsMesh() {
 export function partygoersMesh() {
   const group = new THREE.Group();
   // wax, not skin: smooth, a little shiny, run in places like a candle
-  const wax = fleshMaterial({ skin: skin({ base: "#d6b938", blotch: "rgba(150,90,30,0.45)", veins: "rgba(120,80,40,0.25)", grime: 0.25, pores: 0.15, seed: "party" }), roughness: 0.28, rim: 0x5a4a10 });
+  const wax = fleshMaterial({ skin: skin({ base: "#b49b3c", blotch: "rgba(96,60,22,0.6)", veins: "rgba(110,70,40,0.3)", grime: 0.6, pores: 0.15, seed: "party" }), roughness: 0.3, rim: 0x5a4a10 });
   const body = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.72, 8, 18), { amount: 0.02, scale: 4, seed: 21,
     along: (v) => -0.06 * Math.exp(-(((v.y + 0.05) / 0.16) ** 2)) }), wax);
   body.position.y = 1.36;
@@ -471,13 +471,12 @@ export function partygoersMesh() {
   // small black wet eyes, set in hollows
   // the eyes don't match: one higher and bigger, both just wet black holes
   const wet = new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 0.08 });
-  for (const [x, y, r] of [[-0.065, 0.06, 0.026], [0.06, 0.035, 0.018]]) {
+  for (const [x, y, r] of [[-0.065, 0.06, 0.034], [0.06, 0.035, 0.024]]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), wet);
     eye.position.set(x, y, 0.135);
     head.add(eye);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.22, 6, 4), new THREE.MeshBasicMaterial({ color: 0xfff6dc }));
-    glint.position.set(x + r * 0.3, y + r * 0.3, 0.135 + r * 0.9);
-    head.add(glint);
+    // and something black has run out of both, down to the smile
+    head.add(new THREE.Mesh(tube([[x, y - r * 0.6, 0.14], [x * 1.05, y - 0.05, 0.14], [x * 1.1, y - 0.1, 0.125]], r * 0.32, 0.5, 5), wet));
   }
   // the smile, ear to ear, cut into the face along the skull
   const onFace = (x, y, out = 0) => {
