@@ -52,7 +52,7 @@ void main() {
 
 export function createPost(renderer) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 2 });
+  const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   const material = new THREE.ShaderMaterial({
     uniforms: {
       frame: { value: target.texture },

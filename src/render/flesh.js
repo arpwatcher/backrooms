@@ -6,6 +6,7 @@
 // makes a thing look wrong when it moves.
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Rng } from "../core/rng.js";
 
 // --- noise -----------------------------------------------------------------
@@ -201,9 +202,11 @@ function mergeByPosition(geometry) {
 }
 
 // a limb or neck along a list of points, thinning as it goes
-export function tube(points, radius = 0.05, taper = 0.6, radial = 8) {
+export function tube(points, radius = 0.05, taper = 0.6, sides = 8) {
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
-  const geometry = new THREE.TubeGeometry(curve, Math.max(8, points.length * 6), radius, radial, false);
+  // round enough that a limb in the beam has no flat faces on it
+  const radial = Math.max(8, Math.round(sides * 1.6));
+  const geometry = new THREE.TubeGeometry(curve, Math.max(16, points.length * 10), radius, radial, false);
   const pos = geometry.attributes.position;
   const segments = geometry.parameters.tubularSegments;
   const v = new THREE.Vector3();
@@ -214,7 +217,17 @@ export function tube(points, radius = 0.05, taper = 0.6, radial = 8) {
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   geometry.computeVertexNormals();
-  return geometry;
+  // round off both ends, so a limb coming out of a sleeve or a joint has no
+  // cut rim showing
+  const ends = [[0, radius], [1, radius * taper]].map(([at, r]) => {
+    const cap = new THREE.SphereGeometry(r, radial, Math.max(4, radial / 2));
+    const p = curve.getPointAt(at);
+    cap.translate(p.x, p.y, p.z);
+    return cap;
+  });
+  const merged = mergeGeometries([geometry, ...ends]);
+  for (const g of [geometry, ...ends]) g.dispose();
+  return merged;
 }
 
 // --- eyes ------------------------------------------------------------------

@@ -990,7 +990,7 @@ export function attendantMesh() {
     return pivot;
   });
   const mop = new THREE.Group();
-  mop.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.7, 6), fleshMaterial({ color: 0x6a5232, roughness: 0.7 })));
+  mop.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.7, 12), fleshMaterial({ color: 0x6a5232, roughness: 0.7 })));
   mop.children[0].position.y = 0.85;
   const strands = new THREE.Mesh(lumpy(new THREE.CylinderGeometry(0.1, 0.2, 0.16, 14, 2, true), { amount: 0.03, scale: 12, seed: 9 }), fleshMaterial({ skin: skin({ base: "#6f6a58", blotch: "rgba(50,45,20,0.6)", veins: null, grime: 0.9, pores: 0, seed: "mop" }), roughness: 1, side: THREE.DoubleSide }));
   strands.position.y = 0.07;
