@@ -58,10 +58,11 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   then co-op: the host makes an invite code, a friend pastes it into join
   and sends back an answer code, the host pastes that, and the friend is in
   the host's level. Send the codes by any chat. The host runs the monsters,
-  which go for whoever is nearest. Every player has their own marks, and in
-  a group the dead become Echoes. Add `?bot` to the address to walk with a
-  stand-in second player on your own. Still to come: voice, and an Echo's
-  own view (see `docs/16-coop-tech.md`).
+  which go for whoever is nearest. Each player keeps a colour (backpack,
+  armband, name) so you can tell who is who from behind. Every player has
+  their own marks, and in a group the dead become Echoes. Add `?bot` to the
+  address to walk with a stand-in second player on your own. Still to come:
+  voice, and an Echo's own view (see `docs/16-coop-tech.md`).
 
 ## Controls
 

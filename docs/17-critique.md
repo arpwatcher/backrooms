@@ -12,19 +12,44 @@ lit and in the dark.
 
 1. **Five monsters are still built from code** (Smiler, Partygoers,
    Hushbaby, Attendant, Deadline) next to seven real models. All five were
-   reworked on 10-24/25 and read as frightening now, but a real sculpted,
-   rigged model would still beat each of them. Two good CC0 candidates
-   (codyanka's Clawman and Ridgeback) cost $5 each.
+   reworked between 10-24 and 10-26 and read as frightening now, but a real
+   sculpted, rigged model would still beat each of them. Two good CC0
+   candidates (codyanka's Clawman and Ridgeback) cost $5 each.
 2. **The PS1-era models are low-poly up close.** The hound, the Drowned and
    Monochrome hold up at running distance and their textures are now
    smoothed, but on the death screen you can count the polygons.
-3. **Other players in co-op are plain figures.** A coat, a head, swinging
-   limbs and a name; fine for finding each other, not yet a character.
-4. **Critique shots are framed by chance.** The stand spot is the
-   entity's cell plus the most open side, so a crate pillar sometimes
-   blocks the view (the Attendant on level 12).
+3. **Dark levels hide their monster entirely without the flashlight.** On
+   levels 2, 8 and 12 the "lit" shot is nearly black; fair, since the light
+   is the counter, but the Hounds now have eyeshine and the others could use
+   a tell of their own that reads in the dark.
 
 ## Fixed
+
+- 2026-10-26: the Hushbaby like a white plastic ant. It is a fat dead
+  infant now, grey going blue and bruised, held up on arms with a high
+  elbow and a second joint, the cord still trailing, and its too-big head
+  hangs upside down: all-black wet eyes under a screaming mouth with raw
+  gums.
+- 2026-10-26: the Partygoers' face too small to read and the grin sticking
+  out past the head. The head is bigger, in a paper party hat, the grin is
+  cut along the face and catches the light, and the eyes are bigger black
+  holes with something black run out of them. The wax is dirtier.
+- 2026-10-26: the Attendant reading as a coat hanger with two hoses. He has
+  a hump, shoulders, the bib and straps of his overalls, long bare
+  forearms with knuckly fingers round the mop, knees and boots.
+- 2026-10-26: the Deathmoths reading as dust on a wall, then as pale
+  flowers. Their wings are a moth's now, swept back with veins and a dark
+  band, the skull mark of a death's-head on the back, and every seventh is
+  as big as a hand and beats slower.
+- 2026-10-26: the Hounds invisible in their dark level. Their eyes throw
+  the light back, green-gold, carried on the head bone.
+- 2026-10-26: other players in co-op as plain figures. Each is a survivor
+  in a worn jacket and jeans with a face, a backpack and armband in their
+  own colour, and the flashlight in hand with its lens lit; they creep,
+  walk or run as their noise says.
+- 2026-10-26: critique shots framed by chance. The tool now walks round
+  each entity and stands at the furthest spot the game's own line of sight
+  says can see it, past both shoulders.
 
 - 2026-10-25: the Smiler's grin like a row of identical cones. The teeth
   are now all different, long and short, leaning, some yellowed, on wet
