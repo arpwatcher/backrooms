@@ -857,18 +857,31 @@ export function hushbabyMesh() {
 // under the peak there is nothing but dark.
 export function attendantMesh() {
   const group = new THREE.Group();
-  const overalls = fleshMaterial({ skin: skin({ base: "#4d5455", blotch: "rgba(40,50,30,0.5)", veins: null, grime: 0.8, pores: 0, seed: "overalls" }), roughness: 0.92, rim: 0x202628 });
+  const overalls = fleshMaterial({ skin: skin({ base: "#5d6864", blotch: "rgba(40,50,30,0.55)", veins: null, grime: 0.85, pores: 0, seed: "overalls" }), roughness: 0.92, rim: 0x2c3436 });
   const flesh = fleshMaterial({ skin: skin({ base: "#9a8478", blotch: "rgba(110,60,60,0.4)", veins: "rgba(70,60,100,0.4)", grime: 0.5, pores: 0.3, seed: "janitor" }), roughness: 0.6, rim: 0x2a2018 });
   // everything turns together: on a trail he comes backwards, his back to you
   const rig = new THREE.Group();
   group.add(rig);
   const body = new THREE.Group();
   rig.add(body);
-  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.21, 0.5, 6, 14), { amount: 0.012, scale: 5, seed: 51 }), overalls);
+  // a hump of a back, bent over the mop for longer than anyone remembers
+  const torso = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.21, 0.5, 6, 14), { amount: 0.012, scale: 5, seed: 51,
+    along: (v) => (v.y > 0.05 && v.z < 0 ? 0.08 * Math.min(1, (v.y - 0.05) / 0.2) * Math.min(1, -v.z / 0.15) : 0) }), overalls);
   torso.position.set(0, 1.36, 0.1);
   torso.rotation.x = 0.55;
-  torso.scale.set(1.1, 1, 0.8);
+  torso.scale.set(1.2, 1, 0.85);
   body.add(torso);
+  // the bib of the overalls, its straps, and a name patch nobody can read
+  const bib = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.16, 14, 10), { amount: 0.006, seed: 52 }), overalls);
+  bib.scale.set(1.15, 1.3, 0.45);
+  bib.position.set(0, 1.42, 0.3);
+  bib.rotation.x = 0.55;
+  body.add(bib);
+  for (const x of [-0.1, 0.1]) body.add(new THREE.Mesh(tube([[x, 1.5, 0.34], [x * 1.3, 1.66, 0.22], [x * 1.4, 1.62, -0.06], [x * 1.2, 1.3, -0.16]], 0.018, 1, 5), fleshMaterial({ color: 0x2e3432, roughness: 0.9 })));
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.04), new THREE.MeshStandardMaterial({ color: 0xa8a290, roughness: 0.9 }));
+  patch.position.set(-0.08, 1.47, 0.37);
+  patch.rotation.x = -0.9;
+  body.add(patch);
   // the neck bends forward and down, too far
   const neck = new THREE.Group();
   neck.position.set(0, 1.68, 0.3);
@@ -897,17 +910,41 @@ export function attendantMesh() {
   peak.position.set(0, 0.06, 0.13);
   head.add(cap, peak);
   // long thin legs with a knee that bends a little the wrong way
-  for (const x of [-0.1, 0.1]) body.add(new THREE.Mesh(tube([[x, 1.12, 0], [x, 0.58, -0.05], [x, 0.04, 0.03]], 0.065, 0.7, 8), overalls));
+  const boot = fleshMaterial({ color: 0x17140f, roughness: 0.6, rim: 0x101010 });
+  for (const x of [-0.11, 0.11]) {
+    body.add(new THREE.Mesh(tube([[x, 1.14, 0.02], [x, 0.85, 0.0], [x, 0.6, -0.06]], 0.075, 0.8, 8), overalls));
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), overalls);
+    knee.position.set(x, 0.6, -0.05);
+    body.add(knee);
+    body.add(new THREE.Mesh(tube([[x, 0.6, -0.06], [x, 0.32, -0.01], [x, 0.08, 0.02]], 0.055, 0.8, 8), overalls));
+    const foot = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.07, 10, 8), { amount: 0.005 }), boot);
+    foot.scale.set(0.9, 0.6, 1.7);
+    foot.position.set(x, 0.05, 0.06);
+    body.add(foot);
+  }
   // arms down to the mop handle, too long
   const arms = [-0.24, 0.24].map((x) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 1.56, 0.26);
     // arms down past his knees to the mop
-    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.35, -0.5, 0.2], [-x * 0.4, -0.98, 0.42]], 0.042, 0.6, 8), overalls));
-    const hand = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.045, 10, 8), { amount: 0.006 }), flesh);
-    hand.scale.set(0.8, 1.4, 0.6);
-    hand.position.set(-x * 0.4, -1.02, 0.42);
+    // a shoulder, an upper arm to a sharp elbow, a long thin forearm
+    const shoulder = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.075, 12, 10), { amount: 0.006 }), overalls);
+    pivot.add(shoulder);
+    const elbow = [x * 0.35, -0.46, 0.16], wrist = [-x * 0.4, -0.97, 0.42];
+    pivot.add(new THREE.Mesh(tube([[0, 0, 0], [x * 0.25, -0.24, 0.06], elbow], 0.055, 0.75, 8), overalls));
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), overalls);
+    knob.position.set(...elbow);
+    pivot.add(knob);
+    pivot.add(new THREE.Mesh(tube([elbow, [x * 0.05, -0.72, 0.3], wrist], 0.036, 0.7, 8), flesh));
+    const hand = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.042, 10, 8), { amount: 0.006 }), flesh);
+    hand.scale.set(0.8, 1.2, 0.6);
+    hand.position.set(wrist[0], wrist[1] - 0.04, wrist[2]);
     pivot.add(hand);
+    // long knuckly fingers curled round the handle
+    for (let f = 0; f < 4; f++) {
+      const y = wrist[1] - 0.04 - f * 0.022;
+      pivot.add(new THREE.Mesh(tube([[wrist[0], y, wrist[2] + 0.02], [wrist[0] - x * 0.15, y - 0.01, wrist[2] + 0.06], [wrist[0] - x * 0.22, y - 0.02, wrist[2] + 0.01]], 0.008, 0.6, 4), flesh));
+    }
     body.add(pivot);
     return pivot;
   });
