@@ -441,6 +441,33 @@ export function partygoersMesh() {
     along: (v) => (v.z > 0.1 && v.y > 0.02 && v.y < 0.07 && Math.abs(Math.abs(v.x) - 0.06) < 0.03 ? -0.035 : 0) }), wax);
   skull.scale.set(0.95, 1.15, 0.95);
   head.add(skull);
+  // too big for the neck, so the face can be read from across a room
+  head.scale.setScalar(1.3);
+  // a paper party hat, pushed over to one side, the elastic cutting in
+  const hatTexture = (() => {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext("2d");
+    for (let i = 0; i < 8; i++) {
+      g.fillStyle = i % 2 ? "#d8d0c0" : "#a8222a";
+      g.fillRect(i * 8, 0, 8, 64);
+    }
+    g.fillStyle = "rgba(40,30,10,0.35)";
+    for (let i = 0; i < 30; i++) g.fillRect((i * 37) % 64, (i * 23) % 64, 3, 2);
+    return new THREE.CanvasTexture(c);
+  })();
+  hatTexture.colorSpace = THREE.SRGBColorSpace;
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.26, 18, 1, true), new THREE.MeshStandardMaterial({ map: hatTexture, roughness: 0.85, side: THREE.DoubleSide }));
+  hat.position.set(0.05, 0.25, -0.01);
+  hat.rotation.z = -0.35;
+  head.add(hat);
+  const elastic = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.003, 4, 24, Math.PI), new THREE.MeshBasicMaterial({ color: 0x1a1610 }));
+  // ear to ear under the jaw
+  elastic.rotation.z = Math.PI;
+  elastic.scale.set(1.08, 2.15, 1);
+  elastic.position.set(0, 0.12, -0.03);
+  head.add(elastic);
   // small black wet eyes, set in hollows
   // the eyes don't match: one higher and bigger, both just wet black holes
   const wet = new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 0.08 });
@@ -448,20 +475,29 @@ export function partygoersMesh() {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), wet);
     eye.position.set(x, y, 0.135);
     head.add(eye);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.22, 6, 4), new THREE.MeshBasicMaterial({ color: 0xfff6dc }));
+    glint.position.set(x + r * 0.3, y + r * 0.3, 0.135 + r * 0.9);
+    head.add(glint);
   }
-  // the smile, wider than the face
+  // the smile, ear to ear, cut into the face along the skull
+  const onFace = (x, y, out = 0) => {
+    const rx = 0.17 * 0.95, ry = 0.17 * 1.15;
+    return [x, y, rx * Math.sqrt(Math.max(0, 1 - (x / rx) ** 2 - (y / ry) ** 2)) + out];
+  };
+  const smileAt = (t, out) => {
+    const a = Math.PI * (1.04 + t * 0.92);
+    return onFace(Math.cos(a) * 0.14, -0.025 + Math.sin(a) * 0.075, out);
+  };
   const gum = new THREE.MeshBasicMaterial({ color: 0x2a0806 });
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.02, 6, 30, Math.PI * 0.95), gum);
-  mouth.rotation.z = Math.PI * 1.025;
-  mouth.scale.set(1.5, 0.62, 0.6);
-  mouth.position.set(0, -0.02, 0.14);
-  head.add(mouth);
-  const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xf0ead6, roughness: 0.3 });
-  // a smile wider than the face, with too many small teeth in it
+  head.add(new THREE.Mesh(tube(Array.from({ length: 13 }, (_, i) => smileAt(i / 12, -0.004)), 0.02, 1, 8), gum));
+  // the teeth catch what little light there is: the smile is what you see first
+  const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xf0ead6, emissive: 0x3a3426, roughness: 0.3 });
+  // too many small teeth in it
   for (let i = 0; i < 30; i++) {
-    const a = Math.PI * 1.05 + (i / 29) * Math.PI * 0.9;
     const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.018, 0.01), toothMaterial);
-    tooth.position.set(Math.cos(a) * 0.13 * 1.5, -0.02 + Math.sin(a) * 0.13 * 0.62 + 0.008, 0.15 - Math.abs(Math.cos(a)) * 0.03);
+    tooth.position.set(...smileAt(i / 29, 0.006));
+    tooth.position.y += 0.008;
+    tooth.lookAt(tooth.position.clone().multiplyScalar(2));
     head.add(tooth);
   }
   // wax running off the chin and down the body
@@ -514,6 +550,8 @@ export function partygoersMesh() {
     left.rotation.z = entity.state === "greet" ? -2.6 + Math.sin(time * 12) * 0.5 : -0.05 + sway * 0.05;
     right.rotation.z = 0.05 - sway * 0.05;
     right.rotation.x = chasing ? -1.3 : 0;
+    left.rotation.x = chasing ? -1.1 + Math.sin(time * 9) * 0.15 : 0;
+    if (chasing) left.rotation.z = -0.05;
     // the head tilts too far and snaps back
     head.rotation.z = Math.sin(time * 0.5 + entity.id) * 0.25 + twitch(time, entity.id, 1.1, 0.5);
     head.rotation.x = twitch(time, entity.id + 2, 0.7, 0.3) + (chasing ? 0.3 : 0);
