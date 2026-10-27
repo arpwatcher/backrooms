@@ -1285,18 +1285,22 @@ export function stillLifeMesh() {
 // barely swing, and a head that turns on its own, in jerks, toward wherever
 // it is looking. When it notices you it stops and the head tilts.
 export function stiltsMesh() {
+  const steps = gait();
   return modelInstance("stilts", {
     pose: (time, entity, bone) => {
-      const pace = entity.state === "stride" ? 3.2 : entity.state === "patrol" || entity.state === "search" ? 1.4 : 0;
-      const step = Math.sin(time * pace + entity.id);
-      const lift = (side) => Math.max(0, Math.sin(time * pace + entity.id + (side ? Math.PI : 0)));
-      bone("thigh.L")?.rotateX(pace ? step * 0.32 : 0);
-      bone("thigh.R")?.rotateX(pace ? -step * 0.32 : 0);
-      bone("shin.L")?.rotateX(pace ? -lift(0) * 0.55 : 0);
-      bone("shin.R")?.rotateX(pace ? -lift(1) * 0.55 : 0);
+      // long slow steps, as many as the ground going by needs
+      const { stride, speed } = steps(time, entity);
+      const pace = Math.min(1, speed / 1.2);
+      const phase = stride * 1.5 + entity.id;
+      const step = Math.sin(phase);
+      const lift = (side) => Math.max(0, Math.sin(phase + (side ? Math.PI : 0)));
+      bone("thigh.L")?.rotateX(step * 0.32 * pace);
+      bone("thigh.R")?.rotateX(-step * 0.32 * pace);
+      bone("shin.L")?.rotateX(-lift(0) * 0.55 * pace);
+      bone("shin.R")?.rotateX(-lift(1) * 0.55 * pace);
       // the model stands in an A-pose: bring the arms in to hang by its sides
-      bone("upper_arm.L")?.rotateZ(-0.55).rotateX(pace ? -step * 0.12 : twitch(time, entity.id, 0.3, 0.04));
-      bone("upper_arm.R")?.rotateZ(0.55).rotateX(pace ? step * 0.12 : twitch(time, entity.id + 1, 0.3, 0.04));
+      bone("upper_arm.L")?.rotateZ(-0.55).rotateX(-step * 0.12 * pace + twitch(time, entity.id, 0.3, 0.04));
+      bone("upper_arm.R")?.rotateZ(0.55).rotateX(step * 0.12 * pace + twitch(time, entity.id + 1, 0.3, 0.04));
       bone("forearm.L")?.rotateX(0.12 + twitch(time, entity.id + 4, 0.8, 0.06));
       bone("forearm.R")?.rotateX(0.12 + twitch(time, entity.id + 5, 0.8, 0.06));
       // the head looks where it looks, not where the body walks
