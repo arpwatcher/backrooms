@@ -1186,6 +1186,25 @@ export function deadlineMesh() {
   return group;
 }
 
+// Laid over a model's own clip: now and then the head snaps to one side,
+// holds, and comes back, the way nothing with working muscles moves.
+// `bones` are tried in order (rigs name their head differently).
+function headJerks(bones = ["Head", "head"], size = 0.35, rate = 1.2) {
+  // if the clip doesn't move the bone itself, last frame's jerk is still on
+  // it: take that off first, or they would pile up and turn the head round
+  let base = null;
+  let last = null;
+  return (time, entity, bone) => {
+    const head = bones.map((n) => bone(n)).find(Boolean);
+    if (!head) return;
+    if (last && head.quaternion.equals(last)) head.quaternion.copy(base);
+    base = head.quaternion.clone();
+    head.rotateZ(twitch(time, entity.id ?? 1, rate, size));
+    head.rotateX(twitch(time, (entity.id ?? 1) + 7, rate * 0.7, size * 0.6));
+    last = head.quaternion.clone();
+  };
+}
+
 // the hound is a real model now (assets/models/hound.glb, by bitkiln): a
 // skinned dog, all muscle and teeth (and a black-skinned one beside it
 // in a pack). It walks while it wanders, stops to
@@ -1319,6 +1338,8 @@ export function wretchMesh() {
   const model = modelInstance("creature", {
     clipFor: (e) => (e.state === "chase" ? "run" : e.state === "search" || e.state === "investigate" || e.state === "wander" ? "walk" : "idle"),
     speedFor: (e) => (e.state === "chase" ? 1.15 : e.state === "wander" ? 0.7 : 1),
+    // its rig has no head bone: the jaw jerks instead
+    pose: headJerks(["Jaw"], 0.3, 1.5),
   });
   if (model) return model;
   const fallback = facelingsBody();
@@ -1335,6 +1356,7 @@ export function drownedMesh() {
     clipFor: (e) => (e.state === "follow" ? ((e.pace ?? 0) > 3 ? "run" : "walk") : e.state === "still" ? "retch" : "walk"),
     // a missing pace would make the speed NaN and fold every bone to nothing
     speedFor: (e) => (e.state === "follow" ? ((e.pace ?? 0) > 3 ? 1.1 : Math.max(0.4, (e.pace ?? 0) / 1.9)) : e.state === "wander" ? 0.4 : 1),
+    pose: headJerks(["Head"], 0.3, 0.9),
   });
   if (!model) return wretchMesh();
   // the poolrooms are bright and the flashlight finds him: wash most of the
@@ -1367,6 +1389,7 @@ function drain(material, amount, level = 1) {
 export function monochromeMesh() {
   const model = modelInstance("monochrome", {
     clipFor: (e) => (e.state === "hunt" ? "run" : "walk"),
+    pose: headJerks(["Head"], 0.4, 1.3),
     speedFor: (e) => (e.state === "hunt" ? 1 : 0.45),
   });
   if (!model) return facelingsBody();
