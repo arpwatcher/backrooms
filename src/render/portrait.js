@@ -71,7 +71,7 @@ export function createPortrait() {
       });
       scene.add(current);
       // states that look like it's coming for you
-      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "follow", deadline: "coming", partygoers: "chase", deathmoths: "swarm", wretch: "chase", drowned: "follow", monochrome: "hunt" }[kind] ?? "hunt";
+      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "caught", deadline: "coming", partygoers: "chase", deathmoths: "swarm", wretch: "chase", drowned: "follow", monochrome: "hunt" }[kind] ?? "hunt";
       // where each one's face is, and how close to stand to it: pose it as
       // it comes for you, then find its head
       current.userData.animate?.(0.5, fake, "dark");

@@ -1019,6 +1019,12 @@ export function attendantMesh() {
     rig.rotation.y = following ? Math.PI : 0;
     neck.rotation.y = following ? Math.PI * 0.82 + twitch(time, entity.id + 2, 0.8, 0.12) : 0;
     head.rotation.z = following ? Math.PI * 0.12 + Math.sin(time * 0.9) * 0.12 : 0.35;
+    // caught you (the death screen): turned to you, the head come right up,
+    // and nothing under the cap but the two points
+    if (entity.state === "caught") {
+      neck.rotation.x = -0.35 + twitch(time, entity.id, 1.3, 0.1);
+      head.rotation.z = 0.25 + Math.sin(time * 0.9) * 0.08;
+    }
     body.rotation.y = twitch(time, entity.id + 4, 0.6, 0.15);
   };
   return group;
