@@ -71,17 +71,30 @@ feel that as relief.
 **Footsteps** are noise bursts shaped by posture: a run is short and bright,
 a crouch is low and soft. Stride length triggers them, not time.
 
-**Every entity has a voice:**
+**Every entity has a voice.** Most are synthesized; where a real throat
+is needed a CC0 or public-domain recording is layered on top (credits in
+`assets/sfx/CREDITS.md`), played at a different pitch each time and often
+slowed. If the recordings don't load, the synthesis plays alone.
 
 | Entity | Sound | How it's made |
 |--------|-------|---------------|
 | Smiler | wet clicking teeth | three short high bandpass bursts |
-| Hounds | panting, claws | two mid bandpass breaths and a click |
+| Hounds | panting, and now and then a growl under it | mid bandpass breaths and a click; a recorded growl at 0.7 speed |
 | Still Life | stone scraping on carpet | low bandpass drag and a high scratch |
 | Deathmoths | papery flutter | nine tiny high bursts in a ragged rhythm |
-| Partygoers | a cheerful tune through a wall, slightly flat | triangle arpeggio, lowpassed, with a kick |
+| Partygoers | a music box through the wall playing "Happy Birthday" | synthesized steel tines, a few beats per call, flatter and slower each time round |
 | Facelings | a thin rising whine | a sine sweep that gets louder as you stare |
+| Hushbaby | an infant crying in the wall; out of it, the same cry doubled an octave down | recorded cries, muffled and slowed in the wall |
+| The Wretch | a rasp; on sight a scream | recorded growl; recorded scream at 0.8 speed over a growl at 0.6 |
+| The Drowned | a wet retch | recorded burbles at 0.72 speed and drips |
+| (any, on sight) | the sting | a dissonant cluster, a noise slash, and a roar slowed to 0.55 |
+| (the building) | slams, a phone, steps, vents, moans far off | synthesized; the moans are recordings, lowpassed |
 | You | breath after a sprint | in and out noise bands, faster when spent |
+
+**The rooms.** Everything placed in the level is also sent to one shared
+reverb: an impulse made at start-up, 2.2 s of noise that darkens as it dies,
+a little different in each ear, like a long low office with soft walls. A
+limiter at the end keeps a scream over a chase from clipping.
 
 **Mixing rules:**
 
