@@ -1024,25 +1024,61 @@ export function attendantMesh() {
 export function deadlineMesh() {
   const group = new THREE.Group();
   const layers = [];
-  // a wall of dark across the whole corridor, facing you: three sheets of
-  // smoke one behind the other, and solid black behind them. It is wider
-  // than any corridor; the walls on either side cut it to the opening.
-  for (const [depth, speed, opacity] of [[0, 0.05, 0.7], [-0.7, -0.08, 0.85], [-1.4, 0.12, 0.95]]) {
-    const map = smoke(`deadline-${depth}`).clone();
+  // how much of each sheet shows: [across, up] -> 0..1; soft at the top, so
+  // the dark has no edge, and fading toward you on the crawling sheets
+  const fade = (fn) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const img = g.createImageData(64, 64);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        const v = Math.max(0, Math.min(1, fn(x / 63, 1 - y / 63))) * 255;
+        const i = (y * 64 + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return new THREE.CanvasTexture(c);
+  };
+  const softTop = fade((u, v) => Math.min(1, (1 - v) / 0.3));
+  const toward = fade((u, v) => Math.min(1, (1 - v) / 0.9) ** 1.5);
+  const sheet = (w, h, seed, opacity, alphaMap, repeat) => {
+    const map = smoke(seed).clone();
     map.needsUpdate = true;
-    map.repeat.set(4, 1);
-    const material = new THREE.MeshBasicMaterial({ map, color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, fog: false });
-    const shell = new THREE.Mesh(new THREE.PlaneGeometry(12, 3.6, 24, 1), material);
+    map.repeat.set(...repeat);
+    const material = new THREE.MeshBasicMaterial({ map, alphaMap, color: 0x000000, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, fog: false });
+    return { mesh: new THREE.Mesh(new THREE.PlaneGeometry(w, h, 24, 1), material), map };
+  };
+  // the dark itself: a dozen sheets of smoke one behind another, each thin,
+  // so it thickens the further in you look and has no surface to it. Wider
+  // than any corridor and taller than the ceiling; the walls cut it to the
+  // opening and the ceiling hides its top.
+  for (let i = 0; i < 12; i++) {
+    const depth = -0.2 - i * 0.42;
+    const { mesh, map } = sheet(12, 4.2, `deadline-${i % 4}`, 0.42 + i * 0.05, softTop, [2.2 + (i % 3) * 0.4, 1]);
     // a slow bulge toward you in the middle
-    const pos = shell.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.cos((pos.getX(i) / 12) * Math.PI) * 0.5);
-    shell.position.set(0, 1.7, depth);
-    group.add(shell);
-    layers.push({ map, speed, shell });
+    const pos = mesh.geometry.attributes.position;
+    for (let k = 0; k < pos.count; k++) pos.setZ(k, Math.cos((pos.getX(k) / 12) * Math.PI) * 0.4);
+    mesh.position.set(0, 1.9, depth);
+    group.add(mesh);
+    layers.push({ map, speed: (i % 2 ? -1 : 1) * (0.03 + (i % 5) * 0.02), shell: mesh, sway: 0.3 });
   }
-  const behind = new THREE.Mesh(new THREE.BoxGeometry(12, 3.6, 6), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }));
-  behind.position.set(0, 1.7, -4.6);
+  // past those, nothing at all
+  const behind = new THREE.Mesh(new THREE.PlaneGeometry(14, 7), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false, side: THREE.DoubleSide }));
+  behind.position.set(0, 2.5, -5.4);
   group.add(behind);
+  // and it gets to you first along the floor and the ceiling: black smoke
+  // crawling out ahead of the wall, thinning as it reaches
+  for (const [y, flip] of [[0.03, 1], [2.66, -1]]) {
+    const { mesh, map } = sheet(12, 3, `deadline-crawl-${y}`, 0.85, toward, [3, 1.2]);
+    mesh.rotation.x = -Math.PI / 2 * flip;
+    mesh.position.set(0, y, 1.3 * 1);
+    if (flip < 0) mesh.rotation.z = Math.PI;
+    group.add(mesh);
+    layers.push({ map, speed: 0.06 * flip, shell: mesh, sway: 0, crawl: true });
+  }
   // figures in the smoke: black silhouettes that fade in and out
   const figures = [0, 1].map((i) => {
     const figure = facelingsBody();
@@ -1058,10 +1094,11 @@ export function deadlineMesh() {
   });
   group.userData.animate = (time, entity) => {
     group.visible = entity.state === "coming";
-    for (const { map, speed, shell } of layers) {
+    for (const { map, speed, shell, sway, crawl } of layers) {
       map.offset.x = time * speed;
-      map.offset.y = Math.sin(time * 0.3 + speed * 10) * 0.05;
-      shell.position.x = Math.sin(time * 0.4 + speed * 20) * 0.3;
+      // the crawling smoke rolls toward you; the rest churns in place
+      map.offset.y = crawl ? -time * 0.08 : Math.sin(time * 0.3 + speed * 10) * 0.05;
+      shell.position.x = Math.sin(time * 0.4 + speed * 20) * sway;
     }
     figures.forEach((figure, i) => {
       const show = Math.max(0, Math.sin(time * 0.35 + i * 2.4) - 0.6) * 2.2;
