@@ -157,6 +157,20 @@ export function createAudio() {
     return node;
   }
 
+  // the body of a step: a low sine that drops in pitch as it dies
+  function thump(f, at, level, destination) {
+    const osc = ctx.createOscillator();
+    osc.frequency.setValueAtTime(f * 1.6, at);
+    osc.frequency.exponentialRampToValueAtTime(f * 0.7, at + 0.08);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(level, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.11);
+    osc.connect(g).connect(destination);
+    osc.start(at);
+    osc.stop(at + 0.13);
+  }
+  let stepSide = 1;
   // a music box tine: a bright fundamental with the inharmonic partials of
   // a struck steel tooth, a click, and a long ring
   function tine(f, at, level, destination) {
@@ -206,24 +220,38 @@ export function createAudio() {
     },
     // surface: "soft" (carpet), "hard" (concrete, tile, metal) or "water"
     footstep(running, crouching, surface = "soft") {
-      const level = crouching ? 0.05 : running ? 0.32 : 0.16;
+      // never quite the same step twice
+      const level = (crouching ? 0.05 : running ? 0.32 : 0.16) * (0.85 + Math.random() * 0.3);
       const t = ctx.currentTime;
+      // left, right, left: a little to each side, and a touch of the room
+      const feet = ctx.createStereoPanner();
+      feet.pan.value = (stepSide = -stepSide) * 0.12;
+      const room = ctx.createGain();
+      room.gain.value = 0.12;
+      feet.connect(master);
+      feet.connect(room).connect(send);
       if (surface === "water") {
         // ankle-deep: a slosh and a drip
-        burst({ duration: running ? 0.25 : 0.35, frequency: 900, q: 0.7, type: "bandpass", level: level * 1.3, at: t });
-        burst({ duration: 0.06, frequency: 2600 + Math.random() * 800, q: 6, type: "bandpass", level: level * 0.4, at: t + 0.12 });
+        burst({ duration: running ? 0.25 : 0.35, frequency: 900, q: 0.7, type: "bandpass", level: level * 1.3, at: t, destination: feet });
+        burst({ duration: 0.06, frequency: 2600 + Math.random() * 800, q: 6, type: "bandpass", level: level * 0.4, at: t + 0.12, destination: feet });
         return;
       }
       if (surface === "hard") {
         // a heel on concrete, and the room giving it back a moment later
-        burst({ duration: 0.05, frequency: 1800, q: 1.5, type: "bandpass", level: level * 1.1, at: t });
-        burst({ duration: 0.12, frequency: 400, level: level * 0.7, at: t });
-        burst({ duration: 0.05, frequency: 1500, q: 1.5, type: "bandpass", level: level * 0.25, at: t + 0.14 });
+        thump(95, t, level * 0.8, feet);
+        burst({ duration: 0.05, frequency: 1800, q: 1.5, type: "bandpass", level: level * 1.1, at: t, destination: feet });
+        burst({ duration: 0.12, frequency: 400, level: level * 0.7, at: t, destination: feet });
+        burst({ duration: 0.05, frequency: 1500, q: 1.5, type: "bandpass", level: level * 0.25, at: t + 0.14, destination: feet });
         return;
       }
-      burst({ duration: running ? 0.12 : 0.18, frequency: crouching ? 300 : 520, level, at: t });
-      // the damp squelch under it
-      burst({ duration: 0.09, frequency: 1600, q: 4, type: "bandpass", level: level * 0.25, at: t + 0.03 });
+      // carpet: the heel lands (a soft low thud), the foot rolls, the toe
+      // follows, and the pile scuffs under it, damp
+      const roll = running ? 0.05 : crouching ? 0.14 : 0.09;
+      thump(crouching ? 60 : 75, t, level * (crouching ? 0.5 : 0.75), feet);
+      burst({ duration: running ? 0.08 : 0.11, frequency: crouching ? 260 : 420, level: level * 0.8, at: t, destination: feet });
+      burst({ duration: 0.07, frequency: 340, level: level * 0.45, at: t + roll, destination: feet });
+      burst({ duration: 0.05, frequency: 2800, q: 1.2, type: "bandpass", level: level * 0.12, at: t + roll * 0.6, destination: feet });
+      burst({ duration: 0.09, frequency: 1600, q: 4, type: "bandpass", level: level * 0.18, at: t + 0.03, destination: feet });
     },
     flickerTick(x, y, z) {
       burst({ duration: 0.04, frequency: 3000, q: 6, type: "bandpass", level: 0.25, destination: panner(x, y, z, 1.5) });
