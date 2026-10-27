@@ -66,6 +66,8 @@ let time = 0;
 let frames = 0;
 // walk=1.5: the thing moves forward at that speed (the model stays put), for legs
 const walking = Number(q.get("walk") ?? 0);
+// standing still in the studio is posing for the picture, unless it walks
+entity.posing = !walking;
 function frame() {
   time += 1 / 30;
   entity.z += walking / 30;

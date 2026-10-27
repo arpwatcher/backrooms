@@ -58,7 +58,7 @@ export function createPortrait() {
     under.position.set(at.x, fy - 0.9, fz + 0.6);
     rim.position.set(at.x - 0.8, fy + 0.6, fz - 0.5);
   }
-  const fake = { id: 7, state: "hunt", facing: 0, head: 0, stare: 3, pace: 4, x: 0, z: 0, memory: {} };
+  const fake = { id: 7, state: "hunt", facing: 0, head: 0, stare: 3, pace: 4, x: 0, z: 0, posing: true, memory: {} };
   return {
     camera,
     scene,

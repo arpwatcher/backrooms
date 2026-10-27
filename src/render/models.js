@@ -122,8 +122,19 @@ export function modelInstance(name, { clipFor = () => "idle", speedFor = () => 1
   const rest = new Map([...bones].map(([n, b]) => [n, b.quaternion.clone()]));
   group.userData.body = body;
   group.userData.bone = bone;
+  // how long it has been going nowhere, for walks and runs that aren't
+  let lx = null, lz = 0, lt = 0, still = 0;
   group.userData.animate = (time, entity) => {
-    const want = clipFor(entity) ?? "idle";
+    if (lx !== null && time > lt) {
+      const d = Math.hypot(entity.x - lx, entity.z - lz);
+      if (d < 2) still = d / (time - lt) < 0.15 ? still + (time - lt) : 0;
+    }
+    [lx, lz, lt] = [entity.x, entity.z, time];
+    let want = clipFor(entity) ?? "idle";
+    // a walk or run that isn't getting anywhere (against a wall, held by
+    // the game) stands instead of running on the spot; a pose held for a
+    // picture (the death screen) is left as it is
+    if ((want === "walk" || want === "run") && still > 0.35 && actions.idle && !entity.posing) want = "idle";
     if (want !== current && actions[want]) {
       const next = actions[want];
       next.reset().play();
