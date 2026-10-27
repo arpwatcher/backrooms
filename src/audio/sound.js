@@ -48,7 +48,7 @@ export function createAudio() {
   send.connect(reverb).connect(wet).connect(master);
 
   // --- recordings, fetched in the background; each name is a group of takes
-  const SAMPLES = { growl: 6, scream: 2, gurgle: 2, roar: 1, moan: 4, cry: 6 };
+  const SAMPLES = { growl: 6, scream: 2, gurgle: 2, roar: 1, moan: 4, cry: 6, chew: 3 };
   const takes = new Map();
   const sfxBase = new URL("../../assets/sfx/", import.meta.url);
   for (const [group, n] of Object.entries(SAMPLES)) {
@@ -247,8 +247,10 @@ export function createAudio() {
       const detune = 0.94 + Math.random() * 0.12;
       const burst = (options) => noiseBurst({ ...options, frequency: options.frequency * detune });
       if (sound === "teeth") {
+        // wet chewing in the dark, slowed, and the teeth meeting over it
+        const chewed = sample("chew", dest, { rate: 0.8, level: 0.45 * volume, lowpass: 5000 });
         for (let i = 0; i < 3; i++) {
-          burst({ duration: 0.03, frequency: 4200 + i * 300, q: 10, type: "bandpass", level: 0.5 * volume, at: t + i * 0.09, destination: dest });
+          burst({ duration: 0.03, frequency: 4200 + i * 300, q: 10, type: "bandpass", level: (chewed ? 0.3 : 0.5) * volume, at: t + i * 0.09, destination: dest });
         }
       } else if (sound === "panting") {
         for (let i = 0; i < 2; i++) {
