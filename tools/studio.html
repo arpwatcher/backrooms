@@ -64,8 +64,11 @@ scene.add(mesh);
 const entity = { id: 3, state, facing: 0, head: 0, stare: 2, x: 0, z: 0, memory: {} };
 let time = 0;
 let frames = 0;
+// walk=1.5: the thing moves forward at that speed (the model stays put), for legs
+const walking = Number(q.get("walk") ?? 0);
 function frame() {
   time += 1 / 30;
+  entity.z += walking / 30;
   mesh.userData.animate?.(time, entity, panel > 0.5 ? "lit" : "dark");
   post.render(scene, camera, { time, fear: Number(q.get("fear") ?? 0) });
   window.__frames = ++frames;

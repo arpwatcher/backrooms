@@ -460,6 +460,56 @@ export function deathmothsMesh() {
 }
 
 
+// Distance actually covered, for legs: a stride that matches the ground
+// going by, so nothing walks on the spot or slides with its feet still.
+function gait() {
+  let lx = null, lz = 0, lt = 0, stride = 0, speed = 0;
+  return (time, e) => {
+    if (lx !== null) {
+      const d = Math.hypot(e.x - lx, e.z - lz);
+      const dt = time - lt;
+      // a jump (retreat, teleport) or a paused clock is not a step
+      if (dt > 0 && d < 2) {
+        stride += d;
+        speed += (d / dt - speed) * Math.min(1, dt * 8);
+      }
+    }
+    lx = e.x;
+    lz = e.z;
+    lt = time;
+    return { stride, speed };
+  };
+}
+
+// a leg on a hip pivot with a knee pivot under it, built from absolute
+// points [hip, knee, ankle] so the meshes can be made as before
+function leg(parent, hip, knee, ankle, { thigh, shin, material, foot }) {
+  const hipPivot = new THREE.Group();
+  hipPivot.position.set(...hip);
+  parent.add(hipPivot);
+  const rel = (p, o) => [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  hipPivot.add(new THREE.Mesh(tube([[0, 0, 0], rel(mid(hip, knee), hip), rel(knee, hip)], thigh, 0.75, 10), material));
+  const kneePivot = new THREE.Group();
+  kneePivot.position.set(...rel(knee, hip));
+  hipPivot.add(kneePivot);
+  kneePivot.add(new THREE.Mesh(tube([[0, 0, 0], rel(mid(knee, ankle), knee), rel(ankle, knee)], shin, 0.75, 10), material));
+  foot.position.set(...rel(ankle, knee));
+  foot.position.y -= 0.01;
+  foot.position.z += 0.06;
+  kneePivot.add(foot);
+  return { hip: hipPivot, knee: kneePivot };
+}
+// swing a pair of legs: hips forward and back, the trailing knee bent
+function walk(legs, stride, amount, rate = 3.2) {
+  const swing = Math.sin(stride * rate) * amount;
+  legs[0].hip.rotation.x = swing;
+  legs[1].hip.rotation.x = -swing;
+  legs[0].knee.rotation.x = Math.max(0, -swing) * 1.4;
+  legs[1].knee.rotation.x = Math.max(0, swing) * 1.4;
+  return swing;
+}
+
 // A guest who has been at the party far too long. Too tall, waxy yellow
 // skin stretched thin, a neck that keeps going, and a face that is all
 // smile: carved too wide, with small wet black eyes above it. It holds its
@@ -571,14 +621,12 @@ export function partygoersMesh() {
   const left = arm(-0.27);
   const right = arm(0.27);
   // long legs: thick thighs into the hips, knees, thin shins, flat feet
-  for (const x of [-0.1, 0.1]) {
-    group.add(new THREE.Mesh(tube([[x, 1.0, 0], [x * 1.05, 0.7, 0.03], [x * 1.05, 0.46, 0.04]], 0.095, 0.7, 10), wax));
-    group.add(new THREE.Mesh(tube([[x * 1.05, 0.46, 0.04], [x, 0.22, 0.01], [x, 0.04, 0]], 0.062, 0.75, 10), wax));
+  const legs = [-0.1, 0.1].map((x) => {
     const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), wax);
     foot.scale.set(0.9, 0.5, 2);
-    foot.position.set(x, 0.03, 0.06);
-    group.add(foot);
-  }
+    return leg(group, [x, 1.0, 0], [x * 1.05, 0.46, 0.04], [x, 0.04, 0], { thigh: 0.095, shin: 0.062, material: wax, foot });
+  });
+  const steps = gait();
   const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0xc8202a, emissive: 0x300508, roughness: 0.25 }));
   balloon.scale.y = 1.2;
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.55, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
@@ -588,6 +636,9 @@ export function partygoersMesh() {
   group.userData.animate = (time, entity) => {
     const chasing = entity.state === "chase";
     const sway = Math.sin(time * 1.7 + entity.id);
+    // stiff long strides, too even, like being walked by something else
+    const { stride, speed } = steps(time, entity);
+    walk(legs, stride, Math.min(0.55, speed * 0.2), 2.6);
     body.rotation.x = chasing ? 0.28 : 0;
     left.rotation.z = entity.state === "greet" ? -2.6 + Math.sin(time * 12) * 0.5 : -0.05 + sway * 0.05;
     right.rotation.z = 0.05 - sway * 0.05;
@@ -956,17 +1007,15 @@ export function attendantMesh() {
   head.add(cap, peak);
   // long thin legs with a knee that bends a little the wrong way
   const boot = fleshMaterial({ color: 0x17140f, roughness: 0.6, rim: 0x101010 });
-  for (const x of [-0.11, 0.11]) {
-    body.add(new THREE.Mesh(tube([[x, 1.14, 0.02], [x, 0.85, 0.0], [x, 0.6, -0.06]], 0.075, 0.8, 8), overalls));
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), overalls);
-    knee.position.set(x, 0.6, -0.05);
-    body.add(knee);
-    body.add(new THREE.Mesh(tube([[x, 0.6, -0.06], [x, 0.32, -0.01], [x, 0.08, 0.02]], 0.055, 0.8, 8), overalls));
+  const legs = [-0.11, 0.11].map((x) => {
     const foot = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.07, 10, 8), { amount: 0.005 }), boot);
     foot.scale.set(0.9, 0.6, 1.7);
-    foot.position.set(x, 0.05, 0.06);
-    body.add(foot);
-  }
+    const l = leg(body, [x, 1.14, 0.02], [x, 0.6, -0.06], [x, 0.08, 0.02], { thigh: 0.075, shin: 0.055, material: overalls, foot });
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), overalls);
+    l.knee.add(knee);
+    return l;
+  });
+  const steps = gait();
   // arms down to the mop handle, too long
   const arms = [-0.24, 0.24].map((x) => {
     const pivot = new THREE.Group();
@@ -1010,6 +1059,9 @@ export function attendantMesh() {
   group.userData.animate = (time, entity) => {
     const following = entity.state === "follow";
     const pace = following ? 6 : 2.2;
+    // a short dragging shuffle, the boots barely leaving the floor
+    const { stride, speed } = steps(time, entity);
+    walk(legs, stride, Math.min(0.3, speed * 0.15), 4.2);
     mop.position.x = Math.sin(time * pace + entity.id) * 0.25;
     mop.rotation.z = Math.sin(time * pace + entity.id) * 0.3;
     arms.forEach((arm) => (arm.rotation.z = Math.sin(time * pace + entity.id) * 0.25));
