@@ -157,6 +157,29 @@ export function createAudio() {
     return node;
   }
 
+  // a music box tine: a bright fundamental with the inharmonic partials of
+  // a struck steel tooth, a click, and a long ring
+  function tine(f, at, level, destination) {
+    for (const [ratio, amount, decay] of [[1, 1, 1.6], [3.01, 0.22, 0.7], [5.93, 0.1, 0.35]]) {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = f * ratio;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(level * amount, at + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + decay);
+      osc.connect(g).connect(destination);
+      osc.start(at);
+      osc.stop(at + decay + 0.05);
+    }
+    noiseBurst({ duration: 0.006, frequency: 4200, q: 2, type: "bandpass", level: level * 0.5, at, destination });
+  }
+  // "Happy Birthday" (public domain) as [midi note, beats]
+  const BIRTHDAY = [[67, 0.75], [67, 0.25], [69, 1], [67, 1], [72, 1], [71, 2],
+    [67, 0.75], [67, 0.25], [69, 1], [67, 1], [74, 1], [72, 2],
+    [67, 0.75], [67, 0.25], [79, 1], [76, 1], [72, 1], [71, 1], [69, 2],
+    [77, 0.75], [77, 0.25], [76, 1], [72, 1], [74, 1], [72, 3]];
+  const party = { cursor: 0, round: 0 };
+
   const burst = noiseBurst;
   let voiceNode = null;
   let chaseNode = null;
@@ -240,26 +263,25 @@ export function createAudio() {
           burst({ duration: 0.025, frequency: 2200 + ((i * 431) % 1800), q: 1.2, type: "bandpass", level: 0.22 * volume, at: t + i * 0.045 + (i % 3) * 0.01, destination: dest });
         }
       } else if (sound === "party") {
-        // a cheerful little tune through a wall, a beat too slow
+        // a music box through the wall playing "Happy Birthday", a few beats
+        // per call, carrying on where it left off: too slow, a little flat,
+        // the spring wobbling, and each time round it winds down further
         const muffle = ctx.createBiquadFilter();
         muffle.type = "lowpass";
-        muffle.frequency.value = 700;
+        muffle.frequency.value = 1500;
         muffle.connect(dest);
-        const notes = [523.25, 659.25, 783.99, 659.25];
-        notes.forEach((f, i) => {
-          const at = t + i * 0.42;
-          const osc = ctx.createOscillator();
-          osc.type = "triangle";
-          osc.frequency.value = f * 0.985 * detune;
-          const g = ctx.createGain();
-          g.gain.setValueAtTime(0.0001, at);
-          g.gain.exponentialRampToValueAtTime(0.16 * volume, at + 0.02);
-          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.38);
-          osc.connect(g).connect(muffle);
-          osc.start(at);
-          osc.stop(at + 0.4);
-        });
-        for (let i = 0; i < 4; i++) burst({ duration: 0.09, frequency: 90, q: 1, type: "lowpass", level: 0.35 * volume, at: t + i * 0.42, destination: dest });
+        let at = t;
+        let beats = 0;
+        while (beats < 3) {
+          const [note, length] = BIRTHDAY[party.cursor];
+          const tired = 1 + party.round * 0.06 + Math.random() * 0.03;
+          const pitch = 440 * 2 ** ((note - 69) / 12) * (0.985 - party.round * 0.006) * (1 + (Math.random() - 0.5) * 0.012);
+          tine(pitch, at, 0.2 * volume, muffle);
+          at += length * 0.6 * tired;
+          beats += length;
+          party.cursor = (party.cursor + 1) % BIRTHDAY.length;
+          if (party.cursor === 0) party.round = (party.round + 1) % 6;
+        }
       } else if (sound === "whine") {
         // a thin rising tone, like a held breath through the nose
         const osc = ctx.createOscillator();
