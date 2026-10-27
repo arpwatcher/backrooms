@@ -583,6 +583,8 @@ export function partygoersMesh() {
   balloon.scale.y = 1.2;
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.55, 3), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
   group.add(balloon, string);
+  // what the death screen frames
+  group.userData.face = head;
   group.userData.animate = (time, entity) => {
     const chasing = entity.state === "chase";
     const sway = Math.sin(time * 1.7 + entity.id);
@@ -874,6 +876,8 @@ export function hushbabyMesh() {
     body.add(pivot);
     limbs.push(pivot);
   }
+  // what the death screen frames
+  group.userData.face = head;
   group.userData.animate = (time, entity) => {
     // in the wall it is only a voice; you see it when it comes out
     group.visible = entity.state === "coming";
@@ -1001,6 +1005,8 @@ export function attendantMesh() {
   const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.3, 14), fleshMaterial({ skin: skin({ base: "#6a5a1a", blotch: "rgba(30,25,5,0.6)", veins: null, grime: 0.8, pores: 0, seed: "bucket" }), roughness: 0.5, rim: 0x2a2408 }));
   bucket.position.set(-0.45, 0.15, 0.25);
   rig.add(bucket);
+  // what the death screen frames
+  group.userData.face = head;
   group.userData.animate = (time, entity) => {
     const following = entity.state === "follow";
     const pace = following ? 6 : 2.2;
@@ -1253,8 +1259,9 @@ export function wretchMesh() {
 // Without the model he is the wretch's fallback figure, soaked dark.
 export function drownedMesh() {
   const model = modelInstance("drowned", {
-    clipFor: (e) => (e.state === "follow" ? (e.pace > 3 ? "run" : "walk") : e.state === "still" ? "retch" : "walk"),
-    speedFor: (e) => (e.state === "follow" ? (e.pace > 3 ? 1.1 : Math.max(0.4, e.pace / 1.9)) : e.state === "wander" ? 0.4 : 1),
+    clipFor: (e) => (e.state === "follow" ? ((e.pace ?? 0) > 3 ? "run" : "walk") : e.state === "still" ? "retch" : "walk"),
+    // a missing pace would make the speed NaN and fold every bone to nothing
+    speedFor: (e) => (e.state === "follow" ? ((e.pace ?? 0) > 3 ? 1.1 : Math.max(0.4, (e.pace ?? 0) / 1.9)) : e.state === "wander" ? 0.4 : 1),
   });
   if (!model) return wretchMesh();
   // the poolrooms are bright and the flashlight finds him: wash most of the
