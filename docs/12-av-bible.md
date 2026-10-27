@@ -68,8 +68,12 @@ lowpass, plus a room tone of filtered noise. It never stops, except on a
 **silent hum** rule shift. A mercy period softens it, and players learn to
 feel that as relief.
 
-**Footsteps** are noise bursts shaped by posture: a run is short and bright,
-a crouch is low and soft. Stride length triggers them, not time.
+**Footsteps** are built like a real step: the heel lands (a low thud that
+drops in pitch), the foot rolls, the toe follows, and the carpet pile
+scuffs, damp. A run rolls quickly, a crouch slowly and quietly. Concrete
+adds a hard heel and a slap back from the room; water sloshes. No two
+steps are the same, left and right sit a little to each side, and a touch
+of the reverb puts them in the room. Stride length triggers them, not time.
 
 **Every entity has a voice.** Most are synthesized; where a real throat
 is needed a CC0 or public-domain recording is layered on top (credits in
@@ -78,7 +82,7 @@ slowed. If the recordings don't load, the synthesis plays alone.
 
 | Entity | Sound | How it's made |
 |--------|-------|---------------|
-| Smiler | wet clicking teeth | three short high bandpass bursts |
+| Smiler | wet chewing and clicking teeth | recorded chewing at 0.8 speed under three short high bandpass bursts |
 | Hounds | panting, and now and then a growl under it | mid bandpass breaths and a click; a recorded growl at 0.7 speed |
 | Still Life | stone scraping on carpet | low bandpass drag and a high scratch |
 | Deathmoths | papery flutter | nine tiny high bursts in a ragged rhythm |
