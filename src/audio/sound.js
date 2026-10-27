@@ -48,7 +48,7 @@ export function createAudio() {
   send.connect(reverb).connect(wet).connect(master);
 
   // --- recordings, fetched in the background; each name is a group of takes
-  const SAMPLES = { growl: 6, scream: 2, gurgle: 2, roar: 1, moan: 4 };
+  const SAMPLES = { growl: 6, scream: 2, gurgle: 2, roar: 1, moan: 4, cry: 6 };
   const takes = new Map();
   const sfxBase = new URL("../../assets/sfx/", import.meta.url);
   for (const [group, n] of Object.entries(SAMPLES)) {
@@ -273,6 +273,12 @@ export function createAudio() {
         osc.connect(g).connect(dest);
         osc.start(t);
         osc.stop(t + 0.5);
+      } else if (sound === "cry" && volume < 1 && sample("cry", dest, { rate: 0.93, spread: 0.04, level: 0.8 * volume, lowpass: 900 })) {
+        // a real infant, through plasterboard, a little too slow
+      } else if (sound === "cry" && sample("cry", dest, { rate: 0.86, spread: 0.04, level: 0.85 * volume })) {
+        // out of the wall: nothing between you and it now, and under the
+        // cry the same cry again, far lower, in a voice no baby has
+        sample("cry", dest, { rate: 0.5, spread: 0.02, level: 0.35 * volume, lowpass: 1400 });
       } else if (sound === "cry") {
         // a thin wavering wail, muffled as if through plasterboard
         const osc = ctx.createOscillator();

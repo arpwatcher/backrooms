@@ -418,9 +418,9 @@ try {
   });
   check(voices === 19, "every entity voice and player sound plays without an error");
   // the recordings come in the background; give them a moment
-  await page.waitForFunction(() => Object.values(window.__noclip.audio.recordings).reduce((a, b) => a + b, 0) >= 15, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => Object.values(window.__noclip.audio.recordings).reduce((a, b) => a + b, 0) >= 21, null, { timeout: 20000 }).catch(() => {});
   const recordings = await page.evaluate(() => window.__noclip.audio.recordings);
-  check(Object.values(recordings).reduce((a, b) => a + b, 0) === 15, `the recorded growls, screams, gurgles, roar and moans load (${JSON.stringify(recordings)})`);
+  check(Object.values(recordings).reduce((a, b) => a + b, 0) === 21, `the recorded growls, screams, gurgles, roar, moans and cries load (${JSON.stringify(recordings)})`);
   // co-op over real webrtc: two more game pages on different seeds; an invite
   // code one way and an answer back, and the guest ends up in the host's
   // level, with the host's monsters where the host has them
