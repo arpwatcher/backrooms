@@ -1104,6 +1104,11 @@ export function deadlineMesh() {
     group.add(figure);
     return figure;
   });
+  // only when it has you: two dull points where the first one's eyes are
+  const gaze = eyes({ color: 0xb8a890, spacing: 0.07, size: 0.007, halo: 0.07, intensity: 0.8 });
+  gaze.position.set(0, 1.8, 0.11);
+  gaze.visible = false;
+  figures[0].add(gaze);
   group.userData.animate = (time, entity) => {
     group.visible = entity.state === "coming";
     for (const { map, speed, shell, sway, crawl } of layers) {
@@ -1112,12 +1117,18 @@ export function deadlineMesh() {
       map.offset.y = crawl ? -time * 0.08 : Math.sin(time * 0.3 + speed * 10) * 0.05;
       shell.position.x = Math.sin(time * 0.4 + speed * 20) * sway;
     }
+    // caught you (the death screen): the first of them is right at the edge
+    // of the dark, in front of you, looking
+    const caught = entity.state === "caught";
+    group.visible ||= caught;
+    gaze.visible = caught;
+    if (caught) figures[0].position.set(0, 0, 0.9);
     figures.forEach((figure, i) => {
-      const show = Math.max(0, Math.sin(time * 0.35 + i * 2.4) - 0.6) * 2.2;
+      const show = caught && i === 0 ? 1 : Math.max(0, Math.sin(time * 0.35 + i * 2.4) - 0.6) * 2.2;
       figure.traverse((o) => {
         if (o.material) o.material.opacity = Math.min(0.9, show);
       });
-      figure.rotation.y = Math.sin(time * 0.2 + i) * 0.6;
+      figure.rotation.y = caught && i === 0 ? 0 : Math.sin(time * 0.2 + i) * 0.6;
     });
   };
   return group;

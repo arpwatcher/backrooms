@@ -10,7 +10,7 @@ import { MESHES } from "./entities.js";
 const FIXED = {
   smiler: [1.62, 0.3, 1.3],
   deathmoths: [1.7, 0, 1.6],
-  deadline: [1.5, 0, 2.2],
+  deadline: [1.93, 1.0, 1.3],
 };
 // Everything else is framed on its head: a real model's head (or jaw) bone,
 // or the group a built one marks as userData.face. [how far above it, how far
@@ -71,7 +71,7 @@ export function createPortrait() {
       });
       scene.add(current);
       // states that look like it's coming for you
-      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "caught", deadline: "coming", partygoers: "chase", deathmoths: "swarm", wretch: "chase", drowned: "follow", monochrome: "hunt" }[kind] ?? "hunt";
+      fake.state = { smiler: "approach", hounds: "hunt", stillLife: "frozen", facelings: "offended", stilts: "stride", hushbaby: "coming", attendant: "caught", deadline: "caught", partygoers: "chase", deathmoths: "swarm", wretch: "chase", drowned: "follow", monochrome: "hunt" }[kind] ?? "hunt";
       // where each one's face is, and how close to stand to it: pose it as
       // it comes for you, then find its head
       current.userData.animate?.(0.5, fake, "dark");
