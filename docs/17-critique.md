@@ -18,12 +18,36 @@ lit and in the dark.
 2. **The PS1-era models are low-poly up close.** The hound, the Drowned and
    Monochrome hold up at running distance and their textures are now
    smoothed, but on the death screen you can count the polygons.
-3. **Dark levels hide their monster entirely without the flashlight.** On
+3. **Sound is still mostly synthesis.** Real recordings now carry the
+   growls, screams, the Drowned's gurgle, distant moans and the Hushbaby's
+   cry, all in a reverb; footsteps, the Smiler's teeth, the moths and the
+   party tune are still synthesized and are next if good CC0 takes turn up.
+4. **Dark levels hide their monster entirely without the flashlight.** On
    levels 2, 8 and 12 the "lit" shot is nearly black; fair, since the light
    is the counter, but the Hounds now have eyeshine and the others could use
    a tell of their own that reads in the dark.
 
 ## Fixed
+
+- 2026-10-27: Deadline reading as a black screen across the corridor. It
+  was a solid box behind three smoke sheets; now a dozen thin sheets pile
+  up to black with no surface and a soft top, and smoke crawls out ahead of
+  it along the floor and the ceiling.
+- 2026-10-27: death screens showing a chest, a hand or nothing. The framing
+  was set by hand for the old built monsters; the camera now finds the head
+  (a model's head or jaw bone, or the face a built one marks) and follows
+  it while the clip moves it. The Drowned had vanished there (a NaN clip
+  speed). The Attendant turns round and lifts his empty face to you, and
+  Deadline is the dark with two dull points looking out of it.
+  `tools/portraits.mjs` shoots them all.
+- 2026-10-27: the Partygoers and the Attendant sliding on still legs, and
+  Stilts walking by a clock. Their legs swing with the ground they actually
+  cover, and a model whose walk or run gets nowhere stands instead of
+  running on the spot.
+- 2026-10-26 (afternoon): monsters snapping a right angle at every corner;
+  they ease along their path and turn at a set rate (Still Life still
+  snaps). Jagged edges (4x MSAA through the post pass) and faceted, open
+  ended limbs (rounder tubes, capped).
 
 - 2026-10-26: the Hushbaby like a white plastic ant. It is a fat dead
   infant now, grey going blue and bruised, held up on arms with a high
