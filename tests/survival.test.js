@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stepLucidity, stageOf, LUCIDITY } from "../src/game/lucidity.js";
-import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, LOW } from "../src/game/flashlight.js";
+import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, LOW, interference, INTERFERENCE_RANGE } from "../src/game/flashlight.js";
 import { createRun, levelSeed, descend, checkpointFor, drinkAlmondWater } from "../src/game/run.js";
 import { createPlayer } from "../src/game/player.js";
 
@@ -55,6 +55,25 @@ test("a low battery browns the beam out", () => {
   assert.ok(beamStrength(light, 0.1) < 1);
   light.on = false;
   assert.equal(beamStrength(light, 0), 0);
+});
+
+test("something hunting close by makes a full beam stutter, more the closer it is", () => {
+  const light = toggleFlashlight(createFlashlight());
+  const dark = (near) => {
+    let n = 0;
+    for (let t = 0; t < 60; t += 0.01) if (beamStrength(light, t, near) < 0.5) n++;
+    return n;
+  };
+  assert.equal(dark(0), 0, "nothing near: a steady beam");
+  assert.ok(dark(0.3) > 0, "something near: it drops out now and then");
+  assert.ok(dark(0.9) > dark(0.3) * 1.5, "closer: it drops out much more");
+});
+
+test("only things hunting you, and only within range, interfere", () => {
+  assert.equal(interference([{ x: 3, z: 0, hunting: false }], 0, 0), 0);
+  assert.equal(interference([{ x: INTERFERENCE_RANGE + 1, z: 0, hunting: true }], 0, 0), 0);
+  assert.ok(Math.abs(interference([{ x: INTERFERENCE_RANGE / 2, z: 0, hunting: true }], 0, 0) - 0.5) < 1e-9);
+  assert.equal(interference([], 0, 0), 0);
 });
 
 test("each level has its own seed, chained from the run", () => {

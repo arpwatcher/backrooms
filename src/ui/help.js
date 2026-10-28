@@ -22,6 +22,7 @@ export const TIPS = [
   "notes on the walls were left by people who came before you",
   "lockers stand in dead ends: crouch inside one and nothing that hunts by sight can see you",
   "to play with friends: Esc, then co-op - you swap two codes by any chat",
+  "if your flashlight starts to stutter with a full battery, something is hunting you, and it's close",
 ];
 
 export function createHelp() {

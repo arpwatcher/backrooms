@@ -22,7 +22,7 @@ import { createPlayer, stepPlayer } from "./game/player.js";
 import { createInput } from "./game/input.js";
 import { createAudio } from "./audio/sound.js";
 import { stepLucidity } from "./game/lucidity.js";
-import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recharge } from "./game/flashlight.js";
+import { createFlashlight, toggleFlashlight, stepFlashlight, beamStrength, recharge, interference } from "./game/flashlight.js";
 import { createRun, levelSeed, descend, drinkAlmondWater } from "./game/run.js";
 import { createHud } from "./ui/hud.js";
 import { createPost } from "./render/post.js";
@@ -923,7 +923,9 @@ function frame() {
   const unease = Math.max(0, 0.6 - player.lucidity);
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
   camera.updateProjectionMatrix();
-  beam.intensity = beamStrength(flashlight, time) * 20;
+  // something hunting close by makes the light stutter
+  const near = interference(level.encounter.entities.map((e) => ({ x: e.x, z: e.z, hunting: Boolean(e.def.hunting?.(e)) })), player.x, player.z);
+  beam.intensity = beamStrength(flashlight, time, near) * 20;
   adaptBeam();
 
   applyShiftToLights(time);
