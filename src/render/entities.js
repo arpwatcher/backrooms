@@ -48,15 +48,46 @@ let grin = null;
 // almost nothing; in the dark it's a hole in the room with teeth in it.
 export function smilerMesh() {
   const group = new THREE.Group();
-  const shade = fleshMaterial({ skin: skin({ base: "#0c0a09", blotch: "rgba(40,10,10,0.5)", veins: "rgba(30,20,40,0.6)", grime: 0.3, seed: "smiler" }), rim: 0x2a1410, rimPower: 1.8, roughness: 0.95 });
-  shade.transparent = true;
+  // not a body: a darkness the shape of one, with no edge. A small dense
+  // core, then soft sheets of black smoke round it, always turned to you,
+  // thinning to nothing at the rim, so the light finds no surface on it
   const body = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 28, 22), {
     amount: 0.08, scale: 3, seed: 11,
     along: (v) => (v.y < -0.2 ? -0.12 * (-0.2 - v.y) * 4 : 0),
-  }), shade);
-  body.scale.set(0.85, 2.1, 0.7);
-  body.position.y = 1.15;
+  }), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true }));
+  body.scale.set(0.34, 1.3, 0.3);
+  body.position.y = 1.2;
   group.add(body);
+  const veil = new THREE.Group();
+  veil.position.y = 1.2;
+  group.add(veil);
+  const softEdge = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const img = g.createImageData(64, 64);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        // tall and soft: a body-shaped falloff, heavier toward the floor
+        const dx = (x - 31.5) / 31.5, dy = (y - 31.5) / 31.5;
+        const v = Math.max(0, 1 - Math.hypot(dx * (1.1 + Math.max(0, -dy) * 0.4), dy)) ** 1.4 * 255;
+        const i = (y * 64 + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return new THREE.CanvasTexture(c);
+  })();
+  const sheets = [0, 1, 2, 3].map((i) => {
+    const map = smoke(`smiler-${i % 2}`).clone();
+    map.needsUpdate = true;
+    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1.5 - i * 0.12, 2.6 - i * 0.15), new THREE.MeshBasicMaterial({ map, alphaMap: softEdge, color: 0x000000, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    // in front of the core, behind the face
+    sheet.position.z = 0.24 - i * 0.04;
+    veil.add(sheet);
+    return { sheet, map, speed: (i % 2 ? -1 : 1) * (0.04 + i * 0.015) };
+  });
   const face = new THREE.Group();
   face.position.set(0, 1.62, 0.3);
   group.add(face);
@@ -97,9 +128,15 @@ export function smilerMesh() {
   gaze.position.y = 0.2;
   face.add(gaze);
   group.userData.animate = (time, entity, light) => {
+    // the veil churns, and always faces you (the group faces the player)
+    for (const { map, speed } of sheets) {
+      map.offset.x = time * speed;
+      map.offset.y = Math.sin(time * 0.4 + speed * 30) * 0.05;
+    }
     const lit = light === "lit";
     // nearly nothing in the light; a hole in the room in the dark
-    shade.opacity = lit ? 0.12 : 0.97;
+    body.material.opacity = lit ? 0.1 : 0.97;
+    sheets.forEach(({ sheet }) => (sheet.material.opacity = lit ? 0.08 : 0.8));
     toothMaterial.emissiveIntensity = lit ? 0.05 : 0.55;
     gaze.userData.setOpen(lit ? 0.2 : 1);
     const flinch = entity.state === "flinch";
@@ -108,6 +145,7 @@ export function smilerMesh() {
     const hunting = entity.state === "approach";
     face.scale.x = (flinch ? 0.75 : 1) * (hunting ? 1.25 + Math.sin(time * 3) * 0.05 : 1);
     body.rotation.z = Math.sin(time * 0.7 + entity.id) * 0.05 + twitch(time, entity.id, 1.2, 0.12);
+    veil.rotation.z = body.rotation.z * 0.6;
     face.position.x = twitch(time, entity.id + 5, 2.2, 0.06);
     // closing in, the jaws part: the lower teeth drop away from the upper
     const gape = hunting ? 0.03 + Math.max(0, Math.sin(time * 1.7 + entity.id)) * 0.06 : 0;
