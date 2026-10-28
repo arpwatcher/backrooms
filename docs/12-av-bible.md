@@ -33,6 +33,16 @@ measured against it.
   mannequin posture, the Deathmoths' cloud, the Partygoer's balloon and paper hat,
   the Faceling's grey wrappings, the Hushbaby's arms with their elbows
   above its back, and the Attendant bent double over his mop.
+- **The flashlight is a real one.** Its light comes through a painted
+  cookie: a hot centre, the reflector's bright and dark rings, a long soft
+  spill and dust on the lens. On a machine that can afford it (it watches
+  its own frame rate) it casts shadows, and only the monsters cast them, so
+  a thing in your beam throws itself on the wall behind it. Within 12 m of
+  anything hunting you, it stutters, more the closer it is.
+- **The rooms are worn.** Papered walls have a skirting board, sockets low
+  down and the odd vent grille; each level's ceiling has its own water
+  stains and a missing tile here and there; every panel spills a soft haze
+  over the tiles round it that dies with the panel.
 - **Every entity has one thing that reads in the dark** (see the table
   below), so a dead level hides the body but never the warning.
 - **Low lucidity distorts what you see, never the rules.** It brings

@@ -29,6 +29,16 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-28: the flashlight a hard white disc. It has a cookie (hot
+  centre, rings, soft spill, lens dust), throws the monsters' shadows where
+  the machine allows, and stutters when something hunting you is close.
+- 2026-10-28: rooms too clean. Skirting boards, sockets and vents on the
+  papered walls, the level's own ceiling stains and missing tiles, and a
+  haze of light round every panel.
+- 2026-10-28: the Hushbaby scrabbling on the spot, and the Hounds running
+  at one speed whatever they did. Both now move their legs with the ground
+  they really cover.
+
 - 2026-10-27: Deadline reading as a black screen across the corridor. It
   was a solid box behind three smoke sheets; now a dozen thin sheets pile
   up to black with no surface and a soft top, and smoke crawls out ahead of
