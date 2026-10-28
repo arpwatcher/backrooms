@@ -85,32 +85,50 @@ scene.add(camera);
 const beam = new THREE.SpotLight(0xfff4d6, 0, 22, 0.5, 0.35, 1.4);
 beam.position.set(0.15, -0.12, 0);
 beam.target.position.set(0, -0.2, -1);
-beam.map = flashlightCookie();
-beam.castShadow = true;
 beam.shadow.mapSize.set(512, 512);
 beam.shadow.camera.near = 0.3;
 beam.shadow.camera.far = 22;
 beam.shadow.bias = -0.0008;
 beam.shadow.radius = 3;
 camera.add(beam, beam.target);
-// the cookie and the shadows cost something on every lit pixel; a machine
-// that can't hold ~30 fps with them for a few seconds gets a plain soft beam
-// instead (?beam=full keeps them, for screenshots)
+// the cookie and the shadows cost something on every lit pixel. The beam
+// starts plain; after three seconds a machine running comfortably (over
+// ~50 fps) gets them, and one that later can't hold ~28 fps with them for
+// four seconds loses them for good. ?beam=full gives them from the start.
 let frameAverage = 1 / 60;
 let slowFor = 0;
+let watched = 0;
 let lastFrameAt = null;
+let beamMode = "plain-trial";
+function fullBeam(on) {
+  beam.castShadow = on;
+  beam.map = on ? flashlightCookie() : null;
+  beam.penumbra = on ? 0.35 : 0.6;
+}
+if (params.get("beam") === "full") {
+  fullBeam(true);
+  beamMode = "full-forced";
+} else {
+  fullBeam(false);
+}
 function adaptBeam() {
   // wall-clock time: the game's own step is capped, and would hide how slow
   const now = performance.now() / 1000;
   const dt = lastFrameAt === null ? 0 : now - lastFrameAt;
   lastFrameAt = now;
-  if (!beam.castShadow || params.get("beam") === "full" || !(dt > 0)) return;
+  if (!(dt > 0) || beamMode === "plain" || beamMode === "full-forced") return;
   frameAverage += (Math.min(dt, 0.5) - frameAverage) * Math.min(1, dt * 2);
+  if (beamMode === "plain-trial") {
+    watched += dt;
+    if (watched < 3) return;
+    beamMode = frameAverage < 1 / 50 ? "full" : "plain";
+    if (beamMode === "full") fullBeam(true);
+    return;
+  }
   slowFor = frameAverage > 1 / 28 ? slowFor + dt : 0;
   if (slowFor > 4) {
-    beam.castShadow = false;
-    beam.map = null;
-    beam.penumbra = 0.6;
+    fullBeam(false);
+    beamMode = "plain";
   }
 }
 
