@@ -1,0 +1,75 @@
+// Drives the CCNA labs page in headless Chromium the way a person would:
+// opens labs, types each model answer into the right console, presses
+// Έλεγχος and expects every task ticked; then opens the command index and
+// the exam view. Any console error fails it.
+
+import http from "node:http";
+import { readFile } from "node:fs/promises";
+import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const root = fileURLToPath(new URL("..", import.meta.url));
+const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" };
+
+const server = http.createServer(async (req, res) => {
+  const path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^([/\\])+/, "");
+  try {
+    const body = await readFile(join(root, path || "ccna/index.html"));
+    res.writeHead(200, { "content-type": types[extname(path)] || "application/octet-stream" });
+    res.end(body);
+  } catch {
+    res.writeHead(404);
+    res.end();
+  }
+});
+await new Promise((resolve) => server.listen(0, resolve));
+const base = `http://localhost:${server.address().port}/ccna/index.html`;
+
+// one of each kind: single device, two routers, a switch sim, a sim with prompts
+const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf"];
+
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+let failed = 0;
+const ok = (good, what) => {
+  console.log(`${good ? "ok" : "not ok"} - ${what}`);
+  if (!good) failed++;
+};
+
+await page.goto(base);
+await page.waitForFunction(() => window.__ccna);
+for (const id of LABS) {
+  await page.goto(`${base}#lab/${id}`);
+  await page.waitForFunction((want) => window.__ccna.current?.def.id === want, id);
+  const solution = await page.evaluate(() => window.__ccna.current.def.solution);
+  for (const [name, lines] of Object.entries(solution)) {
+    const index = await page.evaluate((n) => window.__ccna.current.consoles.indexOf(n), name);
+    await page.locator(".tabs button").nth(index).click();
+    for (const line of lines) {
+      await page.fill(".cmd", line);
+      await page.press(".cmd", "Enter");
+    }
+  }
+  await page.click(".check");
+  const ticks = await page.$$eval(".tasks li", (lis) => lis.map((li) => li.className));
+  ok(ticks.length > 0 && ticks.every((c) => c === "ok"), `${id}: typing the answer ticks every task (${ticks.join(" ")})`);
+  ok((await page.textContent(".result")).includes("Σωστά"), `${id}: the result says so`);
+}
+
+await page.goto(`${base}#commands`);
+await page.waitForTimeout(200);
+ok((await page.locator("main").innerText()).includes("ip helper-address"), "the command index lists commands");
+await page.goto(`${base}#exam`);
+await page.waitForTimeout(200);
+ok((await page.locator("main").innerText()).length > 50, "the exam view renders");
+
+ok(errors.length === 0, `no console errors${errors.length ? ": " + errors.join(" | ") : ""}`);
+await browser.close();
+server.close();
+process.exit(failed ? 1 : 0);

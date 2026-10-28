@@ -27,6 +27,7 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run smoke
+      - run: npm run smoke:ccna
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -42,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # only what the browser needs - no tests, tools or node_modules
-      - run: mkdir site && cp -r index.html src vendor assets site/
+      - run: mkdir site && cp -r index.html src vendor assets ccna site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
