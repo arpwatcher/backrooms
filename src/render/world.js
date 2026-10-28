@@ -158,6 +158,24 @@ export function buildWorld(scene, layout, look = {}) {
     return panel;
   });
 
+  // the haze round every panel: light spilling over the tiles beside it.
+  // One instanced sheet for them all, coloured per panel every frame
+  const glow = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(2.8, 2.0),
+    panelGlowMaterial(),
+    Math.max(1, panels.length),
+  );
+  const at = new THREE.Matrix4();
+  const down = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  panels.forEach((p, i) => {
+    at.compose(new THREE.Vector3(p.mesh.position.x, WALL_HEIGHT - 0.02, p.mesh.position.z), down, new THREE.Vector3(1, 1, 1));
+    glow.setMatrixAt(i, at);
+    glow.setColorAt(i, new THREE.Color(0));
+  });
+  glow.count = panels.length;
+  glow.frustumCulled = false;
+  group.add(glow);
+
   const pool = [];
   for (let i = 0; i < LIGHT_POOL; i++) {
     const light = new THREE.PointLight(look.light ?? 0xfff1c4, 0, CELL * 5, 1.6);
@@ -170,7 +188,7 @@ export function buildWorld(scene, layout, look = {}) {
   const ambient = new THREE.AmbientLight(look.ambientColor ?? 0x9a8848, look.ambient ?? 0.6);
   group.add(ambient);
 
-  return { group, panels, pool, ambient, segments, water };
+  return { group, panels, pool, ambient, segments, water, glow };
 }
 
 // per frame: flicker, then hand the light pool to the nearest live panels
@@ -188,6 +206,12 @@ export function updateLights(world, position, time) {
       panel.level = off ? 0.05 : 1;
       panel.mesh.material.color.setHex(off ? 0x5a5236 : panel.on);
     }
+  }
+  // each panel's haze follows it: on, flickering, dead
+  if (world.glow?.instanceColor) {
+    const c = new THREE.Color();
+    world.panels.forEach((p, i) => world.glow.setColorAt(i, c.setHex(p.on).multiplyScalar(0.32 * p.level)));
+    world.glow.instanceColor.needsUpdate = true;
   }
   const live = world.panels
     .filter((p) => p.level > 0.1)
@@ -376,4 +400,44 @@ function wallFittings(segments, layout) {
     group.add(mesh);
   }
   return group;
+}
+
+// additive, so black adds nothing; and it fades into the fog toward black,
+// not toward the fog's colour, or far panels would glow through the murk
+let glowMaterial = null;
+function panelGlowMaterial() {
+  if (glowMaterial) return glowMaterial;
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 96;
+  const g = c.getContext("2d");
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, 128, 96);
+  const img = g.getImageData(0, 0, 128, 96);
+  for (let y = 0; y < 96; y++) {
+    for (let x = 0; x < 128; x++) {
+      // a soft rounded rectangle: brightest under the panel, gone at the rim
+      const dx = Math.max(0, Math.abs(x - 63.5) / 63.5 - 0.22) / 0.78;
+      const dy = Math.max(0, Math.abs(y - 47.5) / 47.5 - 0.15) / 0.85;
+      const v = Math.max(0, 1 - Math.hypot(dx, dy)) ** 2.2 * 255;
+      const i = (y * 128 + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  glowMaterial = new THREE.MeshBasicMaterial({ map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  glowMaterial.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <fog_fragment>", `#ifdef USE_FOG
+  #ifdef FOG_EXP2
+    float glowFog = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
+  #else
+    float glowFog = smoothstep( fogNear, fogFar, vFogDepth );
+  #endif
+  gl_FragColor.rgb *= 1.0 - glowFog;
+#endif`);
+  };
+  glowMaterial.customProgramCacheKey = () => "panel-glow";
+  return glowMaterial;
 }
