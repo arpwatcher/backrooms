@@ -54,6 +54,19 @@ export function buildWorld(scene, layout, look = {}) {
   floor.position.set(width / 2, 0, depth / 2);
   floor.receiveShadow = true;
   group.add(floor);
+  // the level's own damp on a carpeted floor: patches that spread across
+  // cells, darker wet marks, and here and there a streak where something
+  // was dragged
+  if (!look.floor) {
+    const damp = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshLambertMaterial({ map: floorDamp(layout), transparent: true, depthWrite: false }),
+    );
+    damp.rotation.x = -Math.PI / 2;
+    damp.position.set(width / 2, 0.004, depth / 2);
+    damp.receiveShadow = true;
+    group.add(damp);
+  }
 
   const tiles = surface(look.ceilingSurface, "ceiling", `${layout.seed}-ceiling`);
   tiles.repeat.set(layout.width, layout.height);
@@ -449,4 +462,48 @@ function panelGlowMaterial() {
   };
   glowMaterial.customProgramCacheKey = () => "panel-glow";
   return glowMaterial;
+}
+
+function floorDamp(layout) {
+  const rng = new Rng(`${layout.seed}-floor-damp`);
+  const per = 24;
+  const c = document.createElement("canvas");
+  c.width = layout.width * per;
+  c.height = layout.height * per;
+  const g = c.getContext("2d");
+  const blot = (x, y, r, inner, edge) => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.7, inner);
+    grad.addColorStop(1, edge);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.ellipse(x, y, r, r * rng.range(0.5, 1), rng.range(0, Math.PI), 0, Math.PI * 2);
+    g.fill();
+  };
+  const cells = layout.width * layout.height;
+  // wide damp, a little green
+  for (let i = 0; i < cells * 0.2; i++) blot(rng.range(0, c.width), rng.range(0, c.height), rng.range(per * 0.8, per * 3), "rgba(58,60,28,0.27)", "rgba(58,60,28,0)");
+  // wet marks, darker, smaller, with a rim
+  for (let i = 0; i < cells * 0.04; i++) blot(rng.range(0, c.width), rng.range(0, c.height), rng.range(per * 0.3, per * 0.9), "rgba(34,30,14,0.32)", "rgba(34,30,14,0)");
+  // drag streaks
+  g.lineCap = "round";
+  for (let i = 0; i < Math.max(1, cells * 0.004); i++) {
+    let x = rng.range(0, c.width), y = rng.range(0, c.height), a = rng.range(0, Math.PI * 2);
+    g.strokeStyle = "rgba(40,30,16,0.18)";
+    g.lineWidth = rng.range(per * 0.2, per * 0.4);
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) {
+      a += rng.range(-0.3, 0.3);
+      x += Math.cos(a) * per * 0.8;
+      y += Math.sin(a) * per * 0.8;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }

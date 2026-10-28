@@ -87,9 +87,9 @@ export function carpetTexture(seed = "carpet") {
   ctx.fillStyle = "#a99456";
   ctx.fillRect(0, 0, size, size);
   noise(ctx, rng, size, 0.12, 2);
-  // damp patches - darker, slightly green
-  stain(ctx, rng, size, "rgba(60,62,30,0.35)", 7, 60);
-  stain(ctx, rng, size, "rgba(40,35,15,0.25)", 4, 25);
+  // faint wear only: the damp itself is laid over the whole floor per level
+  // (world.js), so it doesn't come round again every two cells
+  stain(ctx, rng, size, "rgba(60,62,30,0.16)", 3, 40);
   return finish(c, 1, 1);
 }
 
