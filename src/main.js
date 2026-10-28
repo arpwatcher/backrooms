@@ -2,6 +2,7 @@
 // player, lights, sound and HUD together.
 
 import * as THREE from "three";
+import { flashlightCookie } from "./render/textures.js";
 import { buildLevel } from "./game/build.js";
 import { createLoopback } from "./net/loopback.js";
 import { createHost, createPeer } from "./net/session.js";
@@ -67,6 +68,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 // filmic tone mapping: the beam and the panels roll off instead of clipping
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
+// shadows from the flashlight only, and only things that move cast them
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const post = createPost(renderer);
 const portrait = createPortrait();
 
@@ -75,10 +79,19 @@ const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerH
 camera.rotation.order = "YXZ";
 scene.add(camera);
 
-// the flashlight rides on the camera
-const beam = new THREE.SpotLight(0xfff4d6, 0, 22, 0.42, 0.45, 1.4);
+// the flashlight rides on the camera. Its light comes through a cookie (the
+// reflector's rings, a soft spill, dust on the lens), and it throws the
+// shadows of whatever stands in it onto the walls behind
+const beam = new THREE.SpotLight(0xfff4d6, 0, 22, 0.5, 0.35, 1.4);
 beam.position.set(0.15, -0.12, 0);
 beam.target.position.set(0, -0.2, -1);
+beam.map = flashlightCookie();
+beam.castShadow = true;
+beam.shadow.mapSize.set(512, 512);
+beam.shadow.camera.near = 0.3;
+beam.shadow.camera.far = 22;
+beam.shadow.bias = -0.0008;
+beam.shadow.radius = 3;
 camera.add(beam, beam.target);
 
 // eyelids: at low lucidity you start to blink, and things that move while
@@ -890,7 +903,7 @@ function frame() {
   const unease = Math.max(0, 0.6 - player.lucidity);
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
   camera.updateProjectionMatrix();
-  beam.intensity = beamStrength(flashlight, time) * 16;
+  beam.intensity = beamStrength(flashlight, time) * 20;
 
   applyShiftToLights(time);
   const ticks = updateLights(level.world, camera.position, time);

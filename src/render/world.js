@@ -51,6 +51,7 @@ export function buildWorld(scene, layout, look = {}) {
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(width / 2, 0, depth / 2);
+  floor.receiveShadow = true;
   group.add(floor);
 
   const tiles = surface(look.ceilingSurface, "ceiling", `${layout.seed}-ceiling`);
@@ -61,6 +62,7 @@ export function buildWorld(scene, layout, look = {}) {
   );
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(width / 2, WALL_HEIGHT, depth / 2);
+  ceiling.receiveShadow = true;
   group.add(ceiling);
 
   // walls: one instance per wall edge
@@ -89,6 +91,7 @@ export function buildWorld(scene, layout, look = {}) {
     matrix.compose(new THREE.Vector3(s.x, WALL_HEIGHT / 2, s.z), s.rotate ? rotation : none, scale);
     walls.setMatrixAt(i, matrix);
   });
+  walls.receiveShadow = true;
   group.add(walls);
 
   if (layout.pillars.length) {
@@ -104,6 +107,7 @@ export function buildWorld(scene, layout, look = {}) {
       matrix.compose(new THREE.Vector3(c.x, look.pillars === "crate" ? 0.8 : WALL_HEIGHT / 2, c.z), none, scale);
       pillars.setMatrixAt(i, matrix);
     });
+    pillars.receiveShadow = true;
     group.add(pillars);
   }
 

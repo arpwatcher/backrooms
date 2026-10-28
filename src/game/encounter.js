@@ -43,6 +43,10 @@ export function createEncounter({ scene, layout, roster, rng, paths, lightAt, ti
         const box = new THREE.Box3().setFromObject(entity.mesh);
         const size = box.getSize(new THREE.Vector3());
         entity.mesh.add(groundShadow(Math.max(0.5, size.x * 1.3), Math.max(0.5, size.z * 1.3)));
+        // and in your beam it throws its shadow on the wall behind it
+        entity.mesh.traverse((o) => {
+          if (o.isMesh && !o.material?.transparent) o.castShadow = true;
+        });
       }
       entity.mesh.position.set(entity.x, 0, entity.z);
       scene.add(entity.mesh);

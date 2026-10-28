@@ -257,3 +257,63 @@ export function officeCarpetTexture(seed = "office-carpet") {
   stain(ctx, rng, size, "rgba(20,20,20,0.25)", 5, 40);
   return finish(c);
 }
+
+// What a cheap flashlight actually throws: a hot centre, a bright ring and
+// a darker one from the reflector, a wide soft spill that fades out rather
+// than stopping at an edge, and the shadows of dust and scratches on the lens.
+let cookie = null;
+export function flashlightCookie() {
+  if (cookie) return cookie;
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, size, size);
+  const mid = size / 2;
+  const rng = new Rng("lens");
+  const img = g.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const r = Math.hypot(x - mid + 0.5, y - mid + 0.5) / mid;
+      // spill: a long soft falloff to nothing at the rim
+      let v = Math.max(0, 1 - r) ** 0.9 * 0.85;
+      // the hot spot
+      v += Math.exp(-((r / 0.2) ** 2)) * 0.45;
+      // the reflector's rings: bright, then a dark band, then a faint one
+      v += Math.exp(-(((r - 0.3) / 0.035) ** 2)) * 0.16;
+      v -= Math.exp(-(((r - 0.4) / 0.04) ** 2)) * 0.1;
+      v += Math.exp(-(((r - 0.62) / 0.05) ** 2)) * 0.06;
+      // a little lopsided, as a real one is
+      v *= 1 + 0.06 * Math.cos(Math.atan2(y - mid, x - mid) * 3 + 0.7) * Math.min(1, r * 2);
+      const i = (y * size + x) * 4;
+      const k = Math.max(0, Math.min(255, v * 255));
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = k;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // dust and a scratch or two on the lens
+  g.globalCompositeOperation = "multiply";
+  for (let i = 0; i < 24; i++) {
+    const x = mid + rng.range(-mid * 0.7, mid * 0.7), y = mid + rng.range(-mid * 0.7, mid * 0.7);
+    const r = rng.range(1, 4);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(200,200,200,${rng.range(0.25, 0.5)})`);
+    grad.addColorStop(1, "rgba(255,255,255,1)");
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  g.strokeStyle = "rgba(170,170,170,0.6)";
+  for (let i = 0; i < 3; i++) {
+    g.lineWidth = rng.range(0.5, 1.2);
+    g.beginPath();
+    const a = rng.range(0, Math.PI * 2), d = rng.range(10, mid * 0.6);
+    g.moveTo(mid + Math.cos(a) * d, mid + Math.sin(a) * d);
+    g.lineTo(mid + Math.cos(a) * d + rng.range(-40, 40), mid + Math.sin(a) * d + rng.range(-40, 40));
+    g.stroke();
+  }
+  cookie = new THREE.CanvasTexture(c);
+  cookie.colorSpace = THREE.SRGBColorSpace;
+  return cookie;
+}
