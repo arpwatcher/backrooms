@@ -91,6 +91,15 @@ export function buildWorld(scene, layout, look = {}) {
     }
   }
   const wallMaterial = new THREE.MeshLambertMaterial({ map: surface(look.walls, "wallpaper", `${layout.seed}-wallpaper`), color: look.wall ?? 0xffffff });
+  // every wall slides its paper sideways by its own amount, so the stains on
+  // it don't come round again in the same place on the next wall
+  wallMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", `#include <uv_vertex>
+#if defined( USE_MAP ) && defined( USE_INSTANCING )
+  vMapUv.x += fract( sin( float( gl_InstanceID ) * 12.9898 ) * 43758.5453 );
+#endif`);
+  };
+  wallMaterial.customProgramCacheKey = () => "wall-shift";
   const walls = new THREE.InstancedMesh(
     new THREE.BoxGeometry(CELL + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS),
     wallMaterial,
