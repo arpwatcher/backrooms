@@ -15,7 +15,7 @@ for (const [kind, depth] of shots) {
   // a fresh page each time: software gl tires over many levels
   const pg = await b.newPage({ viewport: { width: 960, height: 540 } });
   pg.on("pageerror", (e) => console.log("pageerror", e.message));
-  await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
+  await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke&beam=full`);
   await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
   const dead = await pg.evaluate(([kind, depth]) => {
     const n = window.__noclip;

@@ -17,7 +17,7 @@ async function freshPage() {
   pg.on("pageerror", (e) => console.log("pageerror", e.message));
   pg.on("console", (m) => m.type() === "error" && console.log("console", m.text().slice(0, 200)));
   pg.on("crash", () => console.log("page crashed"));
-  await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke`);
+  await pg.goto(`http://localhost:${srv.address().port}/index.html?seed=crit&smoke&beam=full`);
   await pg.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 60000 });
   return pg;
 }

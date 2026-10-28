@@ -93,6 +93,26 @@ beam.shadow.camera.far = 22;
 beam.shadow.bias = -0.0008;
 beam.shadow.radius = 3;
 camera.add(beam, beam.target);
+// the cookie and the shadows cost something on every lit pixel; a machine
+// that can't hold ~30 fps with them for a few seconds gets a plain soft beam
+// instead (?beam=full keeps them, for screenshots)
+let frameAverage = 1 / 60;
+let slowFor = 0;
+let lastFrameAt = null;
+function adaptBeam() {
+  // wall-clock time: the game's own step is capped, and would hide how slow
+  const now = performance.now() / 1000;
+  const dt = lastFrameAt === null ? 0 : now - lastFrameAt;
+  lastFrameAt = now;
+  if (!beam.castShadow || params.get("beam") === "full" || !(dt > 0)) return;
+  frameAverage += (Math.min(dt, 0.5) - frameAverage) * Math.min(1, dt * 2);
+  slowFor = frameAverage > 1 / 28 ? slowFor + dt : 0;
+  if (slowFor > 4) {
+    beam.castShadow = false;
+    beam.map = null;
+    beam.penumbra = 0.6;
+  }
+}
 
 // eyelids: at low lucidity you start to blink, and things that move while
 // unwatched get their chance
@@ -904,6 +924,7 @@ function frame() {
   camera.fov = 72 + Math.sin(time * 0.7) * unease * 9 + (fallingSince === null ? 0 : Math.min(1, (time - fallingSince) / 0.9) ** 2 * 60);
   camera.updateProjectionMatrix();
   beam.intensity = beamStrength(flashlight, time) * 20;
+  adaptBeam();
 
   applyShiftToLights(time);
   const ticks = updateLights(level.world, camera.position, time);
@@ -1001,6 +1022,7 @@ window.__noclip = {
   sees(ax, az, bx, bz) {
     return lineOfSight(level.layout, ax, az, bx, bz);
   },
+  get beamShadows() { return beam.castShadow; },
   get litPanels() { return level.world.panels.filter((p) => p.state !== "dead").length; },
   get tracks() {
     const [first] = level.tracks.wet;
