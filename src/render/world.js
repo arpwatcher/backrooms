@@ -119,6 +119,7 @@ export function buildWorld(scene, layout, look = {}) {
     });
     skirting.receiveShadow = true;
     group.add(skirting);
+    group.add(wallFittings(segments, layout));
   }
 
   if (layout.pillars.length) {
@@ -314,4 +315,65 @@ function ceilingDamage(layout) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   return texture;
+}
+
+// the small things an office leaves on its walls: a socket low down on
+// some, a vent grille up near the ceiling on fewer, on either face
+function wallFittings(segments, layout) {
+  const rng = new Rng(`${layout.seed}-fittings`);
+  const group = new THREE.Group();
+  const face = (draw, w, h) => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    draw(c.getContext("2d"), w, h);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  const socket = face((g, w, h) => {
+    g.fillStyle = "#d9d2bc";
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = "rgba(90,80,50,0.25)";
+    g.fillRect(0, h - 6, w, 6);
+    g.fillStyle = "#2a2620";
+    for (const y of [h * 0.3, h * 0.66]) {
+      g.fillRect(w * 0.33, y - 5, 3, 10);
+      g.fillRect(w * 0.6, y - 5, 3, 10);
+    }
+  }, 32, 48);
+  const vent = face((g, w, h) => {
+    g.fillStyle = "#b8b2a0";
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = "#1c1a16";
+    for (let y = 6; y < h - 4; y += 6) g.fillRect(4, y, w - 8, 3);
+    g.fillStyle = "rgba(60,50,30,0.35)";
+    g.fillRect(0, 0, w, 4);
+  }, 64, 40);
+  const kinds = [
+    { map: socket, size: [0.075, 0.115], y: 0.32, share: 0.12 },
+    { map: vent, size: [0.42, 0.26], y: 2.35, share: 0.04 },
+  ];
+  for (const kind of kinds) {
+    const picked = segments.filter(() => rng.next() < kind.share);
+    if (!picked.length) continue;
+    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(...kind.size), new THREE.MeshLambertMaterial({ map: kind.map }), picked.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    picked.forEach((s, i) => {
+      // which face, and where along the wall
+      const side = rng.next() < 0.5 ? 1 : -1;
+      const along = rng.range(-CELL * 0.35, CELL * 0.35);
+      const out = WALL_THICKNESS / 2 + 0.004;
+      const angle = (s.rotate ? Math.PI / 2 : 0) + (side < 0 ? Math.PI : 0);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+      const x = s.rotate ? s.x + side * out : s.x + along;
+      const z = s.rotate ? s.z - along : s.z + side * out;
+      m.compose(new THREE.Vector3(x, kind.y, z), q, new THREE.Vector3(1, 1, 1));
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  return group;
 }
