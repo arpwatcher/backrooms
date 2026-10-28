@@ -378,14 +378,17 @@ try {
   check(cards >= 4, `the codex lists every entity (${cards} cards)`);
 
   const deep = await browser.newPage({ viewport: { width: 480, height: 270 } });
-  await deep.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&depth=4`);
-  await deep.waitForFunction(() => window.__noclip && window.__noclip.frames > 1, null, { timeout: 30000 });
+  // side pages: on a busy CI runner the load event (models, recordings) can
+  // take over 30 s; what matters is the first frames, waited for below
+  const side = { waitUntil: "domcontentloaded", timeout: 90000 };
+  await deep.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&depth=4`, side);
+  await deep.waitForFunction(() => window.__noclip && window.__noclip.frames > 1, null, { timeout: 90000 });
   const startedAt = await deep.evaluate(() => window.__noclip.run.depth);
   check(startedAt === 4, `?depth=4 starts the run on level 4 (${startedAt})`);
   await deep.close();
   const easy = await browser.newPage({ viewport: { width: 480, height: 270 } });
-  await easy.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&tier=lucid`);
-  await easy.waitForFunction(() => window.__noclip && window.__noclip.frames > 2 && window.__noclip.bearing, null, { timeout: 30000 }).catch(() => {});
+  await easy.goto(`http://localhost:${port}/index.html?seed=smoke&smoke&tier=lucid`, side);
+  await easy.waitForFunction(() => window.__noclip && window.__noclip.frames > 2 && window.__noclip.bearing, null, { timeout: 90000 }).catch(() => {});
   const bearing = await easy.evaluate(() => window.__noclip.bearing);
   check(bearing && bearing.cells > 0, `on lucid an arrow points down the path to the exit (${bearing?.cells} cells)`);
   await easy.close();
@@ -429,9 +432,9 @@ try {
     p.on("pageerror", (e) => errors.push(`${seed}: ${e.message}`));
     // a third and fourth game page on a busy runner can take longer than
     // the default 30 s to fire load (the models); the frame wait below is
-    // what matters, and it allows 90
+    // what matters, and with three pages drawing it can take a while
     await p.goto(`http://localhost:${port}/index.html?seed=${seed}&smoke&depth=3`, { waitUntil: "domcontentloaded", timeout: 90000 });
-    await p.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 90000 });
+    await p.waitForFunction(() => window.__noclip && window.__noclip.frames > 3, null, { timeout: 180000 });
     return p;
   };
   const host = await game("coop-host");
