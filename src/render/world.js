@@ -28,6 +28,7 @@ const SURFACES = {
 const surface = (name, fallback, seed) => (SURFACES[name] ?? SURFACES[fallback])(seed);
 
 import { CELL, WALL_HEIGHT, WALL_THICKNESS, PILLAR_HALF } from "../world/units.js";
+import { Rng } from "../core/rng.js";
 
 export { CELL, WALL_HEIGHT };
 const LIGHT_POOL = 10;
@@ -64,6 +65,18 @@ export function buildWorld(scene, layout, look = {}) {
   ceiling.position.set(width / 2, WALL_HEIGHT, depth / 2);
   ceiling.receiveShadow = true;
   group.add(ceiling);
+  // over the office ceiling, one sheet of damage for the whole level, so no
+  // two stretches look alike: water stains spread across tiles, and here and
+  // there a tile gone, black above
+  if (!look.ceilingSurface) {
+    const damage = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshLambertMaterial({ map: ceilingDamage(layout), transparent: true, depthWrite: false }),
+    );
+    damage.rotation.x = Math.PI / 2;
+    damage.position.set(width / 2, WALL_HEIGHT - 0.005, depth / 2);
+    group.add(damage);
+  }
 
   // walls: one instance per wall edge
   const segments = [];
@@ -93,6 +106,20 @@ export function buildWorld(scene, layout, look = {}) {
   });
   walls.receiveShadow = true;
   group.add(walls);
+  // a skirting board along the foot of every papered wall, scuffed dark
+  if (!look.walls || look.walls === "wallpaper") {
+    const skirting = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(CELL + WALL_THICKNESS + 0.02, 0.09, WALL_THICKNESS + 0.024),
+      new THREE.MeshLambertMaterial({ color: 0x5c4b30 }),
+      segments.length,
+    );
+    segments.forEach((s, i) => {
+      matrix.compose(new THREE.Vector3(s.x, 0.045, s.z), s.rotate ? rotation : none, scale);
+      skirting.setMatrixAt(i, matrix);
+    });
+    skirting.receiveShadow = true;
+    group.add(skirting);
+  }
 
   if (layout.pillars.length) {
     // pillars, or stacks of crates where a level stores things
@@ -248,4 +275,43 @@ function waterOver(width, depth) {
   water.rotation.x = -Math.PI / 2;
   water.position.set(width / 2, 0.07, depth / 2);
   return water;
+}
+
+// the level's own ceiling damage: an alpha sheet over the tiled ceiling, a
+// few pixels per tile (tiles are half a cell), seeded by the level
+function ceilingDamage(layout) {
+  const rng = new Rng(`${layout.seed}-ceiling-damage`);
+  const per = 16;
+  const tilesX = layout.width * 2, tilesY = layout.height * 2;
+  const c = document.createElement("canvas");
+  c.width = tilesX * per;
+  c.height = tilesY * per;
+  const g = c.getContext("2d");
+  // stains: soft brown blots with a darker tide line, spreading over tiles
+  const stains = Math.round(tilesX * tilesY * 0.035);
+  for (let i = 0; i < stains; i++) {
+    const x = rng.range(0, c.width), y = rng.range(0, c.height), r = rng.range(per * 0.6, per * 2.2);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, "rgba(120,92,40,0.32)");
+    grad.addColorStop(0.75, "rgba(110,80,30,0.22)");
+    grad.addColorStop(0.92, "rgba(80,56,20,0.45)");
+    grad.addColorStop(1, "rgba(80,56,20,0)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.ellipse(x, y, r, r * rng.range(0.6, 1), rng.range(0, Math.PI), 0, Math.PI * 2);
+    g.fill();
+  }
+  // a missing tile now and then: black above, a ragged edge
+  const missing = Math.round(tilesX * tilesY * 0.006);
+  for (let i = 0; i < missing; i++) {
+    const tx = rng.int(0, tilesX - 1), ty = rng.int(0, tilesY - 1);
+    g.fillStyle = "rgba(6,5,3,0.97)";
+    g.fillRect(tx * per + 1, ty * per + 1, per - 2, per - 2);
+    g.fillStyle = "rgba(90,70,30,0.6)";
+    g.fillRect(tx * per + 1, ty * per + 1, per - 2, 1);
+  }
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }
