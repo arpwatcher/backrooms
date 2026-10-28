@@ -11,6 +11,9 @@ import hsrp from "./hsrp.js";
 import nat from "./nat.js";
 import acl from "./acl.js";
 import security from "./security.js";
+import ipv6 from "./ipv6.js";
+import management from "./management.js";
+import legacy from "./legacy.js";
 
 export const MODULES = [
   { id: "basics", title: "IOS βασικά", blurb: "modes, hostname, κωδικοί, interfaces, αποθήκευση" },
@@ -25,6 +28,9 @@ export const MODULES = [
   { id: "nat", title: "NAT / PAT", blurb: "static, dynamic, overload, port forwarding" },
   { id: "acl", title: "ACLs", blurb: "standard, extended, named, wildcards, vty, sequence" },
   { id: "security", title: "Security", blurb: "SSH, local users, port security, DHCP snooping, DAI" },
+  { id: "ipv6", title: "IPv6", blurb: "addressing, EUI-64, link-local, SLAAC, static routes" },
+  { id: "management", title: "Device management", blurb: "IOS image, boot system, config-register, TFTP" },
+  { id: "legacy", title: "Εκτός ύλης (legacy)", blurb: "RIP, EIGRP, VTP: δεν είναι στο 200-301" },
 ];
 
-export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...hsrp, ...services, ...nat, ...acl, ...security];
+export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...hsrp, ...services, ...nat, ...acl, ...security, ...ipv6, ...management, ...legacy];
