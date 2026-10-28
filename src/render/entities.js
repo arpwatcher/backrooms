@@ -929,14 +929,18 @@ export function hushbabyMesh() {
   }
   // what the death screen frames
   group.userData.face = head;
+  const steps = gait();
   group.userData.animate = (time, entity) => {
     // in the wall it is only a voice; you see it when it comes out
     group.visible = entity.state === "coming";
-    // it crawls in fits: a burst of limbs, a freeze, a burst
-    const burst = Math.sin(time * 2.3 + entity.id) > -0.2 ? 1 : 0;
-    limbs.forEach((l, i) => (l.rotation.x = burst * Math.sin(time * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * (i > 1 ? 0.2 : 0.45)));
-    body.position.y = 0.46 + burst * Math.abs(Math.sin(time * 16)) * 0.03;
-    body.rotation.z = burst * Math.sin(time * 8) * 0.06;
+    // it crawls in fits: a burst of limbs, a freeze, a burst; the limbs go
+    // as fast as the floor goes by, scrabbling, too many steps for the ground
+    const { stride, speed } = steps(time, entity);
+    const burst = (Math.sin(time * 2.3 + entity.id) > -0.2 ? 1 : 0.15) * Math.min(1, speed / 1.5);
+    const phase = stride * 9;
+    limbs.forEach((l, i) => (l.rotation.x = burst * Math.sin(phase + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * (i > 1 ? 0.2 : 0.45)));
+    body.position.y = 0.46 + burst * Math.abs(Math.sin(phase)) * 0.03;
+    body.rotation.z = burst * Math.sin(phase * 0.5) * 0.06;
     // upside down, never still, and now and then it turns all the way over
     const roll = Math.sin(time * 0.7 + entity.id) > 0.93 ? Math.PI : 0;
     head.rotation.z = Math.PI + roll + twitch(time, entity.id, 2.4, 0.5);
