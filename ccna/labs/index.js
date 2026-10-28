@@ -9,6 +9,8 @@ import intervlan from "./intervlan.js";
 import services from "./services.js";
 import hsrp from "./hsrp.js";
 import nat from "./nat.js";
+import acl from "./acl.js";
+import security from "./security.js";
 
 export const MODULES = [
   { id: "basics", title: "IOS βασικά", blurb: "modes, hostname, κωδικοί, interfaces, αποθήκευση" },
@@ -21,6 +23,8 @@ export const MODULES = [
   { id: "hsrp", title: "HSRP (FHRP)", blurb: "virtual gateway, priority, preempt, version 2" },
   { id: "services", title: "IP services", blurb: "DHCP, relay, NTP, syslog, SNMP, CDP, LLDP" },
   { id: "nat", title: "NAT / PAT", blurb: "static, dynamic, overload, port forwarding" },
+  { id: "acl", title: "ACLs", blurb: "standard, extended, named, wildcards, vty, sequence" },
+  { id: "security", title: "Security", blurb: "SSH, local users, port security, DHCP snooping, DAI" },
 ];
 
-export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...hsrp, ...services, ...nat];
+export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...hsrp, ...services, ...nat, ...acl, ...security];
