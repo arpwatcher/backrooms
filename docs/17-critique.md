@@ -29,6 +29,13 @@ lit and in the dark.
 
 ## Fixed
 
+- 2026-10-28: the Smiler's body a dark sack in the beam. It is a darkness
+  now, a small black core in soft churning smoke with no edge, and the grin
+  hangs in it.
+- 2026-10-28: the same damp patches on the carpet every two cells and the
+  same stain on every wall. The damp, wet marks and drag streaks are laid
+  over the whole floor per level, and each wall slides its paper.
+
 - 2026-10-28: the flashlight a hard white disc. It has a cookie (hot
   centre, rings, soft spill, lens dust), throws the monsters' shadows where
   the machine allows, and stutters when something hunting you is close.

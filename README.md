@@ -50,6 +50,8 @@ Work in progress. The design lives in [`docs/`](docs/) and the game in
   - Film grain and filmic light.
   - A sting and a camera jolt when something sees you.
   - A chase drone and a heartbeat when something is after you.
+  - A flashlight that throws the monsters' shadows (on machines fast enough)
+    and stutters when something hunting you is close.
   - Hallucinations at low lucidity.
   - Footsteps that sound like the floor.
 - Textures are painted on canvas. Sounds are synthesized with WebAudio, with
