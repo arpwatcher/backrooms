@@ -97,11 +97,44 @@ Add `?seed=anything` to the URL to play or share a specific run,
 `&tier=lucid|uneasy|lost|noclip` to pick a difficulty, and `&depth=4` to
 start on a given level.
 
+## CCNA CLI labs
+
+[`ccna/`](ccna/) is a separate page in the same repo, with Cisco IOS command
+labs for the CCNA 200-301 exam:
+<https://arpwatcher.github.io/backrooms/ccna/>.
+
+- **Mini labs like the exam's.** Each lab has a small topology (two or three
+  devices, as on the exam), a task list, and a console for every device.
+  Every command in the syllabus has its own lab. Each module ends with a
+  bigger "sim" lab. Modules: IOS basics, VLANs and trunks, STP, EtherChannel,
+  inter-VLAN routing, static routing, OSPFv2, HSRP, IP services (DHCP, NTP,
+  syslog, SNMP, CDP/LLDP), NAT, ACLs, security (SSH, port security, DHCP
+  snooping, DAI), IPv6 and device management. RIP, EIGRP and VTP are left
+  in as clearly marked extras.
+- **A console that behaves like IOS.** It accepts abbreviations (`conf t`,
+  `sh ip int br`) and answers with IOS's own errors (`% Ambiguous command`,
+  `% Invalid input` with the caret). It also has `?` help, Tab completion,
+  `do`, pipes (`| include`, `| section`), and the real prompts for `enable`,
+  `copy`, `reload` and `crypto key`. The `show` output is built from what you
+  configured.
+- **Checking is done on the result, not the typing.** "Έλεγχος" inspects the
+  configuration that resulted (adjacencies, trunks, the root bridge, the
+  HSRP active router, NAT and ACL entries), so any correct answer passes.
+  When a task fails, it says what is missing.
+- **Exam mode.** Timed random labs with no hints, scored out of 1000
+  (pass at 825).
+
+The engine is in `ccna/engine/` and the labs are in `ccna/labs/`, one file
+per module. Each lab is plain data: devices, links, tasks with a check
+function, and a model answer. The tests require every model answer to pass
+every task, and require an empty attempt to fail.
+
 ## Tests
 
 ```
 npm test             # logic: generation, entities, director, fairness (node --test)
 npm run smoke        # plays the real game in headless Chromium and checks it
+npm run smoke:ccna   # types lab answers into the CCNA page and checks them
 ```
 
 three.js and its glTF loader are vendored under `vendor/three/` (MIT, see its LICENSE).
