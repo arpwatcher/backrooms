@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCNA CLI Labs</title>
+<meta name="description" content="Mini labs για τις εντολές του CCNA 200-301: γράφεις εντολές IOS και ελέγχεται αν η ρύθμιση είναι σωστή.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu-toggle" id="menu-toggle" aria-label="Λίστα labs">☰</button>
+  <a class="brand" href="#"><span class="logo" aria-hidden="true"></span>CCNA <b>CLI Labs</b></a>
+  <nav class="views" aria-label="Προβολές">
+    <a href="#" data-view="labs">Labs</a>
+    <a href="#commands" data-view="commands">Εντολές</a>
+    <a href="#exam" data-view="exam">Εξέταση</a>
+  </nav>
+  <div class="progress" id="progress" title="Labs που έχεις ολοκληρώσει"></div>
+</header>
+<div class="layout">
+  <aside class="menu" id="menu">
+    <input class="search" id="search" type="search" placeholder="Αναζήτηση lab ή εντολής…" aria-label="Αναζήτηση">
+    <div id="modules"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<template id="lab-view">
+  <section class="lab">
+    <div class="lab-head">
+      <div>
+        <div class="crumbs"></div>
+        <h1 class="lab-title"></h1>
+      </div>
+      <div class="head-right">
+        <span class="timer" hidden></span>
+      </div>
+    </div>
+    <div class="work">
+      <div class="panel topo-panel">
+        <div class="panel-title">Τοπολογία <span class="hint-text">κλικ σε συσκευή για την κονσόλα της</span></div>
+        <svg class="topo" role="img" aria-label="Τοπολογία"></svg>
+        <div class="pc-info" hidden></div>
+      </div>
+      <div class="panel tasks-panel">
+        <div class="panel-title">Tasks</div>
+        <p class="intro"></p>
+        <ol class="tasks"></ol>
+        <div class="buttons">
+          <button class="btn primary check">Έλεγχος</button>
+          <button class="btn theory-btn">Θεωρία</button>
+          <button class="btn solution-btn">Λύση</button>
+          <button class="btn reset-btn" title="Ξεκίνα το lab από την αρχή">Reset</button>
+          <button class="btn next-btn" hidden>Επόμενο →</button>
+        </div>
+        <div class="result" role="status"></div>
+        <div class="theory" hidden></div>
+        <div class="solution" hidden></div>
+      </div>
+      <div class="panel term-panel">
+        <div class="tabs" role="tablist"></div>
+        <div class="screen" tabindex="-1">
+          <pre class="out"></pre>
+          <div class="input-line"><span class="prompt"></span><input class="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Εντολή"></div>
+        </div>
+        <div class="term-help">Tab: συμπλήρωση · ?: βοήθεια · ↑↓: ιστορικό · Ctrl+Z: έξοδος από config</div>
+      </div>
+    </div>
+  </section>
+</template>
+<script type="module" src="app.js"></script>
+</body>
+</html>
