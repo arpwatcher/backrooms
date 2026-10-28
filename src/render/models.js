@@ -123,11 +123,15 @@ export function modelInstance(name, { clipFor = () => "idle", speedFor = () => 1
   group.userData.body = body;
   group.userData.bone = bone;
   // how long it has been going nowhere, for walks and runs that aren't
-  let lx = null, lz = 0, lt = 0, still = 0;
+  let lx = null, lz = 0, lt = 0, still = 0, speed = 0;
   group.userData.animate = (time, entity) => {
     if (lx !== null && time > lt) {
       const d = Math.hypot(entity.x - lx, entity.z - lz);
-      if (d < 2) still = d / (time - lt) < 0.15 ? still + (time - lt) : 0;
+      if (d < 2) {
+        still = d / (time - lt) < 0.15 ? still + (time - lt) : 0;
+        // how fast it is really going, smoothed, for clips that can follow it
+        speed += (d / (time - lt) - speed) * Math.min(1, (time - lt) * 6);
+      }
     }
     [lx, lz, lt] = [entity.x, entity.z, time];
     let want = clipFor(entity) ?? "idle";
@@ -141,7 +145,7 @@ export function modelInstance(name, { clipFor = () => "idle", speedFor = () => 1
       if (current && actions[current]) actions[current].crossFadeTo(next, 0.25, false);
       current = want;
     }
-    if (actions[current]) actions[current].timeScale = speedFor(entity);
+    if (actions[current]) actions[current].timeScale = speedFor(entity, speed);
     const dt = last === null ? 0 : Math.min(0.1, Math.max(0, time - last));
     last = time;
     mixer.update(dt);

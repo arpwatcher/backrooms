@@ -1219,7 +1219,9 @@ let houndsMade = 0;
 export function houndMesh() {
   const hound = modelInstance(houndsMade++ % 2 ? "houndBlack" : "hound", {
     clipFor: (e) => (e.state === "hunt" ? "run" : e.state === "sniff" ? "howl" : e.state === "wander" ? "walk" : "idle"),
-    speedFor: (e) => (e.state === "hunt" ? 1.1 : 1),
+    // legs that match the ground: the run is cut for about 4.2 m/s, the
+    // walk for about 1.3 (a held pose, the death screen, keeps its pace)
+    speedFor: (e, speed) => (e.posing ? (e.state === "hunt" ? 1.1 : 1) : e.state === "hunt" ? Math.min(1.6, Math.max(0.5, (speed / 4.2) * 1.1)) : e.state === "wander" ? Math.min(1.4, Math.max(0.4, speed / 1.3)) : 1),
   });
   if (!hound) return houndBody();
   // eyeshine: a dog's eyes throw your light back, green-gold, out of the
