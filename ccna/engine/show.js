@@ -345,6 +345,16 @@ function cdpDetail(dev) {
   return out.filter((l) => l !== "").join("\n");
 }
 
+// a router that is a DHCP client: the lease the lab gave it, or a request
+// still going out
+function dhcpLease(dev) {
+  return Object.values(dev.interfaces).filter((f) => f.dhcp).map((f) => {
+    const l = dev.lab?.lease;
+    if (!l || f.shutdown) return `Temp IP addr: 0.0.0.0  for peer on Interface: ${f.name}\nTemp  sub net mask: 0.0.0.0\n   DHCP Lease server: 0.0.0.0, state: 1 Selecting\n   DHCP transaction id: 1A2B`;
+    return `Temp IP addr: ${l.ip}  for peer on Interface: ${f.name}\nTemp  sub net mask: ${l.mask}\n   DHCP Lease server: ${l.server}, state: 5 Bound\n   DHCP transaction id: 1A2B\n   Lease: 86400 secs,  Renewal: 43200 secs,  Rebind: 75600 secs\nTemp default-gateway addr: ${l.gateway}\n   Next timer fires after: 11:59:12\n   Retry count: 0   Client-ID: cisco-${dev.mac}-${short(f.name)}\n   Client-ID hex dump: 636973636F2D\n   Hostname: ${dev.hostname}`;
+  }).join("\n\n");
+}
+
 function dhcpPool(dev) {
   return Object.entries(dev.dhcp.pools)
     .map(([name, p]) => {
@@ -525,6 +535,8 @@ export const SHOWS = {
     ["show interfaces trunk", (d) => trunks(d)],
     ["show interfaces status", (d) => intStatus(d)],
     ["show interfaces status err-disabled", (d) => intStatus(d, true)],
+    ["show spanning-tree pathcost method", (d) => `Spanning tree default pathcost method used is ${d.stp.pathcost}`],
+    ["show dhcp lease", (d) => dhcpLease(d)],
     ["show interfaces description", (d) => [`${pad("Interface", 31)}${pad("Status", 15)}${pad("Protocol", 9)}Description`, ...sortedInterfaces(d).map((f) => `${pad(short(f.name), 31)}${pad(status(d, f)[0] === "administratively down" ? "admin down" : status(d, f)[0], 15)}${pad(status(d, f)[1], 9)}${f.description ?? ""}`)].join("\n")],
     ["show vlan [brief]", (d, a, c) => vlanBrief(d, !c.has("brief"))],
     ["show vlan id <id:num:1-4094>", (d, a) => (d.vlans[a.id] ? vlanBrief({ ...d, vlans: { [a.id]: d.vlans[a.id] } }, false).split("\n").slice(0, 3).join("\n") : `VLAN id ${a.id} not found in current VLAN database`)],

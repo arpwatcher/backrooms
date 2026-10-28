@@ -5,6 +5,7 @@
 import { match } from "./parse.js";
 import { COMMANDS, setFreshMaker } from "./commands.js";
 import { IosError, createDevice } from "./state.js";
+import { hostExec, hostPrompt, hostComplete } from "./host.js";
 
 export { createDevice } from "./state.js";
 
@@ -46,6 +47,7 @@ const SUFFIX = {
 };
 
 export function prompt(dev) {
+  if (dev.host) return hostPrompt(dev);
   if (dev.pending?.prompt) return dev.pending.prompt;
   return dev.hostname + SUFFIX[dev.mode];
 }
@@ -94,6 +96,7 @@ function attempt(dev, mode, line) {
 }
 
 export function exec(dev, raw) {
+  if (dev.host) return hostExec(dev, raw);
   const piped = PIPE.exec(raw);
   if (piped && !dev.pending && /^\s*(do\s+)?sh/i.test(piped[1])) {
     const out = execLine(dev, piped[1]);
@@ -209,6 +212,7 @@ function scope(dev, text) {
 
 // what "?" would list for the text typed so far
 export function help(dev, typed) {
+  if (dev.host) return null;
   const { cmds, text } = scope(dev, typed);
   const endsInSpace = /\s$/.test(text) || text === "";
   const tokens = tokenize(text);
@@ -224,6 +228,7 @@ export function help(dev, typed) {
 
 // tab: complete the last word if only one keyword fits
 export function complete(dev, typed) {
+  if (dev.host) return hostComplete(dev, typed);
   const { cmds, text } = scope(dev, typed);
   if (/\s$/.test(text) || !text.trim()) return typed;
   const tokens = tokenize(text);

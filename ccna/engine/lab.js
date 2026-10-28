@@ -8,12 +8,13 @@ import { normalize } from "./iface.js";
 import { maskBits, network, parseIp } from "./ip.js";
 import { status, operMode, bundled, ospfNeighbors, stpRoot, hsrpRanking, ospfOf, passive, routerId, carries, far } from "./net.js";
 import { routeTable, cost } from "./show.js";
+import { makeHost } from "./host.js";
 
 export function buildLab(def) {
   const devices = {};
   for (const d of def.devices) {
-    const dev = createDevice({ name: d.name, type: d.type, hostname: d.hostname ?? (d.keepDefaultName ? undefined : d.name), ports: d.ports });
-    dev.lab = { learned: def.learned?.[d.name], macs: def.macs?.[d.name], bindings: def.bindings?.[d.name], arp: def.arp?.[d.name], natTranslations: def.natTranslations?.[d.name] };
+    const dev = createDevice({ name: d.name, type: d.type, hostname: d.hostname ?? (d.keepDefaultName ? undefined : d.name), ports: d.ports, mac: d.mac });
+    dev.lab = { learned: def.learned?.[d.name], macs: def.macs?.[d.name], bindings: def.bindings?.[d.name], arp: def.arp?.[d.name], natTranslations: def.natTranslations?.[d.name], lease: def.lease?.[d.name] };
     if (d.ip) {
       const [ip, bits] = d.ip.split("/");
       const f = Object.values(dev.interfaces)[0];
@@ -32,10 +33,12 @@ export function buildLab(def) {
   }
   const all = Object.values(devices);
   for (const dev of all) dev.lab.all = all;
+  // PCs with an operating system get a terminal of their own
+  for (const d of def.devices) if (d.os) makeHost(devices[d.name], d, def);
   for (const d of def.devices) if (d.setup?.length) apply(devices[d.name], d.setup);
   // ports that start err-disabled (a port-security or bpduguard story)
   for (const [name, ports] of Object.entries(def.errdisabled ?? {})) for (const p of ports) devices[name].interfaces[normalize(p)].errdisabled = true;
-  return { def, devices };
+  return { def, devices, answers: {} };
 }
 
 const maskOf = (bits) => {
@@ -91,23 +94,28 @@ export function tools(lab) {
 // run every check; a check returns true, or a message saying what is wrong
 export function checkLab(lab) {
   const t = tools(lab);
-  return lab.def.tasks.map((task) => {
+  return lab.def.tasks.map((task, i) => {
     let result;
+    // what was typed or picked in the task's answer box, if it has one
+    t.reply = String(lab.answers?.[i] ?? "").trim();
     try {
       result = task.check(t);
     } catch (e) {
-      result = `έλεγχος: ${e.message}`;
+      result = `check failed: ${e.message}`;
     }
-    return { text: task.text, ok: result === true, why: result === true ? null : typeof result === "string" ? result : "Δεν έχει γίνει ακόμα." };
+    return { text: task.text, ok: result === true, why: result === true ? null : typeof result === "string" ? result : "Not done yet." };
   });
 }
 
 // type the model answer into every device (used by the tests and "show me")
 export function runSolution(lab) {
   const outputs = [];
-  for (const [name, lines] of Object.entries(lab.def.solution ?? {})) {
+  // "PC1#2" is a second turn on PC1, after the devices listed before it
+  for (const [key, lines] of Object.entries(lab.def.solution ?? {})) {
+    const name = key.split("#")[0];
     const dev = lab.devices[name];
     for (const line of lines) outputs.push({ name, line, prompt: prompt(dev), out: exec(dev, line) });
   }
+  Object.assign(lab.answers, lab.def.answers ?? {});
   return outputs;
 }
