@@ -132,6 +132,12 @@ English.
   configuration that resulted (adjacencies, trunks, the root bridge, the
   HSRP active router, NAT and ACL entries), so any correct answer passes.
   When a task fails, it says what is missing.
+- **Troubleshooting and reading output, as the exam asks.** Most modules
+  have a sim that starts broken (a native VLAN mismatch, a passive OSPF
+  interface and an area mismatch, NAT roles swapped, an ACL in the wrong
+  direction, HSRP peers in different groups, an err-disabled port, a DHCP
+  pool on the wrong network, a stray root priority) and labs whose tasks
+  are questions answered from `show` output. 190 labs, 28 of them sims.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 
