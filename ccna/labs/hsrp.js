@@ -1,4 +1,4 @@
-import { lab, R, S, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, cfg, EN, need, is } from "./kit.js";
 
 const M = "hsrp";
 const base = (a = [], b = []) => [R("R1", 25, 15, cfg("interface g0/0", "ip address 10.10.10.2 255.255.255.0", "no shutdown", ...a)), R("R2", 75, 15, cfg("interface g0/0", "ip address 10.10.10.3 255.255.255.0", "no shutdown", ...b)), S("SW1", 50, 38), PC("PC1", 50, 56, "10.10.10.50/24", "10.10.10.1")];
@@ -58,5 +58,33 @@ export default [
       R2: [...EN, "interface g0/0.10", "standby 10 ip 10.10.10.1", "interface g0/0.20", "standby 20 ip 10.10.20.1", "standby 20 priority 110", "standby 20 preempt"],
     },
     teach: "HSRP does not load balance within a group. Share the load with a separate group per VLAN, each with a different Active router. GLBP does real load balancing.",
+  }),
+  lab({
+    id: "hsrp-read", module: M, title: "Reading show standby brief",
+    cmds: ["show standby brief"],
+    devices: base(["standby 1 ip 10.10.10.1", "standby 1 priority 120", "standby 1 preempt"], ["standby 1 ip 10.10.10.1"]), links,
+    intro: "Answer from the output on R2.",
+    tasks: [
+      { text: "On R2, display the HSRP summary.", check: (t) => need(t.ran("R2", /^show standby( brief)?$/), "Run show standby brief.") },
+      { text: "What is R2's HSRP state?", choices: ["Active", "Standby", "Listen", "Init"], check: (t) => need(t.reply === "Standby", "R1 has priority 120, R2 the default 100.") },
+      { text: "What is the virtual IP that hosts use as their gateway?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "Read the Virtual IP column.") },
+    ],
+    solution: { R2: ["enable", "show standby brief"] },
+    answers: { 1: "Standby", 2: "10.10.10.1" },
+    teach: "In show standby brief, P next to the priority means preempt is on, and the Active and Standby columns show which router holds each role (local means this router).",
+  }),
+  lab({
+    id: "sim-hsrp-fix", module: M, title: "Sim: both routers think they are Active", kind: "sim",
+    cmds: ["show standby brief", "no standby", "standby ip"],
+    devices: base(["standby 1 ip 10.10.10.1", "standby 1 priority 110", "standby 1 preempt"], ["standby 2 ip 10.10.10.254"]), links,
+    intro: "Hosts use 10.10.10.1 as their gateway. R2 was meant to be its backup, but it does not take over when R1 fails.",
+    tasks: [
+      { text: "Compare the HSRP settings on R1 and R2.", check: (t) => need(t.ran("R1", /^show standby/) && t.ran("R2", /^show standby/), "Run show standby brief on both routers.") },
+      { text: "Remove R2's wrong group.", check: (t) => need(!t.f("R2", "g0/0").hsrp.groups[2], "R2 still has group 2. Use no standby 2.") },
+      { text: "Put R2 in the same group as R1, with the same virtual IP.", check: (t) => need(t.f("R2", "g0/0").hsrp.groups[1]?.ip === "10.10.10.1", "Expected standby 1 ip 10.10.10.1 on R2's G0/0.") },
+      { text: "R1 must stay Active.", check: (t) => need(t.hsrpActive("R1", "10.10.10.1"), "R1 is not Active.") },
+    ],
+    solution: { R1: ["enable", "show standby brief"], R2: ["enable", "show standby brief", "configure terminal", "interface g0/0", "no standby 2", "standby 1 ip 10.10.10.1"] },
+    teach: "HSRP peers must agree on the group number and the virtual IP (and the version). Routers in different groups never hear each other, so each one is Active for its own group.",
   }),
 ];
