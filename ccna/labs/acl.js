@@ -1,4 +1,4 @@
-import { lab, R, PC, SRV, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, SRV, cfg, EN, need, is } from "./kit.js";
 
 const M = "acl";
 const same = (a, b) => (b.any ? a?.any : b.host ? a?.host === b.host : a?.net === b.net && a?.wild === b.wild);
@@ -139,5 +139,33 @@ export default [
       R2: [...EN, "access-list 1 permit host 192.168.10.10", "line vty 0 15", "access-class 1 in"],
     },
     teach: "Each interface takes one ACL per direction per protocol (IPv4/IPv6). A second ip access-group replaces the first.",
+  }),
+  lab({
+    id: "acl-read", module: M, title: "Reading show access-lists",
+    cmds: ["show access-lists", "show ip interface"],
+    devices: three(["access-list 110 permit tcp 192.168.10.0 0.0.0.255 host 172.16.1.100 eq 443", "access-list 110 deny ip 192.168.10.0 0.0.0.255 172.16.1.0 0.0.0.255", "access-list 110 permit ip any any", "interface g0/0", "ip access-group 110 in"]), links: threeLinks,
+    intro: "Someone else configured R1's filtering. Find out what it does.",
+    tasks: [
+      { text: "List R1's access lists.", check: (t) => need(t.ran("R1", /^show (ip )?access-lists/), "Run show access-lists.") },
+      { text: "Find which interface and direction ACL 110 is applied to.", check: (t) => need(t.ran("R1", /^show (ip interface|running-config)/), "show ip interface g0/0 shows the Inbound access list (or look in show running-config).") },
+      { text: "Can PC10 (192.168.10.10) open an SSH session to 172.16.1.100?", choices: ["Yes", "No"], check: (t) => need(t.reply === "No", "SSH is TCP 22: the first entry permits only 443, and the second denies the rest to 172.16.1.0/24.") },
+      { text: "Which sequence number permits HTTPS?", ask: "number", check: (t) => need(is.num(t.reply, 10), "Entries are numbered 10, 20, 30... in show access-lists.") },
+    ],
+    solution: { R1: ["enable", "show access-lists", "show ip interface g0/0"] },
+    answers: { 2: "No", 3: "10" },
+    teach: "show access-lists shows every entry with its sequence number and match counters; show ip interface shows which ACL is applied in and out on each interface.",
+  }),
+  lab({
+    id: "sim-acl-fix", module: M, title: "Sim: the ACL blocks everything", kind: "sim",
+    cmds: ["show ip interface", "ip access-group", "access-list"],
+    devices: three(["access-list 100 permit tcp 192.168.10.0 0.0.0.255 host 172.16.1.100 eq www", "access-list 100 deny ip 192.168.10.0 0.0.0.255 host 172.16.1.100", "interface g0/0", "ip access-group 100 out"]), links: threeLinks,
+    intro: "ACL 100 should let LAN 10 reach only the web service on SRV and leave all other traffic alone. Instead, PC10 cannot reach anything, and SRV is still open to it. Fix it.",
+    tasks: [
+      { text: "Find where ACL 100 is applied.", check: (t) => need(t.ran("R1", /^show (ip interface|running-config)/), "Run show ip interface g0/0 (or show running-config).") },
+      { text: "Apply it in the direction that filters traffic coming from LAN 10.", check: (t) => need(t.f("R1", "g0/0").aclIn === "100" && t.f("R1", "g0/0").aclOut !== "100", t.f("R1", "g0/0").aclOut === "100" ? "It is still applied out on G0/0, which filters traffic going to LAN 10." : "Expected ip access-group 100 in on G0/0.") },
+      { text: "Stop the implicit deny from blocking all other traffic.", check: (t) => { const a = t.acl("R1", 100); const last = a?.entries[a.entries.length - 1]; return need(last?.action === "permit" && last.proto === "ip" && last.src.any && last.dst.any, "The last entry must be permit ip any any."); } },
+    ],
+    solution: { R1: ["enable", "show ip interface g0/0", "configure terminal", "access-list 100 permit ip any any", "interface g0/0", "no ip access-group 100 out", "ip access-group 100 in"] },
+    teach: "In and out are from the router's point of view: in = arriving on the interface, out = leaving it. Every ACL ends with an implicit deny any, so a list of permits and denies for one host needs a permit at the end.",
   }),
 ];
