@@ -127,7 +127,8 @@ English.
   `% Invalid input` with the caret). It also has `?` help, Tab completion,
   `do`, pipes (`| include`, `| section`), and the real prompts for `enable`,
   `copy`, `reload` and `crypto key`. The `show` output is built from what you
-  configured.
+  configured; spanning tree, for one, works out root path costs, root ports
+  and the blocked ports the way 802.1D does.
 - **Checking is done on the result, not the typing.** "Check" inspects the
   configuration that resulted (adjacencies, trunks, the root bridge, the
   HSRP active router, NAT and ACL entries), so any correct answer passes.
@@ -137,7 +138,7 @@ English.
   interface and an area mismatch, NAT roles swapped, an ACL in the wrong
   direction, HSRP peers in different groups, an err-disabled port, a DHCP
   pool on the wrong network, a stray root priority) and labs whose tasks
-  are questions answered from `show` output. 190 labs, 28 of them sims.
+  are questions answered from `show` output. 191 labs, 28 of them sims.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 
