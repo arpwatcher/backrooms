@@ -1,0 +1,293 @@
+import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
+
+// harder sims: bigger topologies, several topics at once, more tasks, faults
+// to find and questions answered from the output
+const M = "challenge";
+const hard = (def) => lab({ kind: "sim", hard: true, module: M, ...def });
+const all = (list, ok) => list.every(ok);
+
+// --- a three-switch campus behind a router on a stick -------------------------------------------
+
+const campusDevices = (setup = {}) => [
+  R("R1", 50, 0, setup.R1 ?? []),
+  S("DSW1", 50, 26, setup.DSW1 ?? []),
+  S("ASW1", 24, 52, setup.ASW1 ?? []),
+  S("ASW2", 76, 52, setup.ASW2 ?? []),
+  HOST("PC1", 6, 80, "windows", { ip: "10.10.10.11/24", gateway: "10.10.10.1", mac: "0050.7966.6811" }),
+  HOST("PC2", 36, 82, "linux", { ip: "10.10.20.12/24", gateway: "10.10.20.1", mac: "0050.7966.6812" }),
+  HOST("PC3", 64, 82, "windows", { ip: "10.10.10.13/24", gateway: "10.10.10.1", mac: "0050.7966.6813" }),
+  HOST("PC4", 94, 80, "mac", { ip: "10.10.20.14/24", gateway: "10.10.20.1", mac: "0050.7966.6814" }),
+];
+const campusLinks = [["R1", "g0/0", "DSW1", "g0/1"], ["DSW1", "g0/2", "ASW1", "g0/1"], ["DSW1", "fa0/23", "ASW2", "g0/1"], ["ASW1", "g0/2", "ASW2", "g0/2"], ["ASW1", "fa0/1", "PC1", "fa0"], ["ASW1", "fa0/2", "PC2", "fa0"], ["ASW2", "fa0/1", "PC3", "fa0"], ["ASW2", "fa0/2", "PC4", "fa0"]];
+const vlans = ["vlan 10", "name SALES", "vlan 20", "name ENG", "vlan 99", "name NATIVE", "exit"];
+const uplinks = ["switchport mode trunk", "switchport trunk native vlan 99", "switchport trunk allowed vlan 10,20,99"];
+const edge = (vlan) => ["switchport mode access", `switchport access vlan ${vlan}`, "spanning-tree portfast", "spanning-tree bpduguard enable"];
+const campus = {
+  R1: ["interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.10.10.1 255.255.255.0", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.10.20.1 255.255.255.0"],
+  DSW1: [...vlans, "interface range g0/2 , fa0/23", ...uplinks, "interface g0/1", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "exit", "spanning-tree vlan 10,20,99 root primary"],
+  ASW1: [...vlans, "interface range g0/1 - 2", ...uplinks, "interface fa0/1", ...edge(10), "interface fa0/2", ...edge(20), "exit", "spanning-tree vlan 10,20,99 root secondary"],
+  ASW2: [...vlans, "interface range g0/1 - 2", ...uplinks, "interface fa0/1", ...edge(10), "interface fa0/2", ...edge(20)],
+};
+const switches = ["DSW1", "ASW1", "ASW2"];
+const trunkPorts = [["DSW1", "g0/2"], ["DSW1", "fa0/23"], ["ASW1", "g0/1"], ["ASW1", "g0/2"], ["ASW2", "g0/1"], ["ASW2", "g0/2"]];
+const accessPorts = [["ASW1", "fa0/1", 10], ["ASW1", "fa0/2", 20], ["ASW2", "fa0/1", 10], ["ASW2", "fa0/2", 20]];
+const gateways = [["PC1", "10.10.10.1"], ["PC2", "10.10.20.1"], ["PC3", "10.10.10.1"], ["PC4", "10.10.20.1"]];
+
+// --- OSPF triangle with an Internet edge --------------------------------------------------------
+
+const triangle = (extra = {}) => [
+  R("R1", 16, 10, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.13.1 255.255.255.252", "no shutdown", ...(extra.R1 ?? []))),
+  R("R2", 84, 10, cfg("interface g0/0", "ip address 10.2.2.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "no shutdown", ...(extra.R2 ?? []))),
+  R("R3", 50, 40, cfg("interface g0/0", "ip address 203.0.113.2 255.255.255.252", "no shutdown", "interface g0/1", "ip address 10.0.13.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", ...(extra.R3 ?? []))),
+  ISP("ISP", 50, 70),
+  HOST("PC1", 8, 48, "linux", { ip: "10.1.1.10/24", gateway: "10.1.1.1", mac: "0050.7966.6821" }),
+  HOST("PC2", 92, 48, "windows", { ip: "10.2.2.10/24", gateway: "10.2.2.1", mac: "0050.7966.6822" }),
+];
+const triangleLinks = [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/2", "R3", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R3", "g0/0", "ISP", "g0/0"], ["R1", "g0/0", "PC1", "fa0"], ["R2", "g0/0", "PC2", "fa0"]];
+
+export default [
+  hard({
+    id: "ch-campus-build", title: "Challenge: build a three-switch campus",
+    cmds: ["vlan", "switchport mode trunk", "switchport trunk native vlan", "switchport trunk allowed vlan", "spanning-tree vlan root", "spanning-tree portfast", "encapsulation dot1q"],
+    devices: campusDevices(), links: campusLinks,
+    intro: "Nothing is configured. Sales (VLAN 10, 10.10.10.0/24) and Engineering (VLAN 20, 10.10.20.0/24) sit on both access switches, and R1 routes between them. VLAN 99 is the native VLAN of the switch trunks. Note that ASW2 reaches DSW1 over a FastEthernet port.",
+    tasks: [
+      { text: "On DSW1, ASW1 and ASW2: VLAN 10 named SALES, VLAN 20 named ENG and VLAN 99 named NATIVE.", check: (t) => need(all(switches, (s) => t.dev(s).vlans[10]?.name === "SALES" && t.dev(s).vlans[20]?.name === "ENG" && t.dev(s).vlans[99]?.name === "NATIVE"), "A VLAN or a name is missing on one of the switches.") },
+      { text: "On both access switches, Fa0/1 is a static access port in VLAN 10 and Fa0/2 in VLAN 20, each with PortFast and BPDU Guard.", check: (t) => need(all(accessPorts, ([s, p, v]) => { const f = t.f(s, p); return f.mode === "access" && f.accessVlan === v && f.stp.portfast === "edge" && f.stp.bpduguard === true; }), "Each user port needs mode access, its VLAN, spanning-tree portfast and spanning-tree bpduguard enable.") },
+      { text: "Every link between two switches is a static trunk with native VLAN 99, allowing only VLANs 10, 20 and 99.", check: (t) => need(all(trunkPorts, ([s, p]) => { const f = t.f(s, p); return f.mode === "trunk" && f.nativeVlan === 99 && JSON.stringify(f.allowed) === "[10,20,99]"; }), "Check both ends of all three switch-to-switch links (DSW1 G0/2 and Fa0/23, ASW1 G0/1-2, ASW2 G0/1-2).") },
+      { text: "DSW1's link to R1 is a trunk that allows only VLANs 10 and 20.", check: (t) => need(t.f("DSW1", "g0/1").mode === "trunk" && JSON.stringify(t.f("DSW1", "g0/1").allowed) === "[10,20]", "DSW1 G0/1: switchport mode trunk and allowed vlan 10,20.") },
+      { text: "R1 routes between the VLANs, with gateway .1 in each subnet.", check: (t) => need(t.enabled("R1", "g0/0") && t.f("R1", "g0/0.10")?.encap?.vlan === 10 && t.ip("R1", "g0/0.10") === "10.10.10.1/24" && t.f("R1", "g0/0.20")?.encap?.vlan === 20 && t.ip("R1", "g0/0.20") === "10.10.20.1/24", "R1 needs G0/0 up and subinterfaces for VLAN 10 and VLAN 20.") },
+      { text: "DSW1 is the root for VLANs 10, 20 and 99 (root primary), and ASW1 is the backup (root secondary).", check: (t) => need(all([10, 20, 99], (v) => t.root("DSW1", v) && t.dev("ASW1").stp.vlans[v]?.priority === 28672), "Use spanning-tree vlan 10,20,99 root primary on DSW1 and root secondary on ASW1.") },
+      { text: "All four PCs reach their gateway, and PC1 reaches PC4.", check: (t) => need(all(gateways, ([pc, gw]) => t.reach(pc, gw)) && t.reach("PC1", "10.10.20.14"), "Test from the PCs. A VLAN, a trunk or a subinterface is still missing on the path.") },
+      { text: "Which port is ASW2's root port for VLAN 10?", choices: ["G0/1 (to DSW1)", "G0/2 (to ASW1)"], check: (t) => need(t.reply === "G0/2 (to ASW1)", "G0/1 runs at 100 Mbps because DSW1's end is FastEthernet (cost 19). Through ASW1 the cost is 4 + 4 = 8.") },
+      { text: "Which port does spanning tree block for VLAN 10?", choices: ["ASW2 G0/1", "ASW2 G0/2", "ASW1 G0/2", "DSW1 Fa0/23"], check: (t) => need(t.reply === "ASW2 G0/1", "Check show spanning-tree vlan 10 on ASW2: the port that is neither root nor designated is Altn BLK.") },
+    ],
+    solution: { R1: [...EN, ...campus.R1], DSW1: [...EN, ...campus.DSW1], ASW1: [...EN, ...campus.ASW1], ASW2: [...EN, ...campus.ASW2] },
+    answers: { 7: "G0/2 (to ASW1)", 8: "ASW2 G0/1" },
+    teach: "Build from the core outwards: VLANs everywhere, then trunks (both ends must agree on mode, native VLAN and allowed list), then access ports, then routing, then STP. A link's speed is set by its slower end, and that changes STP costs: a gigabit port facing a FastEthernet port costs 19, not 4.",
+  }),
+  hard({
+    id: "ch-campus-ticket", title: "Challenge: VLAN 20 is down across the campus",
+    cmds: ["show vlan brief", "show interfaces trunk", "show ip interface brief", "show interfaces status"],
+    devices: campusDevices({
+      R1: cfg(...campus.R1.map((l) => (l === "encapsulation dot1q 20" ? "encapsulation dot1q 21" : l))),
+      DSW1: cfg(...campus.DSW1.map((l) => (l === "switchport trunk allowed vlan 10,20" ? "switchport trunk allowed vlan 10" : l))),
+      ASW1: cfg(...campus.ASW1, "interface g0/2", "switchport trunk native vlan 1", "interface fa0/2", "shutdown"),
+      ASW2: cfg(...campus.ASW2, "vlan 30", "exit", "interface fa0/2", "switchport access vlan 30"),
+    }), links: campusLinks,
+    intro: "The campus was built as designed (VLAN 10 Sales, VLAN 20 Engineering, native VLAN 99 on switch trunks, R1 routing). After a change window, nobody in Engineering can work, and a switch logs native VLAN mismatches. There are five faults on four devices. Fix them without changing anything that already works.",
+    tasks: [
+      { text: "Investigate with show commands on R1, DSW1, ASW1 and ASW2.", check: (t) => need(all(["R1", "DSW1", "ASW1", "ASW2"], (d) => t.ran(d, /^show /)), "Run show commands on every device in the path (show vlan brief, show interfaces trunk, show ip interface brief, show interfaces status).") },
+      { text: "PC2's switch port is back in service, in VLAN 20.", check: (t) => need(t.enabled("ASW1", "fa0/2") && t.f("ASW1", "fa0/2").accessVlan === 20, "ASW1 Fa0/2 is shut down.") },
+      { text: "PC4's switch port is in the right VLAN.", check: (t) => need(t.f("ASW2", "fa0/2").accessVlan === 20, "ASW2 Fa0/2 is in VLAN 30.") },
+      { text: "VLAN 20 crosses DSW1's trunk to R1 again, and VLAN 10 still does.", check: (t) => need(t.carries("DSW1", "g0/1", 20) && t.carries("DSW1", "g0/1", 10), "DSW1 G0/1 allows only VLAN 10. Use allowed vlan add 20.") },
+      { text: "R1's VLAN 20 subinterface tags with the right VLAN.", check: (t) => need(t.f("R1", "g0/0.20")?.encap?.vlan === 20, "G0/0.20 uses encapsulation dot1q 21.") },
+      { text: "Both ends of every switch trunk agree on the native VLAN.", check: (t) => need(all(trunkPorts, ([s, p]) => t.f(s, p).nativeVlan === 99), "ASW1 G0/2 uses native VLAN 1; the design says 99.") },
+      { text: "PC2 and PC4 reach their gateway, and PC2 reaches PC1.", check: (t) => need(t.reach("PC2", "10.10.20.1") && t.reach("PC4", "10.10.20.1") && t.reach("PC2", "10.10.10.11"), "Some fault on the VLAN 20 path is still there.") },
+      { text: "Which fault alone would make DSW1 G0/1 show VLAN 20 missing from \"Vlans allowed on trunk\"?", choices: ["ASW1 Fa0/2 shut down", "ASW2 Fa0/2 in VLAN 30", "DSW1 G0/1 allowed list", "R1 G0/0.20 tagging VLAN 21", "ASW1 G0/2 native VLAN"], check: (t) => need(t.reply === "DSW1 G0/1 allowed list", "That section lists the switchport trunk allowed vlan setting itself.") },
+      { text: "Which fault would never show up in a switch's show commands at all?", choices: ["ASW1 Fa0/2 shut down", "ASW2 Fa0/2 in VLAN 30", "DSW1 G0/1 allowed list", "R1 G0/0.20 tagging VLAN 21", "ASW1 G0/2 native VLAN"], check: (t) => need(t.reply === "R1 G0/0.20 tagging VLAN 21", "The switches only see frames tagged 21 that they drop; the fault is in R1's configuration.") },
+    ],
+    solution: {
+      R1: ["enable", "show ip interface brief", "configure terminal", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.10.20.1 255.255.255.0"],
+      DSW1: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk allowed vlan add 20"],
+      ASW1: ["enable", "show interfaces status", "configure terminal", "interface fa0/2", "no shutdown", "interface g0/2", "switchport trunk native vlan 99"],
+      ASW2: ["enable", "show vlan brief", "configure terminal", "interface fa0/2", "switchport access vlan 20"],
+    },
+    answers: { 7: "DSW1 G0/1 allowed list", 8: "R1 G0/0.20 tagging VLAN 21" },
+    teach: "Work along the path of one PC: its access port (status, VLAN), every trunk (mode, native, allowed and forwarding VLANs at both ends), then the gateway (subinterface tag and address). Changing the encapsulation of a subinterface removes its IP address in real IOS, so re-enter it.",
+  }),
+  hard({
+    id: "ch-ospf-edge", title: "Challenge: OSPF triangle with an Internet edge",
+    cmds: ["router ospf", "router-id", "passive-interface", "ip ospf cost", "default-information originate", "ip nat inside source list"],
+    devices: triangle(), links: triangleLinks, extern: ["8.8.8.8"],
+    intro: "Three routers in a triangle; R3 connects to the ISP (203.0.113.1). Addresses are configured; nothing else is. Build the routing and the Internet access. The R1-R3 link is a slow backup circuit.",
+    tasks: [
+      { text: "OSPF process 1, area 0, on every link between the routers and on both LANs. The ISP link stays out of OSPF.", check: (t) => need([["R1", ["g0/0", "g0/1", "g0/2"]], ["R2", ["g0/0", "g0/1", "g0/2"]], ["R3", ["g0/1", "g0/2"]]].every(([r, ifs]) => ifs.every((i) => t.ospfOf(r, i)?.pid === 1 && t.ospfOf(r, i)?.area === 0)) && !t.ospfOf("R3", "g0/0"), "Some interface is not in OSPF 1 area 0, or R3 G0/0 is in OSPF.") },
+      { text: "Router IDs 1.1.1.1, 2.2.2.2 and 3.3.3.3, set with the router-id command.", check: (t) => need(t.dev("R1").ospf[1]?.routerId === "1.1.1.1" && t.dev("R2").ospf[1]?.routerId === "2.2.2.2" && t.dev("R3").ospf[1]?.routerId === "3.3.3.3", "Expected router-id under router ospf 1 on each router.") },
+      { text: "The LAN interfaces send no hellos.", check: (t) => need(t.passive("R1", 1, "g0/0") && t.passive("R2", 1, "g0/0"), "Expected passive-interface g0/0 on R1 and R2.") },
+      { text: "All three adjacencies are FULL.", check: (t) => need(t.ospfAdj("R1", "R2") && t.ospfAdj("R1", "R3") && t.ospfAdj("R2", "R3"), "Not every pair of routers is adjacent.") },
+      { text: "The R1-R3 link has OSPF cost 100 at both ends, so it is used only as a backup.", check: (t) => need(t.cost("R1", "g0/2") === 100 && t.cost("R3", "g0/1") === 100, "Expected ip ospf cost 100 on R1 G0/2 and R3 G0/1.") },
+      { text: "R3 has a default route to the ISP and advertises it into OSPF.", check: (t) => need(t.statics("R3").some((r) => r.net === "0.0.0.0" && r.mask === "0.0.0.0" && r.via === "203.0.113.1") && t.dev("R3").ospf[1]?.defaultOriginate, "Expected ip route 0.0.0.0 0.0.0.0 203.0.113.1 and default-information originate on R3.") },
+      { text: "R3 translates both LANs with PAT on its ISP address (ACL 1, G0/1-2 inside, G0/0 outside).", check: (t) => { const d = t.dev("R3"); return need(t.f("R3", "g0/1").nat === "inside" && t.f("R3", "g0/2").nat === "inside" && t.f("R3", "g0/0").nat === "outside" && d.nat.dynamic.some((x) => x.acl === "1" && x.out === "GigabitEthernet0/0" && x.overload), "Expected ip nat inside on G0/1-2, ip nat outside on G0/0, and ip nat inside source list 1 interface g0/0 overload."); } },
+      { text: "PC1 and PC2 reach 8.8.8.8 and each other.", check: (t) => need(t.reach("PC1", "8.8.8.8") && t.reach("PC2", "8.8.8.8") && t.reach("PC1", "10.2.2.10"), "Check the routes on each router (show ip route) and ACL 1: both LANs must be permitted.") },
+      { text: "What is R1's next hop for 0.0.0.0/0?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.0.12.2"), "show ip route on R1: through R2 the cost is 1 + 1 = 2, against 100 over the direct link.") },
+      { text: "What OSPF metric does R1 have for 10.2.2.0/24?", ask: "number", check: (t) => need(is.num(t.reply, 2), "R1 G0/1 (cost 1) plus R2 G0/0 (cost 1).") },
+    ],
+    solution: {
+      R1: [...EN, "router ospf 1", "router-id 1.1.1.1", "network 10.1.1.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0", "network 10.0.13.0 0.0.0.3 area 0", "passive-interface g0/0", "interface g0/2", "ip ospf cost 100"],
+      R2: [...EN, "router ospf 1", "router-id 2.2.2.2", "network 10.2.2.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0", "network 10.0.23.0 0.0.0.3 area 0", "passive-interface g0/0"],
+      R3: [...EN, "router ospf 1", "router-id 3.3.3.3", "network 10.0.13.0 0.0.0.3 area 0", "network 10.0.23.0 0.0.0.3 area 0", "default-information originate", "exit", "interface g0/1", "ip ospf cost 100", "ip nat inside", "interface g0/2", "ip nat inside", "interface g0/0", "ip nat outside", "exit", "ip route 0.0.0.0 0.0.0.0 203.0.113.1", "access-list 1 permit 10.1.1.0 0.0.0.255", "access-list 1 permit 10.2.2.0 0.0.0.255", "ip nat inside source list 1 interface g0/0 overload"],
+    },
+    answers: { 8: "10.0.12.2", 9: "2" },
+    teach: "OSPF cost is per interface and only counts on the way out, so set it at both ends of a link. default-information originate needs a default route on that router (or always). PAT on the edge router needs the inside interfaces to be the ones the LAN traffic arrives on, which here are the links from R1 and R2.",
+  }),
+  hard({
+    id: "ch-fhrp-campus", title: "Challenge: redundant gateways on two Layer 3 switches",
+    cmds: ["channel-group mode active", "switchport trunk encapsulation dot1q", "ip routing", "interface vlan", "standby", "spanning-tree vlan root"],
+    devices: [
+      L3("DSW1", 22, 6), L3("DSW2", 78, 6), S("ASW1", 50, 38),
+      HOST("PC1", 26, 68, "windows", { ip: "10.10.10.21/24", gateway: "10.10.10.1", mac: "0050.7966.6831" }),
+      HOST("PC2", 74, 68, "linux", { ip: "10.10.20.21/24", gateway: "10.10.20.1", mac: "0050.7966.6832" }),
+    ],
+    links: [["DSW1", "g0/1", "DSW2", "g0/1"], ["DSW1", "g0/2", "DSW2", "g0/2"], ["DSW1", "fa0/1", "ASW1", "g0/1"], ["DSW2", "fa0/1", "ASW1", "g0/2"], ["ASW1", "fa0/1", "PC1", "fa0"], ["ASW1", "fa0/2", "PC2", "fa0"]],
+    intro: "DSW1 and DSW2 are the gateways for VLAN 10 (10.10.10.0/24) and VLAN 20 (10.10.20.0/24), each with a virtual gateway at .1. DSW1 should carry VLAN 10 and DSW2 VLAN 20, and STP should agree with HSRP. Nothing is configured.",
+    tasks: [
+      { text: "VLANs 10 and 20 on all three switches.", check: (t) => need(all(["DSW1", "DSW2", "ASW1"], (s) => t.dev(s).vlans[10] && t.dev(s).vlans[20]), "A VLAN is missing somewhere.") },
+      { text: "ASW1: Fa0/1 access in VLAN 10, Fa0/2 access in VLAN 20, and its uplinks G0/1-2 are trunks.", check: (t) => need(t.f("ASW1", "fa0/1").mode === "access" && t.f("ASW1", "fa0/1").accessVlan === 10 && t.f("ASW1", "fa0/2").mode === "access" && t.f("ASW1", "fa0/2").accessVlan === 20 && t.f("ASW1", "g0/1").mode === "trunk" && t.f("ASW1", "g0/2").mode === "trunk", "Check ASW1's access ports and uplinks.") },
+      { text: "DSW1 and DSW2: Fa0/1 is an 802.1Q trunk to ASW1.", check: (t) => need(all(["DSW1", "DSW2"], (s) => t.f(s, "fa0/1").mode === "trunk" && t.f(s, "fa0/1").trunkEncap === "dot1q"), "On a Layer 3 switch: switchport trunk encapsulation dot1q, then switchport mode trunk.") },
+      { text: "G0/1-2 between DSW1 and DSW2 form LACP EtherChannel 1, and Port-channel1 is an 802.1Q trunk.", check: (t) => need(t.bundled("DSW1", "g0/1") && t.bundled("DSW1", "g0/2") && all(["DSW1", "DSW2"], (s) => ["active", "passive"].includes(t.f(s, "g0/1").channel?.mode) && t.f(s, "po1")?.mode === "trunk"), "Both members bundled with LACP (at least one side active), and Po1 a trunk on both switches.") },
+      { text: "Both switches route, with SVIs for both VLANs: DSW1 .2 and DSW2 .3.", check: (t) => need(t.dev("DSW1").ipRouting && t.dev("DSW2").ipRouting && t.ip("DSW1", "vlan10") === "10.10.10.2/24" && t.ip("DSW1", "vlan20") === "10.10.20.2/24" && t.ip("DSW2", "vlan10") === "10.10.10.3/24" && t.ip("DSW2", "vlan20") === "10.10.20.3/24" && all(["DSW1", "DSW2"], (s) => t.enabled(s, "vlan10") && t.enabled(s, "vlan20")), "Expected ip routing and four SVIs, all up.") },
+      { text: "HSRP group 10 (VIP 10.10.10.1) is Active on DSW1, and group 20 (VIP 10.10.20.1) is Active on DSW2; each Active switch has priority 110 and preempts.", check: (t) => need(t.hsrpActive("DSW1", "10.10.10.1") && t.hsrpActive("DSW2", "10.10.20.1") && t.f("DSW1", "vlan10").hsrp.groups[10]?.preempt && t.f("DSW2", "vlan20").hsrp.groups[20]?.preempt && t.f("DSW2", "vlan10").hsrp.groups[10]?.ip && t.f("DSW1", "vlan20").hsrp.groups[20]?.ip, "Both switches need both groups; the Active one with priority 110 and preempt.") },
+      { text: "The STP root for each VLAN is the same switch as its HSRP Active (root primary), with the other as secondary.", check: (t) => need(t.root("DSW1", 10) && t.root("DSW2", 20) && t.dev("DSW2").stp.vlans[10]?.priority === 28672 && t.dev("DSW1").stp.vlans[20]?.priority === 28672, "DSW1 root primary for VLAN 10 and secondary for 20; DSW2 the other way round.") },
+      { text: "PC1 and PC2 reach their virtual gateway and each other.", check: (t) => need(t.reach("PC1", "10.10.10.1") && t.reach("PC2", "10.10.20.1") && t.reach("PC1", "10.10.20.21"), "Something on the path is missing: check trunks, SVIs and HSRP.") },
+      { text: "Which switch forwards PC2's traffic to other subnets?", choices: ["DSW1", "DSW2", "ASW1"], check: (t) => need(t.reply === "DSW2", "PC2 is in VLAN 20, whose HSRP Active is DSW2.") },
+      { text: "What MAC address does PC1 have for its gateway after a ping? (from arp -a)", ask: "xx-xx-xx-xx-xx-xx", check: (t) => need(is.mac(t.reply, "0000.0c07.ac0a"), "HSRPv1 virtual MAC is 0000.0c07.acXX, with XX the group in hex (10 = 0a).") },
+    ],
+    solution: {
+      DSW1: [...EN, "ip routing", "vlan 10", "vlan 20", "exit", "interface range g0/1 - 2", "switchport trunk encapsulation dot1q", "switchport mode trunk", "channel-group 1 mode active", "interface fa0/1", "switchport trunk encapsulation dot1q", "switchport mode trunk", "interface vlan 10", "ip address 10.10.10.2 255.255.255.0", "standby 10 ip 10.10.10.1", "standby 10 priority 110", "standby 10 preempt", "no shutdown", "interface vlan 20", "ip address 10.10.20.2 255.255.255.0", "standby 20 ip 10.10.20.1", "no shutdown", "exit", "spanning-tree vlan 10 root primary", "spanning-tree vlan 20 root secondary"],
+      DSW2: [...EN, "ip routing", "vlan 10", "vlan 20", "exit", "interface range g0/1 - 2", "switchport trunk encapsulation dot1q", "switchport mode trunk", "channel-group 1 mode passive", "interface fa0/1", "switchport trunk encapsulation dot1q", "switchport mode trunk", "interface vlan 10", "ip address 10.10.10.3 255.255.255.0", "standby 10 ip 10.10.10.1", "no shutdown", "interface vlan 20", "ip address 10.10.20.3 255.255.255.0", "standby 20 ip 10.10.20.1", "standby 20 priority 110", "standby 20 preempt", "no shutdown", "exit", "spanning-tree vlan 20 root primary", "spanning-tree vlan 10 root secondary"],
+      ASW1: [...EN, "vlan 10", "vlan 20", "exit", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/2", "switchport mode access", "switchport access vlan 20", "interface range g0/1 - 2", "switchport mode trunk"],
+      PC1: ["ping 10.10.10.1", "arp -a"],
+    },
+    answers: { 8: "DSW2", 9: "00-00-0c-07-ac-0a" },
+    teach: "Align STP with HSRP: if VLAN 10's root is DSW2 while its HSRP Active is DSW1, traffic crosses the inter-switch link for nothing. On Layer 3 switches every trunk needs switchport trunk encapsulation dot1q first, and the port-channel takes its settings from the members when it is created.",
+  }),
+  hard({
+    id: "ch-dhcp-sites", title: "Challenge: DHCP for two sites from one server",
+    cmds: ["ip route", "ip dhcp excluded-address", "ip dhcp pool", "domain-name", "ip helper-address", "ipconfig /renew"],
+    devices: [
+      R("R1", 25, 6, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown")),
+      R("R2", 75, 6, cfg("interface g0/0", "ip address 10.20.20.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown")),
+      S("SW1", 25, 34), S("SW2", 75, 34),
+      HOST("PC1", 8, 64, "windows", { dhcp: true, mac: "0050.7966.6841" }),
+      SRV("DNS", 40, 64, "10.10.10.5/24", "10.10.10.1"),
+      HOST("PC2", 60, 64, "windows", { dhcp: true, mac: "0050.7966.6842" }),
+      HOST("PRN", 92, 64, "linux", { ip: "10.20.20.50/24", gateway: "10.20.20.1", mac: "0050.7966.6843" }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/0", "SW1", "g0/1"], ["R2", "g0/0", "SW2", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "DNS", "fa0"], ["SW2", "fa0/1", "PC2", "fa0"], ["SW2", "fa0/2", "PRN", "fa0"]],
+    intro: "R1 at HQ is the DHCP server for HQ (10.10.10.0/24) and the branch (10.20.20.0/24). The first 20 addresses of each subnet are reserved. The DNS server is 10.10.10.5. Interfaces are configured; routing and DHCP are not.",
+    tasks: [
+      { text: "Each router can reach the other site's LAN (static routes).", check: (t) => need(t.route("R1", "10.20.20.0", 24) && t.route("R2", "10.10.10.0", 24), "R1 needs a route to 10.20.20.0/24 and R2 to 10.10.10.0/24.") },
+      { text: "R1 never hands out .1 to .20 in either subnet.", check: (t) => need(["10.10.10", "10.20.20"].every((n) => t.dev("R1").dhcp.excluded.some((e) => e.from === `${n}.1` && e.to === `${n}.20`)), "Expected ip dhcp excluded-address for .1 - .20 in both subnets.") },
+      { text: "Pool HQ: 10.10.10.0/24, gateway 10.10.10.1, DNS 10.10.10.5, domain hq.mycompany.lab.", check: (t) => { const p = t.dev("R1").dhcp.pools.HQ; return need(p?.network === "10.10.10.0" && p.router.includes("10.10.10.1") && p.dns.includes("10.10.10.5") && p.domain === "hq.mycompany.lab", "Pool HQ is missing something (network, default-router, dns-server or domain-name)."); } },
+      { text: "Pool BRANCH: 10.20.20.0/24, gateway 10.20.20.1, DNS 10.10.10.5, domain branch.mycompany.lab.", check: (t) => { const p = t.dev("R1").dhcp.pools.BRANCH; return need(p?.network === "10.20.20.0" && p.router.includes("10.20.20.1") && p.dns.includes("10.10.10.5") && p.domain === "branch.mycompany.lab", "Pool BRANCH is missing something."); } },
+      { text: "R2 relays the branch's DHCP requests to R1.", check: (t) => need(t.f("R2", "g0/0").helpers.includes("10.0.12.1") || t.f("R2", "g0/0").helpers.includes("10.10.10.1"), "Expected ip helper-address with one of R1's addresses on R2 G0/0.") },
+      { text: "PC1 and PC2 both hold a lease.", check: (t) => need(t.dev("PC1").host.leased && t.dev("PC2").host.leased, "Run ipconfig /renew on PC1 and PC2 once DHCP is ready.") },
+      { text: "PC2 reaches PC1 and the DNS server.", check: (t) => need(t.reach("PC2", t.dev("PC1").interfaces.FastEthernet0.ip ?? "0.0.0.0") && t.reach("PC2", "10.10.10.5"), "Check the leases and the routes in both directions.") },
+      { text: "What address did PC2 receive?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.20.20.21"), "ipconfig on PC2: the first free address after the excluded range.") },
+      { text: "Which address does PC2 show as its DHCP Server?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, t.f("R2", "g0/0").helpers[0] ?? "10.0.12.1"), "ipconfig /all on PC2. The relay forwards to the address in ip helper-address.") },
+    ],
+    solution: {
+      R1: [...EN, "ip route 10.20.20.0 255.255.255.0 10.0.12.2", "ip dhcp excluded-address 10.10.10.1 10.10.10.20", "ip dhcp excluded-address 10.20.20.1 10.20.20.20", "ip dhcp pool HQ", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.10.10.5", "domain-name hq.mycompany.lab", "ip dhcp pool BRANCH", "network 10.20.20.0 255.255.255.0", "default-router 10.20.20.1", "dns-server 10.10.10.5", "domain-name branch.mycompany.lab"],
+      R2: [...EN, "ip route 10.10.10.0 255.255.255.0 10.0.12.1", "interface g0/0", "ip helper-address 10.0.12.1"],
+      PC1: ["ipconfig /renew"], PC2: ["ipconfig /renew", "ipconfig /all"],
+    },
+    answers: { 7: "10.20.20.21", 8: "10.0.12.1" },
+    teach: "A relayed request carries the relay interface's address (giaddr), and the server picks the pool by it. The server answers that address, so it needs a route back to the branch LAN; and the relay needs a route to the server.",
+  }),
+  hard({
+    id: "ch-access-hardening", title: "Challenge: secure an access switch end to end",
+    cmds: ["interface vlan", "ip default-gateway", "crypto key generate rsa", "access-class", "switchport port-security", "ip dhcp snooping", "ip arp inspection"],
+    devices: [
+      R("R1", 82, 2, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 192.168.10.1 255.255.255.0", "interface g0/0.99", "encapsulation dot1q 99", "ip address 192.168.99.1 255.255.255.0")),
+      S("SW1", 45, 30),
+      HOST("PC1", 0, 64, "windows", { ip: "192.168.10.11/24", gateway: "192.168.10.1", mac: "0050.7966.6851" }),
+      HOST("PC2", 30, 72, "linux", { ip: "192.168.10.12/24", gateway: "192.168.10.1", mac: "0050.7966.6852" }),
+      HOST("PC3", 62, 64, "mac", { ip: "192.168.10.13/24", gateway: "192.168.10.1", mac: "0050.7966.6853" }),
+      HOST("ADMIN", 96, 70, "linux", { ip: "192.168.99.50/24", gateway: "192.168.99.1", mac: "0050.7966.6859" }),
+    ],
+    links: [["SW1", "g0/1", "R1", "g0/0"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"], ["SW1", "fa0/3", "PC3", "fa0"], ["SW1", "fa0/24", "ADMIN", "fa0"]],
+    intro: "SW1 is new. Users (Fa0/1-3) go in VLAN 10 (USERS), the admin PC on Fa0/24 in VLAN 99 (MGMT), and every unused port in VLAN 999 (PARKING). R1 is the gateway for both VLANs over the trunk on G0/1, whose native VLAN must be the unused VLAN 999.",
+    tasks: [
+      { text: "VLANs 10 USERS, 99 MGMT and 999 PARKING; Fa0/1-3 access in VLAN 10, Fa0/24 access in VLAN 99.", check: (t) => { const d = t.dev("SW1"); return need(d.vlans[10]?.name === "USERS" && d.vlans[99]?.name === "MGMT" && d.vlans[999]?.name === "PARKING" && ["fa0/1", "fa0/2", "fa0/3"].every((p) => t.f("SW1", p).mode === "access" && t.f("SW1", p).accessVlan === 10) && t.f("SW1", "fa0/24").mode === "access" && t.f("SW1", "fa0/24").accessVlan === 99, "Check the VLAN names and the access ports."); } },
+      { text: "G0/1 is a trunk with native VLAN 999 allowing only VLANs 10 and 99.", check: (t) => need(t.f("SW1", "g0/1").mode === "trunk" && t.f("SW1", "g0/1").nativeVlan === 999 && JSON.stringify(t.f("SW1", "g0/1").allowed) === "[10,99]", "Expected mode trunk, native vlan 999, allowed vlan 10,99 on G0/1.") },
+      { text: "The switch is managed at 192.168.99.2/24 with gateway 192.168.99.1, and the VLAN 1 SVI is shut down.", check: (t) => need(t.ip("SW1", "vlan99") === "192.168.99.2/24" && t.enabled("SW1", "vlan99") && t.dev("SW1").defaultGateway === "192.168.99.1" && t.f("SW1", "vlan1").shutdown, "interface vlan 99 with the address and no shutdown, ip default-gateway, and shutdown on interface vlan 1.") },
+      { text: "SSH version 2 only, with 2048-bit keys (domain corp.lab), local user netadmin (secret), and no Telnet.", check: (t) => { const d = t.dev("SW1"); return need(d.domainName === "corp.lab" && d.rsa === 2048 && d.sshVersion === 2 && d.users.netadmin?.secret && d.lines.vty.loginLocal && d.lines.vty.transport.join() === "ssh", "Something is missing from SSH: domain, keys, version 2, user, login local, transport input ssh."); } },
+      { text: "Only the management subnet 192.168.99.0/24 may open a session to the switch (standard ACL 10).", check: (t) => need(t.acl("SW1", 10)?.entries.some((e) => e.action === "permit" && e.src.net === "192.168.99.0" && e.src.wild === "0.0.0.255") && t.dev("SW1").lines.vty.accessClass === "10", "Expected access-list 10 permit 192.168.99.0 0.0.0.255 and access-class 10 in on the vty lines.") },
+      { text: "User ports: port security with at most 2 MACs, sticky learning, and violation restrict.", check: (t) => need(["fa0/1", "fa0/2", "fa0/3"].every((p) => { const s = t.f("SW1", p).ps; return s.enabled && s.max === 2 && s.sticky && s.violation === "restrict"; }), "Each of Fa0/1-3 needs the four port-security settings.") },
+      { text: "DHCP snooping and Dynamic ARP Inspection for VLAN 10, trusting only the uplink.", check: (t) => { const d = t.dev("SW1"); return need(d.snooping.enabled && d.snooping.vlans.includes(10) && d.dai.vlans.includes(10) && t.f("SW1", "g0/1").snoopTrust && t.f("SW1", "g0/1").daiTrust && !t.f("SW1", "fa0/1").snoopTrust, "Expected ip dhcp snooping, its VLAN, ip arp inspection vlan 10, and both trusts on G0/1 only."); } },
+      { text: "Every unused port (Fa0/4-23, G0/2) is in VLAN 999 and shut down.", check: (t) => need([...Array.from({ length: 20 }, (_, i) => `fa0/${i + 4}`), "g0/2"].every((p) => t.f("SW1", p).accessVlan === 999 && !t.enabled("SW1", p)), "Put the unused ports in VLAN 999 and shut them down.") },
+      { text: "ADMIN reaches the switch and PC1 reaches its gateway.", check: (t) => need(t.reach("ADMIN", "192.168.99.2") && t.reach("PC1", "192.168.10.1"), "Check VLANs, the trunk and the SVI.") },
+      { text: "A user plugs a third device in behind the phone on Fa0/1. What happens?", choices: ["Its frames are dropped and logged, and the port stays up", "The port goes err-disabled", "Its frames are dropped silently", "It is allowed, the oldest MAC is removed"], check: (t) => need(t.reply === "Its frames are dropped and logged, and the port stays up", "maximum 2 with violation restrict: drop, log and count, without shutting the port.") },
+    ],
+    solution: {
+      SW1: [...EN, "vlan 10", "name USERS", "vlan 99", "name MGMT", "vlan 999", "name PARKING", "exit",
+        "interface range fa0/1 - 3", "switchport mode access", "switchport access vlan 10", "switchport port-security", "switchport port-security maximum 2", "switchport port-security mac-address sticky", "switchport port-security violation restrict",
+        "interface fa0/24", "switchport mode access", "switchport access vlan 99",
+        "interface g0/1", "switchport mode trunk", "switchport trunk native vlan 999", "switchport trunk allowed vlan 10,99", "ip dhcp snooping trust", "ip arp inspection trust",
+        "interface range fa0/4 - 23 , g0/2", "switchport access vlan 999", "shutdown",
+        "interface vlan 99", "ip address 192.168.99.2 255.255.255.0", "no shutdown", "interface vlan 1", "shutdown", "exit",
+        "ip default-gateway 192.168.99.1", "ip dhcp snooping", "ip dhcp snooping vlan 10", "ip arp inspection vlan 10",
+        "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username netadmin secret N3tAdm1n",
+        "access-list 10 permit 192.168.99.0 0.0.0.255", "line vty 0 15", "login local", "transport input ssh", "access-class 10 in"],
+    },
+    answers: { 9: "Its frames are dropped and logged, and the port stays up" },
+    teach: "Hardening order that avoids locking yourself out: management VLAN and gateway first, then SSH and the vty ACL (test from the admin PC), then the user ports, then snooping and DAI (trust the uplink before enabling DAI), and park and shut what is unused.",
+  }),
+  hard({
+    id: "ch-edge-policy", title: "Challenge: Internet edge with NAT and a filtered DMZ",
+    cmds: ["ip route", "ip nat inside source static", "ip nat inside source list", "ip access-list extended", "ip access-group", "access-class"],
+    devices: [
+      R("R1", 50, 20, cfg("interface g0/0", "ip address 192.168.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 203.0.113.2 255.255.255.248", "no shutdown", "interface g0/2", "ip address 192.168.50.1 255.255.255.0", "no shutdown")),
+      ISP("ISP", 86, 2), S("SW1", 20, 44),
+      HOST("PC1", 6, 72, "windows", { ip: "192.168.10.11/24", gateway: "192.168.10.1", dns: ["8.8.8.8"], mac: "0050.7966.6861" }),
+      HOST("PC2", 36, 72, "linux", { ip: "192.168.10.12/24", gateway: "192.168.10.1", dns: ["8.8.8.8"], mac: "0050.7966.6862" }),
+      SRV("WEB", 84, 50, "192.168.50.10/24", "192.168.50.1"),
+    ],
+    links: [["R1", "g0/1", "ISP", "g0/0"], ["R1", "g0/0", "SW1", "g0/1"], ["R1", "g0/2", "WEB", "fa0"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"]],
+    extern: ["8.8.8.8"],
+    intro: "R1 is the company's only router. The ISP gateway is 203.0.113.1, and the company owns 203.0.113.0/29. Users (192.168.10.0/24) need the Internet; the web server in the DMZ (192.168.50.10) must be reachable from the Internet as 203.0.113.10, for HTTP and HTTPS only.",
+    tasks: [
+      { text: "R1 sends everything it does not know to the ISP.", check: (t) => need(t.statics("R1").some((r) => r.net === "0.0.0.0" && r.mask === "0.0.0.0" && r.via === "203.0.113.1"), "Expected ip route 0.0.0.0 0.0.0.0 203.0.113.1.") },
+      { text: "NAT roles: G0/0 and G0/2 inside, G0/1 outside.", check: (t) => need(t.f("R1", "g0/0").nat === "inside" && t.f("R1", "g0/2").nat === "inside" && t.f("R1", "g0/1").nat === "outside", "Both the LAN and the DMZ are inside; the ISP side is outside.") },
+      { text: "Users share G0/1's address with PAT, matched by a standard named ACL INSIDE-NET.", check: (t) => { const a = t.acl("R1", "INSIDE-NET"); return need(a?.type === "standard" && a.entries.some((e) => e.action === "permit" && e.src.net === "192.168.10.0" && e.src.wild === "0.0.0.255") && t.dev("R1").nat.dynamic.some((d) => d.acl === "INSIDE-NET" && d.out === "GigabitEthernet0/1" && d.overload), "Expected ip access-list standard INSIDE-NET permitting 192.168.10.0/24 and ip nat inside source list INSIDE-NET interface g0/1 overload."); } },
+      { text: "WEB is published as 203.0.113.10.", check: (t) => need(t.dev("R1").nat.statics.some((s) => s.local === "192.168.50.10" && s.global === "203.0.113.10" && !s.proto), "Expected ip nat inside source static 192.168.50.10 203.0.113.10.") },
+      { text: "Extended ACL OUTSIDE-IN, inbound on G0/1: from anywhere, only TCP 80 and 443 to the web server, plus the replies to the users' own traffic (TCP established and ICMP echo-reply). Nothing else.", check: (t) => { const a = t.acl("R1", "OUTSIDE-IN"); const has = (ok) => a?.entries.some((e) => e.action === "permit" && ok(e)); const toWeb = (port) => has((e) => e.proto === "tcp" && e.src.any && e.dst.host === "203.0.113.10" && e.dstPort?.op === "eq" && e.dstPort.port === port); const inside = a?.entries.some((e) => e.dst?.host === "192.168.50.10"); const replies = has((e) => e.proto === "tcp" && e.established) && has((e) => e.proto === "icmp" && e.icmp === "echo-reply"); return need(toWeb(80) && toWeb(443) && replies && t.f("R1", "g0/1").aclIn === "OUTSIDE-IN" && !has((e) => e.proto === "ip"), inside ? "An inbound ACL on the outside interface is checked before NAT: it sees 203.0.113.10, not 192.168.50.10." : !replies ? "Without permit tcp any any established and permit icmp any any echo-reply, the answers to the users' own traffic are dropped too." : "Expected the two web entries, the two reply entries, applied in on G0/1, and no permit ip."); } },
+      { text: "Only the user LAN may open sessions to R1 itself (standard ACL 5 on the vty lines).", check: (t) => need(t.acl("R1", 5)?.entries.some((e) => e.action === "permit" && e.src.net === "192.168.10.0" && e.src.wild === "0.0.0.255") && t.dev("R1").lines.vty.accessClass === "5", "Expected access-list 5 permit 192.168.10.0 0.0.0.255 and access-class 5 in on line vty 0 15.") },
+      { text: "PC1 and PC2 reach 8.8.8.8.", check: (t) => need(t.reach("PC1", "8.8.8.8") && t.reach("PC2", "8.8.8.8"), "Without a translation, private addresses never get an answer from the Internet. Check the route, the roles and INSIDE-NET.") },
+      { text: "Which address must OUTSIDE-IN permit for the web server?", choices: ["192.168.50.10 (inside local)", "203.0.113.10 (inside global)", "203.0.113.2 (G0/1)", "any"], check: (t) => need(t.reply === "203.0.113.10 (inside global)", "Inbound on the outside interface, the ACL runs before NAT translates the destination.") },
+      { text: "What does overload add to the users' NAT rule?", choices: ["Port numbers, so many hosts share one address", "A second public address when the first is busy", "Translation for traffic from outside", "Nothing; it only logs"], check: (t) => need(t.reply === "Port numbers, so many hosts share one address", "overload is PAT.") },
+    ],
+    solution: {
+      R1: [...EN, "ip route 0.0.0.0 0.0.0.0 203.0.113.1", "interface g0/0", "ip nat inside", "interface g0/2", "ip nat inside", "interface g0/1", "ip nat outside", "exit",
+        "ip access-list standard INSIDE-NET", "permit 192.168.10.0 0.0.0.255", "exit", "ip nat inside source list INSIDE-NET interface g0/1 overload",
+        "ip nat inside source static 192.168.50.10 203.0.113.10",
+        "ip access-list extended OUTSIDE-IN", "permit tcp any host 203.0.113.10 eq www", "permit tcp any host 203.0.113.10 eq 443", "permit tcp any any established", "permit icmp any any echo-reply", "exit",
+        "interface g0/1", "ip access-group OUTSIDE-IN in", "exit",
+        "access-list 5 permit 192.168.10.0 0.0.0.255", "line vty 0 15", "access-class 5 in"],
+    },
+    answers: { 7: "203.0.113.10 (inside global)", 8: "Port numbers, so many hosts share one address" },
+    teach: "Order of operations on a router: an inbound ACL runs before NAT translates, so on the outside interface it sees public (inside global) addresses; an outbound ACL on the outside runs after NAT. An ACL that permitted only the web server would also drop the replies to the users' own sessions, which is what established and echo-reply let back in (a stateful firewall does this properly).",
+  }),
+  hard({
+    id: "ch-ospf-ticket", title: "Challenge: OSPF is broken in four places",
+    cmds: ["show ip ospf neighbor", "show ip ospf interface", "show ip protocols", "clear ip ospf process"],
+    devices: [
+      R("R1", 14, 20, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "router ospf 1", "router-id 2.2.2.2", "network 10.1.1.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0", "passive-interface g0/0", "passive-interface g0/1")),
+      R("R2", 50, 22, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "no shutdown", "router ospf 1", "router-id 2.2.2.2", "network 10.0.12.0 0.0.0.3 area 0", "network 10.0.23.0 0.0.0.3 area 0")),
+      R("R3", 86, 20, cfg("interface g0/0", "ip address 10.3.3.1 255.255.255.0", "no shutdown", "interface g0/2", "ip address 10.0.23.2 255.255.255.252", "ip ospf hello-interval 5", "ip ospf dead-interval 20", "no shutdown", "router ospf 1", "router-id 3.3.3.3", "network 10.3.3.0 0.0.0.0 area 0", "network 10.0.23.0 0.0.0.3 area 0", "passive-interface g0/0")),
+      HOST("PC1", 14, 54, "windows", { ip: "10.1.1.10/24", gateway: "10.1.1.1", mac: "0050.7966.6871" }),
+      HOST("PC3", 86, 54, "linux", { ip: "10.3.3.10/24", gateway: "10.3.3.1", mac: "0050.7966.6873" }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R1", "g0/0", "PC1", "fa0"], ["R3", "g0/0", "PC3", "fa0"]],
+    intro: "PC1 cannot reach PC3. All three routers run OSPF process 1 in area 0, router IDs should be 1.1.1.1, 2.2.2.2 and 3.3.3.3, and the LANs must stay passive. There are four faults.",
+    tasks: [
+      { text: "Investigate on all three routers.", check: (t) => need(all(["R1", "R2", "R3"], (r) => t.ran(r, /^show (ip ospf|ip protocols|running-config)/)), "Use show ip ospf neighbor, show ip ospf interface and show ip protocols on each router.") },
+      { text: "R1 sends hellos to R2.", check: (t) => need(!t.passive("R1", 1, "g0/1") && t.passive("R1", 1, "g0/0"), "R1 G0/1 is passive; G0/0 must stay passive.") },
+      { text: "Every router has its own router ID, and R1's new ID is in use.", check: (t) => need(t.routerId("R1", 1) === "1.1.1.1" && t.ran("R1", /^clear ip ospf process$/), "R1 has R2's router ID. Set router-id 1.1.1.1 and run clear ip ospf process.") },
+      { text: "R2 and R3 agree on their timers.", check: (t) => need(t.f("R3", "g0/2").ospf.hello === t.f("R2", "g0/2").ospf.hello && t.f("R3", "g0/2").ospf.dead === t.f("R2", "g0/2").ospf.dead, "R3 G0/2 has hello 5 and dead 20; R2 uses the defaults.") },
+      { text: "R3's LAN is advertised into OSPF.", check: (t) => need(t.ospfOf("R3", "g0/0")?.area === 0, "network 10.3.3.0 0.0.0.0 matches only the address 10.3.3.0, not the interface 10.3.3.1.") },
+      { text: "Both adjacencies are FULL.", check: (t) => need(t.ospfAdj("R1", "R2") && t.ospfAdj("R2", "R3"), "Not all adjacencies are up yet.") },
+      { text: "PC1 reaches PC3.", check: (t) => need(t.reach("PC1", "10.3.3.10"), "Check show ip route on R1 and R3 for each other's LAN.") },
+      { text: "Which command shows an interface's hello and dead intervals?", choices: ["show ip ospf interface", "show ip ospf neighbor", "show ip protocols", "show ip route ospf"], check: (t) => need(t.reply === "show ip ospf interface", "show ip ospf interface prints Timer intervals configured, Hello 10, Dead 40...") },
+      { text: "After the passive interface was fixed, why did R1 and R2 still not become neighbors?", choices: ["Duplicate router ID", "Area mismatch", "Hello timer mismatch", "Subnet mask mismatch"], check: (t) => need(t.reply === "Duplicate router ID", "R1 was configured with 2.2.2.2, which is R2's router ID.") },
+    ],
+    solution: {
+      R1: ["enable", "show ip protocols", "configure terminal", "router ospf 1", "no passive-interface g0/1", "router-id 1.1.1.1", "end", "clear ip ospf process", "yes"],
+      R2: ["enable", "show ip ospf neighbor"],
+      R3: ["enable", "show ip ospf interface g0/2", "configure terminal", "interface g0/2", "no ip ospf hello-interval", "no ip ospf dead-interval", "router ospf 1", "no network 10.3.3.0 0.0.0.0 area 0", "network 10.3.3.0 0.0.0.255 area 0"],
+    },
+    answers: { 7: "show ip ospf interface", 8: "Duplicate router ID" },
+    teach: "Neighbor checklist: interface up and not passive, same subnet and mask, same area, same hello and dead timers, unique router IDs (plus authentication and MTU). A wildcard of 0.0.0.0 in a network statement matches exactly one address, so it has to be the interface's own.",
+  }),
+];

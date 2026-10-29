@@ -215,3 +215,14 @@ test("ospf routes come from the adjacencies that are up, and beat a floating sta
   assert.ok(!down.some((r) => r.code.startsWith("O")));
   assert.ok(down.some((r) => r.code === "S" && r.net === "10.2.2.0" && r.ad === 200));
 });
+
+test("a private address gets no answer from the Internet without NAT", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ch-edge-policy"));
+  const r1 = l.devices.R1;
+  for (const c of ["enable", "configure terminal", "ip route 0.0.0.0 0.0.0.0 203.0.113.1"]) exec(r1, c);
+  assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 0/);
+  for (const c of ["interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "access-list 1 permit 192.168.10.0 0.0.0.255", "ip nat inside source list 1 interface g0/1 overload"]) exec(r1, c);
+  assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 4/);
+});
