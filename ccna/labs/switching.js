@@ -1,4 +1,4 @@
-import { lab, R, S, L3, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, S, L3, PC, cfg, EN, need, is } from "./kit.js";
 
 const M = "switching";
 const vlanName = (t, sw, id) => t.dev(sw).vlans[id]?.name;
@@ -198,5 +198,38 @@ export default [
     ],
     solution: { SW1: [...EN, "vlan 99", "name MGMT", "exit", "interface g0/1", "switchport mode trunk", "interface vlan 99", "ip address 192.168.99.2 255.255.255.0", "no shutdown", "interface vlan 1", "shutdown", "exit", "ip default-gateway 192.168.99.1"] },
     teach: "Management in its own VLAN (not VLAN 1) is best practice. An SVI comes up only when its VLAN exists and at least one up port carries it (access or trunk).",
+  }),
+  lab({
+    id: "trunk-verify", module: M, title: "Reading show interfaces trunk",
+    cmds: ["show interfaces trunk"],
+    devices: [S("SW1", 25, 30, cfg("vlan 10", "vlan 20", "vlan 99", "interface g0/1", "switchport mode trunk", "switchport trunk native vlan 99", "switchport trunk allowed vlan 10,20,99")), S("SW2", 75, 30, cfg("vlan 10", "vlan 20", "vlan 99", "interface g0/1", "switchport mode trunk", "switchport trunk native vlan 99", "switchport trunk allowed vlan 10,20,99"))],
+    links: [["SW1", "g0/1", "SW2", "g0/1"]],
+    intro: "Answer from the output, as the exam's questions often ask you to.",
+    tasks: [
+      { text: "On SW1, display the trunk details.", check: (t) => need(t.ran("SW1", /^show interfaces trunk$/), "Run show interfaces trunk.") },
+      { text: "What is the native VLAN of G0/1?", ask: "VLAN number", check: (t) => need(is.num(t.reply, 99), "Read the Native vlan column.") },
+      { text: "Which VLANs are allowed on the trunk? (comma separated)", ask: "e.g. 1,2,3", check: (t) => need(t.reply.replace(/\s/g, "") === "10,20,99", "Read the Vlans allowed on trunk section.") },
+    ],
+    solution: { SW1: ["enable", "show interfaces trunk"] },
+    answers: { 1: "99", 2: "10,20,99" },
+    teach: "show interfaces trunk has four parts: mode, encapsulation, status and native VLAN; allowed VLANs; allowed and active VLANs; and VLANs forwarding (not pruned or blocked by STP).",
+  }),
+  lab({
+    id: "sim-trunk-fix", module: M, title: "Sim: VLAN 20 does not cross the trunk", kind: "sim",
+    cmds: ["show interfaces trunk", "switchport trunk native vlan", "switchport trunk allowed vlan add"],
+    devices: [
+      S("SW1", 30, 22, cfg("vlan 10", "vlan 20", "vlan 99", "interface fa0/1", "switchport mode access", "switchport access vlan 20", "interface g0/1", "switchport mode trunk", "switchport trunk native vlan 99", "switchport trunk allowed vlan 10,99")),
+      S("SW2", 70, 22, cfg("vlan 10", "vlan 20", "vlan 99", "interface fa0/1", "switchport mode access", "switchport access vlan 20", "interface g0/1", "switchport mode trunk")),
+      PC("PC1", 30, 52, "10.10.20.11/24"), PC("PC2", 70, 52, "10.10.20.12/24"),
+    ],
+    links: [["SW1", "g0/1", "SW2", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW2", "fa0/1", "PC2", "fa0"]],
+    intro: "PC1 and PC2 are both in VLAN 20 but cannot reach each other, and SW2 logs a native VLAN mismatch. Find both faults and fix them without removing any VLAN that already crosses the trunk.",
+    tasks: [
+      { text: "Compare the trunk on both switches.", check: (t) => need(t.ran("SW1", /^show interfaces (trunk|GigabitEthernet0\/1 (trunk|switchport))$/) && t.ran("SW2", /^show interfaces (trunk|GigabitEthernet0\/1 (trunk|switchport))$/), "Run show interfaces trunk on SW1 and SW2.") },
+      { text: "Make the native VLAN the same at both ends (VLAN 99, as the design says).", check: (t) => need(t.f("SW1", "g0/1").nativeVlan === 99 && t.f("SW2", "g0/1").nativeVlan === 99, "SW2 still uses native VLAN 1.") },
+      { text: "Let VLAN 20 cross the trunk, keeping VLANs 10 and 99.", check: (t) => need(t.carries("SW1", "g0/1", 20) && t.carries("SW1", "g0/1", 10) && t.carries("SW1", "g0/1", 99), t.carries("SW1", "g0/1", 20) ? "VLAN 10 or 99 was removed from the allowed list. Use allowed vlan add." : "SW1's allowed list does not include VLAN 20.") },
+    ],
+    solution: { SW1: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk allowed vlan add 20"], SW2: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk native vlan 99"] },
+    teach: "A native VLAN mismatch does not stop the trunk, but untagged traffic lands in the wrong VLAN and CDP complains. The allowed list is per end: a VLAN must be allowed on both sides to cross.",
   }),
 ];
