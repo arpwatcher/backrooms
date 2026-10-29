@@ -138,7 +138,20 @@ English.
   interface and an area mismatch, NAT roles swapped, an ACL in the wrong
   direction, HSRP peers in different groups, an err-disabled port, a DHCP
   pool on the wrong network, a stray root priority) and labs whose tasks
-  are questions answered from `show` output. 191 labs, 28 of them sims.
+  are questions answered from `show` output.
+- **Challenge labs, harder than the exam.** A separate chapter of sims with
+  four to eight devices and nine or ten tasks each, mixing topics the way a
+  real network does: a three-switch campus with STP questions, a five-fault
+  VLAN ticket, an OSPF triangle with an Internet edge and PAT, HSRP on two
+  Layer 3 switches over LACP, DHCP for two sites through a relay, an access
+  switch hardened end to end, an Internet edge with static NAT and a
+  filtered DMZ, and OSPF broken in four places. Exam mode has a harder
+  option made only of these. 199 labs, 36 of them sims.
+- **A network that behaves like one.** OSPF routes are worked out from the
+  adjacencies you actually brought up (costs, O IA, the O*E2 default), a
+  PC only reaches what its VLAN, the trunks and the routers' tables allow,
+  a ping needs a route back, HSRP answers ARP with its virtual MAC, and
+  nothing on the Internet answers a private address that was not NATed.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 
