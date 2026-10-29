@@ -7,6 +7,7 @@ import { exec, prompt, help, complete } from "./engine/device.js";
 import { status } from "./engine/net.js";
 import { normalize } from "./engine/iface.js";
 import { drawTopology } from "./topo.js";
+import { hostBanner } from "./engine/host.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -51,7 +52,7 @@ function renderMenu(filter = "") {
     ul.hidden = !open;
     for (const l of labs) {
       const li = document.createElement("li");
-      li.innerHTML = `<a href="#lab/${l.id}" class="${current?.def.id === l.id ? "current" : ""}"><span class="tick">${progress.done[l.id] ? "✓" : ""}</span><span>${esc(l.title)}</span>${l.kind === "sim" ? '<span class="tag sim">sim</span>' : ""}${l.extra ? '<span class="tag extra">εκτός 200-301</span>' : ""}</a>`;
+      li.innerHTML = `<a href="#lab/${l.id}" class="${current?.def.id === l.id ? "current" : ""}"><span class="tick">${progress.done[l.id] ? "✓" : ""}</span><span>${esc(l.title)}</span>${l.kind === "sim" ? '<span class="tag sim">sim</span>' : ""}${l.extra ? '<span class="tag extra">not on 200-301</span>' : ""}</a>`;
       ul.appendChild(li);
     }
     wrap.querySelector("button").addEventListener("click", (e) => {
@@ -75,17 +76,19 @@ let current = null; // { def, lab, selected, buffers, histories, exam }
 
 function openLab(def, { exam = null } = {}) {
   const lab = buildLab(def);
-  const consoles = def.devices.filter((d) => ["router", "switch", "l3switch"].includes(d.type)).map((d) => d.name);
+  // routers and switches always have a console; a PC has one when it has an OS
+  const consoles = def.devices.filter((d) => ["router", "switch", "l3switch"].includes(d.type) || d.os).map((d) => d.name);
   current = { def, lab, selected: consoles[0], consoles, buffers: {}, histories: {}, cursor: {}, exam, checked: null };
   for (const name of consoles) {
-    current.buffers[name] = `\n${lab.devices[name].banner ? lab.devices[name].banner + "\n" : ""}\nPress RETURN to get started.\n\n`;
+    const dev = lab.devices[name];
+    current.buffers[name] = dev.host ? hostBanner(dev) : `\n${dev.banner ? dev.banner + "\n" : ""}\nPress RETURN to get started.\n\n`;
     current.histories[name] = [];
   }
   const main = $("#main");
   main.innerHTML = "";
   main.appendChild($("#lab-view").content.cloneNode(true));
   const mod = MODULES.find((m) => m.id === def.module);
-  $(".crumbs").innerHTML = exam ? `<span>Εξέταση · ερώτηση ${exam.index + 1} από ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.kind === "sim" ? '<span class="tag sim">sim σαν της εξέτασης</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
+  $(".crumbs").innerHTML = exam ? `<span>Exam · question ${exam.index + 1} of ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.kind === "sim" ? '<span class="tag sim">simulation</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
   $(".lab-title").textContent = def.title;
   $(".intro").innerHTML = rich(def.intro ?? "");
   renderTasks();
@@ -96,7 +99,7 @@ function openLab(def, { exam = null } = {}) {
   if (exam) {
     $(".theory-btn").hidden = true;
     $(".solution-btn").hidden = true;
-    $(".check").textContent = exam.index + 1 < exam.list.length ? "Επόμενη ερώτηση →" : "Τέλος εξέτασης";
+    $(".check").textContent = exam.index + 1 < exam.list.length ? "Next question →" : "End exam";
     $(".reset-btn").hidden = false;
     const timer = $(".timer");
     timer.hidden = false;
@@ -113,9 +116,19 @@ function renderTasks(results) {
     const li = document.createElement("li");
     const r = results?.[i];
     if (r) li.className = r.ok ? "ok" : "bad";
-    li.innerHTML = rich(task.text) + (r && !r.ok && r.why ? `<span class="why">${rich(r.why)}</span>` : "");
+    li.innerHTML = rich(task.text) + answerBox(task, i) + (r && !r.ok && r.why ? `<span class="why">${rich(r.why)}</span>` : "");
     ol.appendChild(li);
+    const box = li.querySelector(".answer");
+    if (box) box.addEventListener(box.tagName === "SELECT" ? "change" : "input", () => (current.lab.answers[i] = box.value));
   });
+}
+
+// a task that asks something gets a text box, or a list when it has choices
+function answerBox(task, i) {
+  const v = current.lab.answers[i] ?? "";
+  if (task.choices) return `<select class="answer" aria-label="Answer"><option value="">Choose…</option>${task.choices.map((c) => `<option${c === v ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
+  if (task.ask) return `<input class="answer" type="text" spellcheck="false" autocomplete="off" placeholder="${esc(task.ask)}" value="${esc(v)}" aria-label="Answer">`;
+  return "";
 }
 
 function renderTabs() {
@@ -206,7 +219,9 @@ function submit(line) {
     current.cursor[name] = current.histories[name].length;
   }
   const out = exec(dev, line);
-  if (out) write(out.replace(/\n?$/, "\n"));
+  // cls / clear
+  if (out === "\f") current.buffers[name] = "";
+  else if (out) write(out.replace(/\n?$/, "\n"));
   // a hostname change renames the tab and the icon
   renderTabs();
   renderTopology();
@@ -226,7 +241,7 @@ function wireLab() {
     } else if (e.key === "Tab") {
       e.preventDefault();
       if (!dev.pending) input.value = complete(dev, input.value);
-    } else if (e.key === "?" && !dev.pending) {
+    } else if (e.key === "?" && !dev.pending && !dev.host) {
       e.preventDefault();
       write(prompt(dev) + input.value + "?\n" + help(dev, input.value) + "\n");
       renderScreen();
@@ -262,7 +277,7 @@ function wireLab() {
     const ok = results.every((r) => r.ok);
     const res = $(".result");
     res.className = `result ${ok ? "ok" : "bad"}`;
-    res.textContent = ok ? "Σωστά! Όλα τα tasks είναι εντάξει." : `${results.filter((r) => r.ok).length} από ${results.length} tasks σωστά.`;
+    res.textContent = ok ? "Correct! All tasks are complete." : `${results.filter((r) => r.ok).length} of ${results.length} tasks correct.`;
     if (ok) {
       progress.done[current.def.id] = Date.now();
       saveProgress();
@@ -278,13 +293,13 @@ function wireLab() {
   $(".theory-btn").addEventListener("click", () => {
     const box = $(".theory");
     box.hidden = !box.hidden;
-    box.innerHTML = `<h3>Θεωρία</h3><p>${rich(current.def.teach ?? "")}</p>${current.def.cmds.length ? `<h3>Εντολές</h3><p>${current.def.cmds.map((c) => `<code>${esc(c)}</code>`).join(" · ")}</p>` : ""}`;
+    box.innerHTML = `<h3>Theory</h3><p>${rich(current.def.teach ?? "")}</p>${current.def.cmds.length ? `<h3>Commands</h3><p>${current.def.cmds.map((c) => `<code>${esc(c)}</code>`).join(" · ")}</p>` : ""}`;
   });
   $(".solution-btn").addEventListener("click", () => {
     const box = $(".solution");
     if (!box.hidden) return (box.hidden = true);
     box.hidden = false;
-    box.innerHTML = "<h3>Μια σωστή λύση</h3>" + Object.entries(current.def.solution).map(([dev, lines]) => `<div><b>${esc(dev)}</b><pre>${esc(lines.filter((l) => l !== "").join("\n"))}</pre></div>`).join("") + "<p>Δοκίμασε πρώτα μόνος σου. Υπάρχουν και άλλοι σωστοί τρόποι: ο έλεγχος κοιτάει το αποτέλεσμα, όχι τις λέξεις.</p>";
+    box.innerHTML = "<h3>One correct answer</h3>" + Object.entries(current.def.solution).map(([dev, lines]) => `<div><b>${esc(dev.replace("#", " (then) "))}</b><pre>${esc(lines.filter((l) => l !== "").join("\n"))}</pre></div>`).join("") + Object.entries(current.def.answers ?? {}).map(([i, a]) => `<div><b>Task ${Number(i) + 1}</b><pre>${esc(a)}</pre></div>`).join("") + "<p>Try it yourself first. Other answers are correct too: the check looks at the resulting configuration, not the words you typed.</p>";
   });
   $(".reset-btn").addEventListener("click", () => openLab(current.def, { exam: current.exam }));
 }
@@ -301,7 +316,7 @@ function renderCommands() {
   const index = new Map();
   for (const l of LABS) for (const c of l.cmds) (index.get(c) ?? index.set(c, []).get(c)).push(l);
   const rows = [...index.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  $("#main").innerHTML = `<section class="page"><h1>Εντολές</h1><p class="lead">Κάθε εντολή και τα labs όπου τη χρησιμοποιείς. ${rows.length} εντολές σε ${LABS.length} labs.</p><div class="cmd-index">${rows.map(([c, labs]) => `<div class="cmd-row"><code>${esc(c)}</code><span class="labs">${labs.map((l) => `<a href="#lab/${l.id}">${esc(l.title)}</a>`).join("")}</span></div>`).join("")}</div></section>`;
+  $("#main").innerHTML = `<section class="page"><h1>Commands</h1><p class="lead">Every command and the labs that use it. ${rows.length} commands in ${LABS.length} labs.</p><div class="cmd-index">${rows.map(([c, labs]) => `<div class="cmd-row"><code>${esc(c)}</code><span class="labs">${labs.map((l) => `<a href="#lab/${l.id}">${esc(l.title)}</a>`).join("")}</span></div>`).join("")}</div></section>`;
   renderMenu($("#search").value);
 }
 
@@ -311,11 +326,11 @@ let examState = null;
 function renderExamStart() {
   current = null;
   const sims = LABS.filter((l) => l.kind === "sim" && !l.extra).length;
-  $("#main").innerHTML = `<section class="page"><h1>Προσομοίωση εξέτασης</h1>
-  <div class="exam-card"><h2>Πώς δουλεύει</h2>
-  <p>Παίρνεις τυχαία labs σαν τα simulation της εξέτασης. Δεν υπάρχουν θεωρία, λύσεις ή έλεγχος στη διάρκεια, και δεν γυρνάς πίσω σε προηγούμενη ερώτηση, όπως και στην πραγματική εξέταση. Στο τέλος βλέπεις τι πέρασε και τι όχι.</p>
-  <p>Διαθέσιμα sims: ${sims}. Μπαίνουν και mini labs για να γεμίσει το τεστ.</p>
-  <div class="buttons"><button class="btn primary" data-n="5" data-min="25">5 ερωτήσεις · 25 λεπτά</button><button class="btn" data-n="10" data-min="45">10 ερωτήσεις · 45 λεπτά</button></div></div></section>`;
+  $("#main").innerHTML = `<section class="page"><h1>Exam simulation</h1>
+  <div class="exam-card"><h2>How it works</h2>
+  <p>You get random labs like the exam simulations. There is no theory, no answers and no checking along the way, and you cannot go back to a previous question, as in the real exam. At the end you see what passed and what did not.</p>
+  <p>Simulations available: ${sims}. Mini labs fill the rest of the test.</p>
+  <div class="buttons"><button class="btn primary" data-n="5" data-min="25">5 questions · 25 minutes</button><button class="btn" data-n="10" data-min="45">10 questions · 45 minutes</button></div></div></section>`;
   for (const b of $("#main").querySelectorAll("[data-n]")) b.addEventListener("click", () => startExam(Number(b.dataset.n), Number(b.dataset.min)));
   renderMenu($("#search").value);
 }
@@ -348,9 +363,9 @@ function finishExam() {
   // the real exam is scored out of 1000, pass mark around 825
   const scaled = Math.round(300 + pct * 7);
   current = null;
-  $("#main").innerHTML = `<section class="page"><h1>Αποτέλεσμα</h1><div class="exam-card"><div class="score">${scaled} / 1000</div><p>${pct}% των tasks σωστά. Το όριο στην πραγματική εξέταση είναι περίπου 825/1000. ${scaled >= 825 ? "Πέρασες!" : "Ακόμα λίγο: δες ποια έχασες παρακάτω."}</p></div>
+  $("#main").innerHTML = `<section class="page"><h1>Score report</h1><div class="exam-card"><div class="score">${scaled} / 1000</div><p>${pct}% of tasks correct. The passing score on the real exam is about 825/1000. ${scaled >= 825 ? "Pass." : "Not yet: see below which ones you missed."}</p></div>
   <ol class="exam-results">${examState.results.map((r) => `<li><a href="#lab/${r.def.id}">${esc(r.def.title)}</a>: ${r.results.filter((x) => x.ok).length}/${r.results.length}${r.results.filter((x) => !x.ok).map((x) => `<div class="why">✗ ${rich(x.text)}</div>`).join("")}</li>`).join("")}</ol>
-  <div class="buttons"><a class="btn" href="#exam">Νέα εξέταση</a></div></section>`;
+  <div class="buttons"><a class="btn" href="#exam">New exam</a></div></section>`;
   examState = null;
 }
 function tickTimer() {
@@ -368,8 +383,8 @@ function tickTimer() {
 function renderHome() {
   current = null;
   $("#main").innerHTML = `<section class="welcome"><h1>CCNA CLI Labs</h1>
-  <p>Mini labs για τις εντολές του CCNA 200-301. Γράφεις εντολές IOS σε κονσόλα σαν του router ή του switch (modes, abbreviations, <code>?</code>, Tab) και ο έλεγχος κοιτάει αν η <b>ρύθμιση</b> είναι σωστή, όχι αν έγραψες ακριβώς τις ίδιες λέξεις.</p>
-  <p>Τα <span class="tag sim">sim</span> είναι μικρά σενάρια με 3 έως 6 tasks, σαν τα simulation της εξέτασης. Τα υπόλοιπα είναι ένα lab ανά εντολή.</p>
+  <p>Mini labs for the CCNA 200-301 commands. You type IOS commands into a router or switch console (modes, abbreviations, <code>?</code>, Tab), and the check looks at whether the resulting <b>configuration</b> is correct, not whether you typed the same words.</p>
+  <p>Labs marked <span class="tag sim">sim</span> are short scenarios with 3 to 6 tasks, like the exam simulations. The others are one lab per command.</p>
   <div class="grid">${MODULES.map((m) => {
     const labs = byModule(m.id);
     const done = labs.filter((l) => progress.done[l.id]).length;

@@ -2,6 +2,8 @@
 // and a link light at each end (green up, amber coming up, red down), the
 // way Packet Tracer and the exam draw them.
 
+import { osName } from "./engine/host.js";
+
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs = {}, parent) => {
   const e = document.createElementNS(NS, name);
@@ -56,7 +58,7 @@ const SCALE = 2.2;
 // half the icon's size once scaled, for placing lights where the cable leaves it
 // (below the icon the name, and the address if any, count as part of it)
 const RX = 30 * SCALE, RY = 22 * SCALE;
-const edge = (ux, uy, d) => 1 / Math.hypot(ux / RX, uy / (uy > 0 ? 26 * SCALE + (d.ip ? 50 : 26) : RY));
+const edge = (ux, uy, d) => 1 / Math.hypot(ux / RX, uy / (uy > 0 ? 26 * SCALE + (d.ip || d.os ? 50 : 26) : RY));
 
 // a viewBox around the devices, padded for labels, between 5:3 and 5:4 so
 // tall topologies are not shrunk to nothing; never so small that a
@@ -97,8 +99,11 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
       const state = statusOf(name, iface);
       el("circle", { cx: P.x + ux * (out + 12), cy: P.y + uy * (out + 12), r: 8, class: `light ${state}` }, labels);
       // the interface name sits beside the cable, not on it
-      const along = out + 52, side = 24;
-      const label = el("text", { x: P.x + ux * along - uy * side, y: P.y + uy * along + ux * side + 6, class: "iflabel", "text-anchor": "middle" }, labels);
+      // on steep cables the name hangs off to its side of the cable, so the
+      // two ends of a short vertical link don't print over each other
+      const along = out + 52, side = 16, px = -uy;
+      const anchor = px < -0.5 ? "end" : px > 0.5 ? "start" : "middle";
+      const label = el("text", { x: P.x + ux * along + px * side, y: P.y + uy * along + ux * side + 6, class: "iflabel", "text-anchor": anchor }, labels);
       label.textContent = shortName(iface);
     }
   }
@@ -109,9 +114,11 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
     (ICONS[d.type] ?? ICONS.router)(icon, d.type === "l3switch");
     const name = el("text", { x: 0, y: 26 * SCALE + 14, class: "devname", "text-anchor": "middle" }, g);
     name.textContent = lab.devices[d.name].hostname ?? d.name;
-    if (d.ip) {
+    // a PC with a terminal says which OS it runs
+    const sub = [d.os && osName(d.os), d.ip].filter(Boolean).join(" · ");
+    if (sub) {
       const ip = el("text", { x: 0, y: 26 * SCALE + 38, class: "devip", "text-anchor": "middle" }, g);
-      ip.textContent = d.ip;
+      ip.textContent = sub;
     }
     g.addEventListener("click", () => onPick(d.name));
     g.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && onPick(d.name));

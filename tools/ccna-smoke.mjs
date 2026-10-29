@@ -1,6 +1,6 @@
 // Drives the CCNA labs page in headless Chromium the way a person would:
 // opens labs, types each model answer into the right console, presses
-// Έλεγχος and expects every task ticked; then opens the command index and
+// Check and expects every task ticked; then opens the command index and
 // the exam view. Any console error fails it.
 
 import http from "node:http";
@@ -28,8 +28,9 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, resolve));
 const base = `http://localhost:${server.address().port}/ccna/index.html`;
 
-// one of each kind: single device, two routers, a switch sim, a sim with prompts
-const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf"];
+// one of each kind: single device, two routers, a switch sim, a sim with
+// prompts, and PCs with terminals and answer boxes
+const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts"];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -47,8 +48,9 @@ await page.waitForFunction(() => window.__ccna);
 for (const id of LABS) {
   await page.goto(`${base}#lab/${id}`);
   await page.waitForFunction((want) => window.__ccna.current?.def.id === want, id);
-  const solution = await page.evaluate(() => window.__ccna.current.def.solution);
-  for (const [name, lines] of Object.entries(solution)) {
+  const { solution, answers } = await page.evaluate(() => ({ solution: window.__ccna.current.def.solution, answers: window.__ccna.current.def.answers ?? {} }));
+  for (const [key, lines] of Object.entries(solution)) {
+    const name = key.split("#")[0];
     const index = await page.evaluate((n) => window.__ccna.current.consoles.indexOf(n), name);
     await page.locator(".tabs button").nth(index).click();
     for (const line of lines) {
@@ -56,15 +58,21 @@ for (const id of LABS) {
       await page.press(".cmd", "Enter");
     }
   }
+  for (const [i, a] of Object.entries(answers)) {
+    const box = page.locator(".tasks li").nth(Number(i)).locator(".answer");
+    if ((await box.evaluate((e) => e.tagName)) === "SELECT") await box.selectOption(a);
+    else await box.fill(a);
+  }
   await page.click(".check");
   const ticks = await page.$$eval(".tasks li", (lis) => lis.map((li) => li.className));
   ok(ticks.length > 0 && ticks.every((c) => c === "ok"), `${id}: typing the answer ticks every task (${ticks.join(" ")})`);
-  ok((await page.textContent(".result")).includes("Σωστά"), `${id}: the result says so`);
+  ok((await page.textContent(".result")).includes("Correct"), `${id}: the result says so`);
 }
 
 await page.goto(`${base}#commands`);
 await page.waitForTimeout(200);
 ok((await page.locator("main").innerText()).includes("ip helper-address"), "the command index lists commands");
+ok((await page.locator("main").innerText()).includes("ipconfig /all"), "the command index lists the PC commands");
 await page.goto(`${base}#exam`);
 await page.waitForTimeout(200);
 ok((await page.locator("main").innerText()).length > 50, "the exam view renders");
