@@ -188,6 +188,64 @@ export function role(n) {
   return theyWin ? "DR" : "BDR";
 }
 
+// ospf cost: reference bandwidth (100 Mb/s by default) over the interface's
+// bandwidth, unless set with ip ospf cost
+export function ospfCost(dev, f) {
+  if (f.ospf.cost) return f.ospf.cost;
+  const o = ospfOf(dev, f);
+  const ref = (o && dev.ospf[o.pid]?.refBw) || 100;
+  const bw = f.bandwidth ?? (f.name.startsWith("Gigabit") ? 1000000 : f.name.startsWith("Fast") ? 100000 : f.name.startsWith("Serial") ? 1544 : f.name.startsWith("Loopback") ? 8000000 : 100000);
+  return Math.max(1, Math.floor((ref * 1000) / bw));
+}
+
+// the routes a router learns over ospf, worked out from the adjacencies that
+// are really up: shortest path by cost to every router, then every network
+// those routers have in ospf (loopbacks as /32), and a default from a router
+// that originates one
+export function ospfRoutes(dev) {
+  if (!Object.keys(dev.ospf).length) return [];
+  const dist = new Map([[dev, 0]]);
+  const first = new Map();
+  const todo = [dev];
+  while (todo.length) {
+    todo.sort((a, b) => dist.get(a) - dist.get(b));
+    const d = todo.shift();
+    for (const n of ospfNeighbors(d)) {
+      if (!n.up) continue;
+      const c = dist.get(d) + ospfCost(d, n.iface);
+      if (!dist.has(n.device) || c < dist.get(n.device)) {
+        dist.set(n.device, c);
+        first.set(n.device, d === dev ? { via: n.ip, out: n.iface.name } : first.get(d));
+        if (!todo.includes(n.device)) todo.push(n.device);
+      }
+    }
+  }
+  const up = (d) => Object.values(d.interfaces).filter((f) => f.ip && status(d, f)[1] === "up");
+  const connected = new Set(up(dev).map((f) => `${network(f.ip, maskBits(f.mask))}/${maskBits(f.mask)}`));
+  const myAreas = new Set(up(dev).map((f) => ospfOf(dev, f)?.area).filter((a) => a !== undefined));
+  const best = new Map();
+  const offer = (r) => {
+    const key = `${r.net}/${r.bits}`;
+    if (connected.has(key)) return;
+    if (!best.has(key) || r.metric < best.get(key).metric) best.set(key, r);
+  };
+  for (const [r, d0] of dist) {
+    if (r === dev) continue;
+    const hop = first.get(r);
+    for (const f of up(r)) {
+      const o = ospfOf(r, f);
+      if (!o) continue;
+      const bits = f.name.startsWith("Loopback") && f.ospf.network !== "point-to-point" ? 32 : maskBits(f.mask);
+      offer({ code: myAreas.has(o.area) ? "O" : "O IA", net: network(f.ip, bits), bits, ad: 110, metric: d0 + ospfCost(r, f), via: hop.via, out: hop.out });
+    }
+    for (const p of Object.values(r.ospf)) {
+      const hasDefault = r.routes.some((x) => x.net === "0.0.0.0" && x.mask === "0.0.0.0");
+      if (p.defaultOriginate && (p.defaultOriginate === "always" || hasDefault)) offer({ code: "O*E2", net: "0.0.0.0", bits: 0, ad: 110, metric: 1, via: hop.via, out: hop.out });
+    }
+  }
+  return [...best.values()];
+}
+
 // --- spanning tree --------------------------------------------------------------------------------------
 
 export function bridgePriority(dev, vlan) {

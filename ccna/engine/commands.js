@@ -5,7 +5,7 @@ import { compile } from "./parse.js";
 import { IosError, newInterface, iface, DEFAULT_NAME } from "./state.js";
 import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6Prefix, expandIpv6, eui64 } from "./ip.js";
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
-import { SHOWS } from "./show.js";
+import { SHOWS, routeTable } from "./show.js";
 import { runningConfig } from "./config.js";
 import { status, stpRoot, bridgePriority } from "./net.js";
 
@@ -1060,16 +1060,17 @@ export function resolve(dev, target) {
   return null;
 }
 
-// a rough reachability guess from this device's own tables: a connected
-// subnet on an up interface, or a route (static, default)
+// does this device have somewhere to send a packet for ip: a connected
+// subnet on an up interface, or a route in its routing table (static, ospf,
+// default); a layer 2 switch only knows its own subnet and its gateway
 export function reachable(dev, ip) {
   for (const f of Object.values(dev.interfaces)) {
     if (!f.ip || !linkUp(dev, f)) continue;
     const bits = maskBits(f.mask);
     if (network(ip, bits) === network(f.ip, bits)) return true;
   }
-  if (dev.type !== "router" && !dev.ipRouting && dev.defaultGateway) return reachable({ ...dev, defaultGateway: null }, dev.defaultGateway);
-  return dev.routes.some((r) => network(ip, maskBits(r.mask)) === r.net) || Object.keys(dev.ospf).length > 0 && Boolean(dev.lab?.learned?.some((n) => network(ip, n.bits) === n.net));
+  if (dev.type !== "router" && !dev.ipRouting) return Boolean(dev.defaultGateway) && reachable({ ...dev, defaultGateway: null, ipRouting: false }, dev.defaultGateway);
+  return routeTable(dev).some((r) => network(ip, r.bits) === r.net);
 }
 
 function ping(dev, target, count) {

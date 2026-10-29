@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, stpPortNumber } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -147,21 +147,23 @@ export function routeTable(dev) {
     if (r.out) return status(dev, dev.interfaces[r.out])[1] === "up";
     return routes.some((c) => c.code === "C" && network(r.via, c.bits) === c.net);
   };
-  // the best static for each prefix (lowest distance) goes in
-  const statics = dev.routes.filter(usable).sort((a, b) => a.ad - b.ad);
-  const taken = new Set(routes.filter((r) => r.code === "C" || r.code === "L").map((r) => `${r.net}/${r.bits}`));
-  for (const r of statics) {
-    const bits = maskBits(r.mask);
-    const key = `${r.net}/${bits}`;
-    if (taken.has(key) && !routes.some((x) => x.code === "S" && `${x.net}/${x.bits}` === key && x.ad === r.ad)) continue;
-    taken.add(key);
-    routes.push({ code: "S", net: r.net, bits, ad: r.ad, metric: 0, via: r.via, out: r.out });
+  // statics and ospf compete per prefix: the lowest distance goes in (equal
+  // distances share it), so a floating static waits behind ospf
+  const candidates = dev.routes.filter(usable).map((r) => ({ code: "S", net: r.net, bits: maskBits(r.mask), ad: r.ad, metric: 0, via: r.via, out: r.out }));
+  if (Object.keys(dev.ospf).length) {
+    candidates.push(...ospfRoutes(dev).map((r) => ({ ...r, ad: Object.values(dev.ospf)[0].distance ?? 110 })));
+    // what the lab says is learned from beyond the part that is drawn
+    if (dev.lab?.learned && ospfNeighbors(dev).some((n) => n.up)) candidates.push(...dev.lab.learned.map((l) => ({ code: "O", net: l.net, bits: l.bits, ad: 110, metric: l.metric ?? 2, via: l.via, out: l.out })));
   }
-  // what the lab says this router learns over ospf, once ospf is running
-  if (Object.keys(dev.ospf).length && dev.lab?.learned) {
-    const up = ospfNeighbors(dev).some((n) => n.up);
-    if (up) for (const l of dev.lab.learned) if (!taken.has(`${l.net}/${l.bits}`)) routes.push({ code: "O", net: l.net, bits: l.bits, ad: 110, metric: l.metric ?? 2, via: l.via, out: l.out });
+  const winner = new Map();
+  for (const r of candidates) {
+    const key = `${r.net}/${r.bits}`;
+    if (routes.some((c) => (c.code === "C" || c.code === "L") && `${c.net}/${c.bits}` === key)) continue;
+    const w = winner.get(key);
+    if (!w || r.ad < w.ad) winner.set(key, { ad: r.ad, list: [r] });
+    else if (r.ad === w.ad && r.code === "S" && w.list[0].code === "S") w.list.push(r);
   }
+  for (const w of winner.values()) routes.push(...w.list);
   return routes;
 }
 
@@ -237,14 +239,7 @@ function ospfInterface(dev, name, brief) {
     .join("\n");
 }
 
-// ospf cost: reference bandwidth (100 Mb/s by default) over the interface's
-export function cost(dev, f) {
-  if (f.ospf.cost) return f.ospf.cost;
-  const o = ospfOf(dev, f);
-  const ref = (o && dev.ospf[o.pid]?.refBw) || 100;
-  const bw = f.bandwidth ?? (f.name.startsWith("Gigabit") ? 1000000 : f.name.startsWith("Fast") ? 100000 : f.name.startsWith("Serial") ? 1544 : f.name.startsWith("Loopback") ? 8000000 : 100000);
-  return Math.max(1, Math.floor((ref * 1000) / bw));
-}
+export const cost = ospfCost;
 
 function spanningTree(dev, vlanArg) {
   const vlans = vlanArg ? [vlanArg] : Object.keys(dev.vlans).map(Number).filter((v) => v < 1002 && sortedInterfaces(dev).some((f) => f.switchport && carries(dev, f, v) && status(dev, f)[0] === "up")).sort((a, b) => a - b);
