@@ -1,4 +1,4 @@
-import { lab, R, PC, ISP, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, ISP, cfg, EN, need, is } from "./kit.js";
 
 const M = "ospf";
 const two = (a = [], b = []) => [R("R1", 25, 28, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", ...a)), R("R2", 75, 28, cfg("interface g0/0", "ip address 10.2.2.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", ...b)), PC("PC1", 25, 52, "10.1.1.10/24", "10.1.1.1"), PC("PC2", 75, 52, "10.2.2.10/24", "10.2.2.1")];
@@ -167,5 +167,36 @@ export default [
       R3: [...EN, "router ospf 10", "router-id 3.3.3.3", "network 10.3.3.0 0.0.0.255 area 0", "network 10.0.23.0 0.0.0.3 area 0", "passive-interface g0/0"],
     },
     teach: "A network statement with wildcard 0.0.0.0 matches a single IP. Configure the router ID before the network statements, so no clear ip ospf process is needed.",
+  }),
+  lab({
+    id: "ospf-neighbor-read", module: M, title: "Reading show ip ospf neighbor",
+    cmds: ["show ip ospf neighbor"],
+    devices: two(["router ospf 1", "router-id 1.1.1.1", "network 10.0.0.0 0.255.255.255 area 0"], ["router ospf 1", "router-id 2.2.2.2", "network 10.0.0.0 0.255.255.255 area 0"]), links, learned,
+    intro: "OSPF is up between R1 and R2. Answer from the output on R1.",
+    tasks: [
+      { text: "On R1, display the OSPF neighbors.", check: (t) => need(t.ran("R1", /^show ip ospf neighbor/), "Run show ip ospf neighbor.") },
+      { text: "What is the neighbor's router ID?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "2.2.2.2"), "Read the Neighbor ID column.") },
+      { text: "Which address does R1 reach the neighbor at?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.0.12.2"), "Read the Address column (the neighbor's interface, not its router ID).") },
+    ],
+    solution: { R1: ["enable", "show ip ospf neighbor"] },
+    answers: { 1: "2.2.2.2", 2: "10.0.12.2" },
+    teach: "Neighbor ID is the neighbor's router ID; Address is the IP of its interface on the shared link. State FULL means the databases are synchronized; FULL/DR, FULL/BDR or FULL/DROTHER show its role, and FULL/ - is a point-to-point link.",
+  }),
+  lab({
+    id: "sim-ospf-fix", module: M, title: "Sim: R1 and R2 are not OSPF neighbors", kind: "sim",
+    cmds: ["show ip ospf interface", "show ip protocols", "passive-interface", "network area"],
+    devices: two(["router ospf 1", "network 10.1.1.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0", "passive-interface g0/1"], ["router ospf 1", "network 10.2.2.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 1"]), links, learned,
+    intro: "Both routers run OSPF, but R1's LAN cannot reach R2's. There are two faults.",
+    tasks: [
+      { text: "Check the OSPF configuration on both routers.", check: (t) => need(["R1", "R2"].every((r) => t.ran(r, /^show (ip protocols|ip ospf interface|running-config)/)), "Run show ip protocols (or show ip ospf interface) on R1 and on R2.") },
+      { text: "Fix the fault on R1.", check: (t) => need(!t.passive("R1", 1, "g0/1"), "R1 does not send hellos on G0/1: it is passive.") },
+      { text: "Fix the fault on R2, keeping everything in area 0.", check: (t) => need(t.ospfOf("R2", "g0/1")?.area === 0, "R2 puts the R1-R2 link in area 1; it must be area 0 at both ends.") },
+      { text: "The adjacency must be FULL.", check: (t) => need(t.ospfAdj("R1", "R2"), "The routers are still not neighbors.") },
+    ],
+    solution: {
+      R1: ["enable", "show ip protocols", "configure terminal", "router ospf 1", "no passive-interface g0/1"],
+      R2: ["enable", "show ip protocols", "configure terminal", "router ospf 1", "no network 10.0.12.0 0.0.0.3 area 1", "network 10.0.12.0 0.0.0.3 area 0"],
+    },
+    teach: "show ip protocols lists the networks, areas and passive interfaces; show ip ospf interface shows each interface's area and timers. A passive interface sends no hellos, and both ends of a link must be in the same area.",
   }),
 ];
