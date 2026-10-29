@@ -211,4 +211,18 @@ export default [
     solution: { SW1: ["enable", "show spanning-tree vlan 1"], SW3: [...EN, "no spanning-tree vlan 1 priority"], "SW1#2": ["configure terminal", "spanning-tree vlan 1 root primary"] },
     teach: "root primary cannot beat a root with priority 0 (it would need a negative priority), so the stray priority has to go first. Order matters in the exam too.",
   }),
+  lab({
+    id: "stp-blocked-port", module: M, title: "Which port does STP block?",
+    cmds: ["show spanning-tree vlan"],
+    devices: tri([...trunks.slice(0, -1), "spanning-tree vlan 1 priority 4096", "end"], trunks, trunks), links: triLinks,
+    intro: "Three switches in a triangle make a loop, so STP must block one port. SW1 is the root. Work out which port blocks, then confirm it.",
+    tasks: [
+      { text: "Check spanning tree for VLAN 1 on SW2 and on SW3.", check: (t) => need(t.ran("SW2", /^show spanning-tree( vlan 1)?$/) && t.ran("SW3", /^show spanning-tree( vlan 1)?$/), "Run show spanning-tree vlan 1 on both non-root switches.") },
+      { text: "Which switch has the blocking port?", choices: ["SW1", "SW2", "SW3"], check: (t) => need(t.reply === "SW3", "SW2 and SW3 both have root path cost 4, so the lower bridge ID (same priority, lower MAC) wins the designated role on their link.") },
+      { text: "Which of its ports is blocking?", choices: ["G0/1", "G0/2"], check: (t) => need(t.reply === "G0/2", "Its port toward the root (G0/1) is the root port; the port on the SW2-SW3 link is Altn BLK.") },
+    ],
+    solution: { SW2: ["enable", "show spanning-tree vlan 1"], SW3: ["enable", "show spanning-tree vlan 1"] },
+    answers: { 1: "SW3", 2: "G0/2" },
+    teach: "On each non-root switch the root port is the lowest root path cost (then lowest neighbor bridge ID, then lowest neighbor port ID). On each link the designated port is on the switch with the lower root path cost, then the lower bridge ID. Any port that is neither blocks: Altn BLK.",
+  }),
 ];
