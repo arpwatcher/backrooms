@@ -210,6 +210,77 @@ export function stpRoot(dev, vlan) {
   return switches[0];
 }
 
+// a port's STP cost: configured, or by speed (short or long method)
+export function stpCost(dev, f, vlan) {
+  const set = f.stp.vlan[vlan]?.cost ?? f.stp.cost;
+  if (set) return set;
+  const gig = f.name.startsWith("Gig") || f.name.startsWith("Port-channel");
+  return dev.stp.pathcost === "long" ? (gig ? 20000 : 200000) : gig ? 4 : 19;
+}
+// the port number in a port ID (a 2960's G0/1 is port 25)
+export function stpPortNumber(f) {
+  const n = Number(f.name.split("/").pop()) || 0;
+  return f.name.startsWith("Gig") && !f.name.startsWith("GigabitEthernet0/0") ? 24 + n : n;
+}
+const portId = (f) => (f.stp.priority ?? 128) * 4096 + stpPortNumber(f);
+const lessBid = (a, b, v) => bridgePriority(a, v) - bridgePriority(b, v) || a.mac.localeCompare(b.mac);
+
+// every switch port's role and state for one VLAN, worked out the way 802.1D
+// does: root path costs, a root port per switch (lowest cost, then lowest
+// neighbor bridge ID, then lowest neighbor port ID), and on each link the
+// side with the better root path is designated; what is left blocks
+export function stpPorts(dev, vlan) {
+  const root = stpRoot(dev, vlan);
+  const isSwitch = (d) => d.type === "switch" || d.type === "l3switch";
+  const ports = (d) => Object.values(d.interfaces).filter((f) => f.switchport && !f.channel && status(d, f)[0] === "up" && carries(d, f, vlan));
+  const peerOf = (d, f) => {
+    const end = far(d, f.name);
+    return end?.device && isSwitch(end.device) && end.iface && end.iface.switchport && carries(end.device, end.iface, vlan) ? end : null;
+  };
+  // root path cost of every switch (Dijkstra over the ports' costs)
+  const dist = new Map([[root, 0]]);
+  const todo = [root];
+  while (todo.length) {
+    todo.sort((a, b) => dist.get(a) - dist.get(b));
+    const d = todo.shift();
+    for (const f of ports(d)) {
+      const end = peerOf(d, f);
+      if (!end) continue;
+      const c = dist.get(d) + stpCost(end.device, end.iface, vlan);
+      if (!dist.has(end.device) || c < dist.get(end.device)) {
+        dist.set(end.device, c);
+        if (!todo.includes(end.device)) todo.push(end.device);
+      }
+    }
+  }
+  const rootPort = (d) => {
+    if (d === root || !dist.has(d)) return null;
+    let best = null;
+    for (const f of ports(d)) {
+      const end = peerOf(d, f);
+      if (!end || !dist.has(end.device)) continue;
+      const k = { cost: dist.get(end.device) + stpCost(d, f, vlan), via: end.device, theirs: portId(end.iface), ours: portId(f) };
+      const order = best && (k.cost - best.k.cost || lessBid(k.via, best.k.via, vlan) || k.theirs - best.k.theirs || k.ours - best.k.ours);
+      if (!best || order < 0) best = { f, k };
+    }
+    return best?.f ?? null;
+  };
+  const mine = rootPort(dev);
+  return {
+    root, cost: dist.get(dev) ?? 0, rootPort: mine,
+    ports: ports(dev).map((f) => {
+      const end = peerOf(dev, f);
+      if (f === mine) return { f, role: "Root", state: "FWD" };
+      if (!end) return { f, role: "Desg", state: "FWD" };
+      // designated: the better (cost, bridge ID, port ID) side of the link
+      const me = [dist.get(dev) ?? Infinity, dev, portId(f)];
+      const them = [dist.get(end.device) ?? Infinity, end.device, portId(end.iface)];
+      const iWin = me[0] !== them[0] ? me[0] < them[0] : me[1] !== them[1] ? lessBid(me[1], them[1], vlan) < 0 : me[2] < them[2];
+      return iWin ? { f, role: "Desg", state: "FWD" } : { f, role: "Altn", state: "BLK" };
+    }),
+  };
+}
+
 // --- hsrp -----------------------------------------------------------------------------------------------
 
 // all routers in the lab with this group's virtual ip, best first

@@ -124,3 +124,16 @@ test("root primary goes under a lower root, or says it cannot", async () => {
   exec(l.devices.SW3, "spanning-tree vlan 1 priority 0");
   assert.match(exec(l.devices.SW1, "spanning-tree vlan 1 root primary"), /% Failed to make the bridge root for vlan 1/);
 });
+
+test("spanning tree blocks one port of a triangle, on the switch with the higher bridge ID", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const { stpPorts } = await import("../ccna/engine/net.js");
+  const l = buildLab(LABS.find((x) => x.id === "stp-read"));
+  const roles = (s) => Object.fromEntries(stpPorts(l.devices[s], 1).ports.map((p) => [p.f.name, `${p.role} ${p.state}`]));
+  assert.deepEqual(roles("SW1"), { "GigabitEthernet0/1": "Desg FWD", "GigabitEthernet0/2": "Desg FWD" });
+  assert.deepEqual(roles("SW2"), { "GigabitEthernet0/1": "Root FWD", "GigabitEthernet0/2": "Desg FWD" });
+  assert.deepEqual(roles("SW3"), { "GigabitEthernet0/1": "Root FWD", "GigabitEthernet0/2": "Altn BLK" });
+  exec(l.devices.SW3, "enable");
+  assert.match(exec(l.devices.SW3, "show spanning-tree vlan 1"), /Cost {8}4\n {13}Port {8}25 \(GigabitEthernet0\/1\)/);
+});

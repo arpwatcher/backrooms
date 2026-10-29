@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, stpPortNumber } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -252,19 +252,20 @@ function spanningTree(dev, vlanArg) {
   const proto = dev.stp.mode === "rapid-pvst" ? "rstp" : dev.stp.mode === "mst" ? "mstp" : "ieee";
   const out = [];
   for (const v of vlans) {
-    const root = stpRoot(dev, v);
+    const tree = stpPorts(dev, v);
+    const root = tree.root;
     const isRoot = root === dev;
     out.push(`VLAN${String(v).padStart(4, "0")}`, `  Spanning tree enabled protocol ${proto}`);
     out.push(`  Root ID    Priority    ${bridgePriority(root, v)}`, `             Address     ${root.mac}`);
     if (isRoot) out.push("             This bridge is the root");
+    else if (tree.rootPort) out.push(`             Cost        ${tree.cost}`, `             Port        ${stpPortNumber(tree.rootPort)} (${tree.rootPort.name})`);
     out.push("             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec", "");
     out.push(`  Bridge ID  Priority    ${bridgePriority(dev, v)}  (priority ${bridgePriority(dev, v) - v} sys-id-ext ${v})`, `             Address     ${dev.mac}`, "             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec", "", `${pad("Interface", 20)}${pad("Role", 5)}${pad("Sts", 4)}${pad("Cost", 10)}${pad("Prio.Nbr", 9)}Type`, `${"-".repeat(19)} ${"-".repeat(4)} ${"-".repeat(3)} ${"-".repeat(9)} ${"-".repeat(8)} ${"-".repeat(24)}`);
-    for (const f of sortedInterfaces(dev).filter((f) => f.switchport && !f.channel && status(dev, f)[0] === "up" && carries(dev, f, v))) {
-      const end = far(dev, f.name);
-      const towardRoot = !isRoot && end && end.device === root;
-      const portCost = f.stp.vlan[v]?.cost ?? f.stp.cost ?? (f.name.startsWith("Gig") ? 4 : 19);
+    const byName = new Map(tree.ports.map((p) => [p.f, p]));
+    for (const f of sortedInterfaces(dev).filter((f) => byName.has(f))) {
+      const { role, state } = byName.get(f);
       const edge = f.stp.portfast === "edge" || (dev.stp.portfastDefault && f.mode === "access");
-      rows: out.push(`${pad(short(f.name), 20)}${pad(towardRoot ? "Root" : "Desg", 5)}${pad("FWD", 4)}${pad(portCost, 10)}${pad(`${f.stp.priority ?? 128}.${Number(f.name.split("/").pop())}`, 9)}P2p${edge ? " Edge" : ""}`);
+      out.push(`${pad(short(f.name), 20)}${pad(role, 5)}${pad(state, 4)}${pad(stpCost(dev, f, v), 10)}${pad(`${f.stp.priority ?? 128}.${stpPortNumber(f)}`, 9)}P2p${edge ? " Edge" : ""}`);
     }
     out.push("");
   }
