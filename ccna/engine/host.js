@@ -4,7 +4,7 @@
 // It reads the lab around it, so a ping or a DHCP renew only works when the
 // network really allows it.
 
-import { maskBits, network, parseIp, compressIpv6, eui64 } from "./ip.js";
+import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch } from "./ip.js";
 import { status, operMode, carries, hsrpRanking } from "./net.js";
 import { routeTable } from "./show.js";
 
@@ -172,17 +172,40 @@ function pathFrom(router, ip, seen = new Set()) {
     next = end && Object.values(end.device.interfaces).find((f) => f.ip && f.name === end.iface)?.ip;
   }
   const o = next && owner(router, next);
-  if (!o) return router.lab?.extern?.includes(ip) || isExternal(router, best) ? [ip] : null;
+  if (!o) {
+    if (isExternal(router, best)) return (seen.exit = router), [ip];
+    return router.lab?.extern?.includes(ip) ? [ip] : null;
+  }
   if (!ROUTER(o.device)) return null;
   const rest = pathFrom(o.device, ip, seen);
   if (rest === null) return null;
   // the router that owns ip answers from ip itself
   return ownsIp(o.device, ip) ? [ip] : [next, ...rest];
 }
-// a route that leaves the drawn network (toward an ISP cloud)
+// a route that leaves the drawn network: out an interface, or to a next hop
+// on a subnet, that faces an ISP cloud
 function isExternal(router, route) {
-  const end = route.out && router.links[route.out];
+  const exit = route.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && route.via && network(route.via, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
+  const end = exit && router.links[exit];
   return end?.device.type === "cloud";
+}
+
+const isPrivate = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
+// does this router translate this inside address: an inside and an outside
+// interface, and a static entry or a dynamic rule whose ACL permits it
+function natted(router, ip) {
+  const ifs = Object.values(router.interfaces);
+  if (!ifs.some((f) => f.nat === "inside") || !ifs.some((f) => f.nat === "outside")) return false;
+  if (router.nat.statics.some((s) => s.local === ip && !s.proto)) return true;
+  return router.nat.dynamic.some((d) => aclPermits(router.acls[d.acl], ip));
+}
+function aclPermits(acl, ip) {
+  for (const e of acl?.entries ?? []) {
+    const s = e.src;
+    const hit = s.any || (s.host ? s.host === ip : wildcardMatch(ip, s.net, s.wild));
+    if (hit) return e.action === "permit";
+  }
+  return false;
 }
 
 // the router a host's gateway address belongs to
@@ -191,6 +214,9 @@ function gatewayRouter(dev) {
   const n = gw && (dev.host ? onSegment(dev, gw) : null);
   return n && ROUTER(n.device) ? n.device : null;
 }
+
+// for the labs' checks: does this PC get to ip and back
+export const canReach = (dev, ip) => reaches(dev, ip);
 
 // does a packet from this PC get to ip and back
 function reaches(dev, ip) {
@@ -208,7 +234,10 @@ function reaches(dev, ip) {
   learnArp(dev, gw);
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
     const r = gatewayRouter(dev);
-    return Boolean(r && routeTable(r).some((x) => network(ip, x.bits) === x.net));
+    const seen = new Set();
+    if (!r || pathFrom(r, ip, seen) === null) return false;
+    // out to the Internet, a private source needs NAT on the way out
+    return !seen.exit || !isPrivate(f.ip) || natted(seen.exit, f.ip);
   }
   const r = gatewayRouter(dev);
   if (!r || pathFrom(r, ip) === null) return false;

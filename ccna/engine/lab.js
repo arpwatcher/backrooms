@@ -8,7 +8,7 @@ import { normalize } from "./iface.js";
 import { maskBits, network, parseIp } from "./ip.js";
 import { status, operMode, bundled, ospfNeighbors, stpRoot, hsrpRanking, ospfOf, passive, routerId, carries, far } from "./net.js";
 import { routeTable, cost } from "./show.js";
-import { makeHost } from "./host.js";
+import { makeHost, canReach } from "./host.js";
 
 export function buildLab(def) {
   const devices = {};
@@ -86,6 +86,8 @@ export function tools(lab) {
     hsrpActive: (name, vip) => hsrpRanking(D(name), vip, Object.values(lab.devices))[0]?.device === D(name),
     hsrp: (name, vip) => hsrpRanking(D(name), vip, Object.values(lab.devices)),
     acl: (name, id) => D(name).acls[String(id)] ?? null,
+    // a PC's ping to ip would get there and back
+    reach: (name, ip) => canReach(D(name), ip),
     network, maskBits, parseIp,
   };
   return t;

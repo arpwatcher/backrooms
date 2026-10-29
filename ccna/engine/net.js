@@ -272,7 +272,9 @@ export function stpRoot(dev, vlan) {
 export function stpCost(dev, f, vlan) {
   const set = f.stp.vlan[vlan]?.cost ?? f.stp.cost;
   if (set) return set;
-  const gig = f.name.startsWith("Gig") || f.name.startsWith("Port-channel");
+  // a link runs at the slower end's speed
+  const end = far(dev, f.name);
+  const gig = (f.name.startsWith("Gig") || f.name.startsWith("Port-channel")) && !end?.iface?.name.startsWith("Fast");
   return dev.stp.pathcost === "long" ? (gig ? 20000 : 200000) : gig ? 4 : 19;
 }
 // the port number in a port ID (a 2960's G0/1 is port 25)
