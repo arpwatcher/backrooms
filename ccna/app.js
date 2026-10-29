@@ -52,7 +52,7 @@ function renderMenu(filter = "") {
     ul.hidden = !open;
     for (const l of labs) {
       const li = document.createElement("li");
-      li.innerHTML = `<a href="#lab/${l.id}" class="${current?.def.id === l.id ? "current" : ""}"><span class="tick">${progress.done[l.id] ? "✓" : ""}</span><span>${esc(l.title)}</span>${l.kind === "sim" ? '<span class="tag sim">sim</span>' : ""}${l.extra ? '<span class="tag extra">not on 200-301</span>' : ""}</a>`;
+      li.innerHTML = `<a href="#lab/${l.id}" class="${current?.def.id === l.id ? "current" : ""}"><span class="tick">${progress.done[l.id] ? "✓" : ""}</span><span>${esc(l.title)}</span>${l.hard ? '<span class="tag hard">challenge</span>' : l.kind === "sim" ? '<span class="tag sim">sim</span>' : ""}${l.extra ? '<span class="tag extra">not on 200-301</span>' : ""}</a>`;
       ul.appendChild(li);
     }
     wrap.querySelector("button").addEventListener("click", (e) => {
@@ -87,8 +87,9 @@ function openLab(def, { exam = null } = {}) {
   const main = $("#main");
   main.innerHTML = "";
   main.appendChild($("#lab-view").content.cloneNode(true));
+  $(".work").classList.toggle("wide", !!def.hard);
   const mod = MODULES.find((m) => m.id === def.module);
-  $(".crumbs").innerHTML = exam ? `<span>Exam · question ${exam.index + 1} of ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.kind === "sim" ? '<span class="tag sim">simulation</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
+  $(".crumbs").innerHTML = exam ? `<span>Exam · question ${exam.index + 1} of ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.hard ? '<span class="tag hard">challenge</span>' : def.kind === "sim" ? '<span class="tag sim">simulation</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
   $(".lab-title").textContent = def.title;
   $(".intro").innerHTML = rich(def.intro ?? "");
   renderTasks();
@@ -330,16 +331,19 @@ function renderExamStart() {
   <div class="exam-card"><h2>How it works</h2>
   <p>You get random labs like the exam simulations. There is no theory, no answers and no checking along the way, and you cannot go back to a previous question, as in the real exam. At the end you see what passed and what did not.</p>
   <p>Simulations available: ${sims}. Mini labs fill the rest of the test.</p>
-  <div class="buttons"><button class="btn primary" data-n="5" data-min="25">5 questions · 25 minutes</button><button class="btn" data-n="10" data-min="45">10 questions · 45 minutes</button></div></div></section>`;
-  for (const b of $("#main").querySelectorAll("[data-n]")) b.addEventListener("click", () => startExam(Number(b.dataset.n), Number(b.dataset.min)));
+  <div class="buttons"><button class="btn primary" data-n="5" data-min="25">5 questions · 25 minutes</button><button class="btn" data-n="10" data-min="45">10 questions · 45 minutes</button></div>
+  <h2>Harder than the exam</h2>
+  <p>Only challenge labs: bigger topologies, several topics in one lab, faults to find and questions on the output.</p>
+  <div class="buttons"><button class="btn" data-n="3" data-min="45" data-hard="1">3 challenge labs · 45 minutes</button></div></div></section>`;
+  for (const b of $("#main").querySelectorAll("[data-n]")) b.addEventListener("click", () => startExam(Number(b.dataset.n), Number(b.dataset.min), Boolean(b.dataset.hard)));
   renderMenu($("#search").value);
 }
 
-function startExam(n, minutes) {
+function startExam(n, minutes, hard = false) {
   const pool = LABS.filter((l) => !l.extra && l.module !== "basics");
-  const sims = shuffle(pool.filter((l) => l.kind === "sim"));
+  const sims = shuffle(pool.filter((l) => l.kind === "sim" && !l.hard));
   const micros = shuffle(pool.filter((l) => l.kind !== "sim"));
-  const list = [...sims.slice(0, Math.ceil(n * 0.6)), ...micros].slice(0, n);
+  const list = hard ? shuffle(pool.filter((l) => l.hard)).slice(0, n) : [...sims.slice(0, Math.ceil(n * 0.6)), ...micros].slice(0, n);
   examState = { list: shuffle(list), index: 0, results: [], ends: Date.now() + minutes * 60000 };
   openLab(examState.list[0], { exam: examState });
 }

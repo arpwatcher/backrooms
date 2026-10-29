@@ -51,6 +51,7 @@ button { font: inherit; }
 .module li .tick { width: 14px; flex: none; color: var(--ok); }
 .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .tag.sim { border-color: #6b4f12; color: var(--warn); }
+.tag.hard { border-color: #6e2a2a; color: #ff8f8f; }
 .tag.extra { border-color: #44314f; color: #c49be0; }
 
 main { padding: 16px; min-width: 0; }
@@ -64,6 +65,10 @@ main { padding: 16px; min-width: 0; }
 .hint-text { text-transform: none; letter-spacing: 0; }
 .topo-panel { position: relative; }
 .topo { width: 100%; height: auto; display: block; aspect-ratio: 100 / 60; background: radial-gradient(circle at 50% 40%, #13283a, #0e1d2a 70%); border-radius: 8px; }
+.work.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.work.wide .topo-panel { grid-column: 1 / -1; }
+.work.wide .term-panel { grid-column: auto; }
+.work.wide .topo { max-height: 60vh; }
 .term-panel { grid-column: 1 / -1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
 /* topology */
@@ -149,7 +154,7 @@ main { padding: 16px; min-width: 0; }
 .welcome .bar i { display: block; height: 100%; background: var(--ok); }
 
 @media (max-width: 1000px) {
-  .work { grid-template-columns: 1fr; }
+  .work, .work.wide { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; }

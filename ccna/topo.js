@@ -2,8 +2,6 @@
 // and a link light at each end (green up, amber coming up, red down), the
 // way Packet Tracer and the exam draw them.
 
-import { osName } from "./engine/host.js";
-
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs = {}, parent) => {
   const e = document.createElementNS(NS, name);
@@ -65,7 +63,8 @@ const edge = (ux, uy, d) => 1 / Math.hypot(ux / RX, uy / (uy > 0 ? 26 * SCALE + 
 // one-router lab is drawn huge
 function fit(points) {
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
-  let x0 = Math.min(...xs) - 120, x1 = Math.max(...xs) + 120;
+  // PCs carry an "OS · address" line under them, the widest label there is
+  let x0 = Math.min(...xs) - 170, x1 = Math.max(...xs) + 170;
   let y0 = Math.min(...ys) - 90, y1 = Math.max(...ys) + 120;
   let w = Math.max(x1 - x0, 760), h = Math.max(y1 - y0, 456);
   if (w / h > 5 / 3) h = (w * 3) / 5;
@@ -115,7 +114,7 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
     const name = el("text", { x: 0, y: 26 * SCALE + 14, class: "devname", "text-anchor": "middle" }, g);
     name.textContent = lab.devices[d.name].hostname ?? d.name;
     // a PC with a terminal says which OS it runs
-    const sub = [d.os && osName(d.os), d.ip].filter(Boolean).join(" · ");
+    const sub = [d.os && { windows: "Win", linux: "Linux", mac: "Mac" }[d.os], d.ip].filter(Boolean).join(" · ");
     if (sub) {
       const ip = el("text", { x: 0, y: 26 * SCALE + 38, class: "devip", "text-anchor": "middle" }, g);
       ip.textContent = sub;
