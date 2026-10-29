@@ -101,23 +101,34 @@ start on a given level.
 
 [`ccna/`](ccna/) is a separate page in the same repo, with Cisco IOS command
 labs for the CCNA 200-301 exam:
-<https://arpwatcher.github.io/backrooms/ccna/>.
+<https://arpwatcher.github.io/backrooms/ccna/>. Like the exam, it is all in
+English.
 
 - **Mini labs like the exam's.** Each lab has a small topology (two or three
   devices, as on the exam), a task list, and a console for every device.
   Every command in the syllabus has its own lab. Each module ends with a
   bigger "sim" lab. Modules: IOS basics, VLANs and trunks, STP, EtherChannel,
-  inter-VLAN routing, static routing, OSPFv2, HSRP, IP services (DHCP, NTP,
-  syslog, SNMP, CDP/LLDP), NAT, ACLs, security (SSH, port security, DHCP
-  snooping, DAI), IPv6 and device management. RIP, EIGRP and VTP are left
-  in as clearly marked extras.
+  inter-VLAN routing, static routing, OSPFv2, connectivity troubleshooting
+  (ping, extended ping, traceroute, debug), HSRP, IP services (DHCP, DNS,
+  NTP, syslog, SNMP, CDP/LLDP), NAT, ACLs, security (SSH, port security,
+  DHCP snooping, DAI), IPv6, device management, and host OS commands.
+  RIP, EIGRP, VTP and multi-area OSPF are left in as clearly marked extras.
+- **PCs with a terminal.** In the host OS chapter the PCs run Windows,
+  Linux or macOS, with the commands for checking a client's settings:
+  `ipconfig` (`/all`, `/release`, `/renew`, `/displaydns`, `/flushdns`),
+  `ip addr`, `ip route`, `ip neigh`, `ifconfig`, `netstat -rn`, `scutil --dns`,
+  `resolvectl status`, `arp`, `nslookup`, `dig`, `ping`, `tracert` and
+  `traceroute`. Their output comes from the lab: a renew gets a lease only
+  when a router on the segment has a pool for it (or a relay to one), and
+  otherwise the PC falls back to 169.254.x.x. Some tasks are questions
+  answered from that output.
 - **A console that behaves like IOS.** It accepts abbreviations (`conf t`,
   `sh ip int br`) and answers with IOS's own errors (`% Ambiguous command`,
   `% Invalid input` with the caret). It also has `?` help, Tab completion,
   `do`, pipes (`| include`, `| section`), and the real prompts for `enable`,
   `copy`, `reload` and `crypto key`. The `show` output is built from what you
   configured.
-- **Checking is done on the result, not the typing.** "Έλεγχος" inspects the
+- **Checking is done on the result, not the typing.** "Check" inspects the
   configuration that resulted (adjacencies, trunks, the root bridge, the
   HSRP active router, NAT and ACL entries), so any correct answer passes.
   When a task fails, it says what is missing.
