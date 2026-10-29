@@ -1,4 +1,4 @@
-import { lab, R, S, PC, SRV, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, SRV, HOST, cfg, EN, need } from "./kit.js";
 
 const M = "services";
 const lanRouter = (extra = []) => R("R1", 30, 25, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", ...extra));
@@ -213,5 +213,20 @@ export default [
     ],
     solution: { R1: [...EN, "ntp server 172.16.1.100", "logging host 172.16.1.100", "logging trap notifications", "snmp-server community NMSro ro", "end", "copy running-config startup-config", ""] },
     teach: "When an exam sim says to save the configuration, a forgotten copy run start costs points.",
+  }),
+  lab({
+    id: "sim-dhcp-fix", module: M, title: "Sim: the PC gets a 169.254 address", kind: "sim",
+    cmds: ["ipconfig", "show ip dhcp pool", "network", "ipconfig /renew"],
+    devices: [lanRouter(["ip dhcp excluded-address 10.10.10.1 10.10.10.10", "ip dhcp pool LAN", "network 10.10.11.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 8.8.8.8"]), S("SW1", 65, 25), HOST("PC1", 65, 52, "windows", { dhcp: true, mac: "0050.7966.6801" })],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"]],
+    intro: "R1 has a DHCP pool for the LAN, but PC1 never gets an address.",
+    tasks: [
+      { text: "Check PC1's address.", check: (t) => need(t.ran("PC1", /^ipconfig( \/all)?$/), "Run ipconfig on PC1.") },
+      { text: "Check R1's pool.", check: (t) => need(t.ran("R1", /^show (ip dhcp pool|running-config)/), "Run show ip dhcp pool (or show running-config | section dhcp) on R1.") },
+      { text: "Fix the pool so it serves the LAN of G0/0.", check: (t) => need(t.dev("R1").dhcp.pools.LAN?.network === "10.10.10.0", "The pool's network is 10.10.11.0, but G0/0 is on 10.10.10.0/24.") },
+      { text: "Get PC1 a lease.", check: (t) => need(t.dev("PC1").host.leased, "Run ipconfig /renew on PC1.") },
+    ],
+    solution: { PC1: ["ipconfig"], R1: ["enable", "show ip dhcp pool", "configure terminal", "ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0"], "PC1#2": ["ipconfig /renew"] },
+    teach: "A router leases from a pool only when the pool's network matches the subnet of the interface the request arrives on (or the relay's giaddr). A typo in the network statement means no offers at all, and Windows falls back to 169.254.x.x.",
   }),
 ];
