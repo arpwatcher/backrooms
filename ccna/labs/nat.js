@@ -80,4 +80,17 @@ export default [
     solution: { R1: [...EN, "interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "ip nat inside source static 192.168.1.100 203.0.113.4", "ip access-list standard NAT-USERS", "permit 192.168.1.0 0.0.0.255", "exit", "ip nat inside source list NAT-USERS interface g0/1 overload", "end", "show ip nat translations"] },
     teach: "A common exam scenario is \"PCs cannot reach the Internet\". Typical causes: inside and outside swapped, an ACL with the wrong wildcard, or a missing overload.",
   }),
+  lab({
+    id: "sim-nat-fix", module: M, title: "Sim: users cannot reach the Internet", kind: "sim",
+    cmds: ["show ip nat translations", "show running-config | include nat", "ip nat inside", "access-list"],
+    devices: topo(["interface g0/0", "ip nat outside", "interface g0/1", "ip nat inside", "exit", "access-list 1 permit 192.168.1.0 0.0.0.0", "ip nat inside source list 1 interface g0/1 overload"]), links,
+    intro: "PAT was configured on R1, but no translations ever appear. There are two faults.",
+    tasks: [
+      { text: "Look at R1's NAT configuration.", check: (t) => need(t.ran("R1", /^show (running-config|ip nat (translations|statistics)|access-lists)/), "Start with show running-config | include nat, show ip nat statistics or show access-lists.") },
+      { text: "Fix the interface roles.", check: (t) => need(sides(t), sidesMsg) },
+      { text: "Make ACL 1 match the whole 192.168.1.0/24 LAN.", check: (t) => need(t.acl("R1", 1)?.entries.some((e) => e.action === "permit" && e.src.net === "192.168.1.0" && e.src.wild === "0.0.0.255"), "Wildcard 0.0.0.0 matches only the address 192.168.1.0. A /24 needs 0.0.0.255.") },
+    ],
+    solution: { R1: ["enable", "show running-config | include nat", "configure terminal", "interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "no access-list 1", "access-list 1 permit 192.168.1.0 0.0.0.255"] },
+    teach: "NAT troubleshooting checklist: inside and outside on the right interfaces, an ACL that matches the inside addresses (wildcard, not mask), the right ACL number in ip nat inside source, overload for PAT, and a route out.",
+  }),
 ];
