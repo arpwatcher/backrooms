@@ -263,7 +263,7 @@ function pingWin(dev, target, count) {
   const r = lookup(dev, target);
   if (r.error) return `Ping request could not find host ${target}. Please check the name and try again.`;
   const f = own(dev);
-  if (!f.ip) return "PING: transmit failed. General failure.";
+  if (noRoute(dev, r.ip)) return `\nPinging ${r.ip} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
   const ok = reaches(dev, r.ip);
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
   const lines = Array.from({ length: count }, (_, i) => (ok ? `Reply from ${r.ip}: bytes=32 time${i === 0 ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
@@ -279,6 +279,13 @@ function ttl(dev, ip) {
   return start - (hopsTo(dev, ip).length - 1);
 }
 
+// no address, no link, or another subnet with no gateway: the packet never
+// leaves, and every OS says so instead of timing out
+function noRoute(dev, ip) {
+  const f = own(dev);
+  return ip !== "127.0.0.1" && (!f.ip || !linkUp(dev) || (!local(dev, ip) && !dev.host.gw));
+}
+
 function hopsTo(dev, ip) {
   if (local(dev, ip)) return [ip];
   return [dev.host.gw, ...(dev.host.hops[ip] ?? []), ip].filter(Boolean);
@@ -287,6 +294,7 @@ function hopsTo(dev, ip) {
 function tracertWin(dev, target) {
   const r = lookup(dev, target);
   if (r.error) return `Unable to resolve target system name ${target}.`;
+  if (noRoute(dev, r.ip)) return "Unable to contact IP driver. General failure.";
   const ok = reaches(dev, r.ip);
   const hops = ok ? hopsTo(dev, r.ip) : [dev.host.gw].filter((g) => g && reaches(dev, g));
   const ms = (i) => (i === 0 ? "<1 ms" : `${i} ms`).padStart(9);
@@ -421,7 +429,7 @@ function pingUnix(dev, target, count, mac) {
   const r = lookup(dev, target);
   if (r.error) return mac ? `ping: cannot resolve ${target}: Unknown host` : `ping: ${target}: ${r.error === "noserver" ? "Temporary failure in name resolution" : "Name or service not known"}`;
   const f = own(dev);
-  if (!f.ip) return mac ? "ping: sendto: No route to host" : "ping: connect: Network is unreachable";
+  if (noRoute(dev, r.ip)) return mac ? `PING ${r.ip} (${r.ip}): 56 data bytes\nping: sendto: No route to host\n\n--- ${r.ip} ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss` : "ping: connect: Network is unreachable";
   const ok = reaches(dev, r.ip);
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
   const replies = ok ? Array.from({ length: count }, (_, i) => (mac ? `64 bytes from ${r.ip}: icmp_seq=${i} ttl=${ttl(dev, r.ip)} time=1.${2 + i}04 ms` : `64 bytes from ${r.name ? shown : r.ip}: icmp_seq=${i + 1} ttl=${ttl(dev, r.ip)} time=1.${2 + i}4 ms`)) : mac ? Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}`) : [];
@@ -432,6 +440,7 @@ function pingUnix(dev, target, count, mac) {
 function traceUnix(dev, target, mac) {
   const r = lookup(dev, target);
   if (r.error) return mac ? `traceroute: unknown host ${target}` : `${target}: Name or service not known\nCannot handle "host" cmdline arg \`${target}' on position 1 (argc 1)`;
+  if (noRoute(dev, r.ip)) return mac ? "traceroute: findsaddr: failed to connect to peer for src addr selection." : `traceroute to ${r.ip} (${r.ip}), 30 hops max, 60 byte packets\nconnect: Network is unreachable`;
   const ok = reaches(dev, r.ip);
   const hops = ok ? hopsTo(dev, r.ip) : [dev.host.gw].filter((g) => g && reaches(dev, g));
   const rows = hops.map((h, i) => ` ${i + 1}  ${h} (${h})  ${i + 1}.${i}12 ms  ${i + 1}.${i}05 ms  ${i + 1}.${i}01 ms`);

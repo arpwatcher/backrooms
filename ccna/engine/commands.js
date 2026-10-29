@@ -7,7 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS } from "./show.js";
 import { runningConfig } from "./config.js";
-import { status } from "./net.js";
+import { status, stpRoot, bridgePriority } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
 
@@ -523,6 +523,9 @@ def(IF_MODES, "standby [<g:num:0-4095>] ip <ip:ip>", (c) =>
   }), { only: ["router", "l3switch"] });
 def(IF_MODES, "standby [<g:num:0-4095>] priority <p:num:0-255>", (c) => each(c, (f) => (hsrpGroup(f, group(c)).priority = c.args.p)), { only: ["router", "l3switch"] });
 def(IF_MODES, "standby [<g:num:0-4095>] preempt", (c) => each(c, (f) => (hsrpGroup(f, group(c)).preempt = true)), { only: ["router", "l3switch"] });
+def(IF_MODES, "no standby <g:num:0-4095>", (c) => each(c, (f) => delete f.hsrp.groups[c.args.g]), { only: ["router", "l3switch"] });
+def(IF_MODES, "no standby [<g:num:0-4095>] ip [<ip:ip>]", (c) => each(c, (f) => f.hsrp.groups[group(c)] && (f.hsrp.groups[group(c)].ip = null)), { only: ["router", "l3switch"] });
+def(IF_MODES, "no standby [<g:num:0-4095>] priority [<p:num:0-255>]", (c) => each(c, (f) => f.hsrp.groups[group(c)] && (f.hsrp.groups[group(c)].priority = 100)), { only: ["router", "l3switch"] });
 def(IF_MODES, "no standby [<g:num:0-4095>] preempt", (c) => each(c, (f) => (hsrpGroup(f, group(c)).preempt = false)), { only: ["router", "l3switch"] });
 
 // ipv6 on an interface
@@ -626,8 +629,22 @@ def("config", "vtp password <pw:word>", (c) => {
 // --- spanning tree, globally -----------------------------------------------------------------------
 
 def("config", "spanning-tree mode (pvst | rapid-pvst | mst)", (c) => (c.dev.stp.mode = c.words[2]), { only: SW });
+// root primary takes 24576, or 4096 under the current root when that is
+// already lower, and gives up when it would have to go below zero
 def("config", "spanning-tree vlan <v:vlist> root (primary | secondary)", (c) => {
-  for (const v of c.args.v) c.dev.stp.vlans[v] = { priority: c.has("primary") ? 24576 : 28672, root: c.has("primary") ? "primary" : "secondary" };
+  for (const v of c.args.v) {
+    let p = c.has("primary") ? 24576 : 28672;
+    if (c.has("primary")) {
+      const before = c.dev.stp.vlans[v];
+      delete c.dev.stp.vlans[v];
+      const root = stpRoot(c.dev, v);
+      const theirs = bridgePriority(root, v) - v;
+      if (root !== c.dev && theirs <= p) p = theirs - 4096;
+      if (p < 0 && before) c.dev.stp.vlans[v] = before;
+      if (p < 0) fail(`% Failed to make the bridge root for vlan ${v}\n% It may be possible to make the bridge root by setting the priority\n% for some (or all) of these instances to zero.`);
+    }
+    c.dev.stp.vlans[v] = { priority: p, root: c.has("primary") ? "primary" : "secondary" };
+  }
 }, { only: SW });
 def("config", "spanning-tree vlan <v:vlist> priority <p:num:0-61440>", (c) => {
   if (c.args.p % 4096) fail("% Bridge Priority must be in increments of 4096.\n% Allowed values are:\n  0     4096  8192  12288 16384 20480 24576 28672\n  32768 36864 40960 45056 49152 53248 57344 61440");

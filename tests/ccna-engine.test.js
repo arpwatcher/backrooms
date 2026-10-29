@@ -96,3 +96,31 @@ test("a DHCP client gets APIPA with no server, and a lease once a pool exists", 
   for (const line of ["enable", "configure terminal", "ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1"]) exec(r1, line);
   assert.match(exec(pc, "ipconfig /renew"), /IPv4 Address[ .]+: 10\.10\.10\.\d+\n[^\n]*\n\s+Default Gateway[ .]+: 10\.10\.10\.1/);
 });
+
+test("with no route off the subnet, a PC says so instead of timing out", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const win = buildLab(LABS.find((x) => x.id === "win-apipa")).devices.PC1;
+  assert.match(exec(win, "ping 10.10.20.80"), /PING: transmit failed\. General failure\./);
+  assert.equal(exec(win, "tracert 10.10.20.80"), "Unable to contact IP driver. General failure.");
+  const lnx = buildLab(LABS.find((x) => x.id === "linux-ip-route")).devices.PC1;
+  lnx.host.gw = null;
+  assert.equal(exec(lnx, "ping -c 4 10.10.20.80"), "ping: connect: Network is unreachable");
+  assert.match(exec(lnx, "ping -c 1 10.10.10.1"), /1 received/);
+});
+
+test("root primary goes under a lower root, or says it cannot", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "stp-priority"));
+  for (const [name, p] of [["SW3", 8192], ["SW1", null]]) {
+    const d = l.devices[name];
+    exec(d, "enable");
+    exec(d, "configure terminal");
+    if (p) exec(d, `spanning-tree vlan 1 priority ${p}`);
+  }
+  exec(l.devices.SW1, "spanning-tree vlan 1 root primary");
+  assert.equal(l.devices.SW1.stp.vlans[1].priority, 4096);
+  exec(l.devices.SW3, "spanning-tree vlan 1 priority 0");
+  assert.match(exec(l.devices.SW1, "spanning-tree vlan 1 root primary"), /% Failed to make the bridge root for vlan 1/);
+});
