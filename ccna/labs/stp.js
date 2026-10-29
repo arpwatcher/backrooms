@@ -1,4 +1,4 @@
-import { lab, R, S, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, cfg, EN, need, is } from "./kit.js";
 
 const M = "stp";
 const tri = (s1 = [], s2 = [], s3 = []) => [S("SW1", 50, 12, s1), S("SW2", 22, 45, s2), S("SW3", 78, 45, s3)];
@@ -183,5 +183,32 @@ export default [
       SW3: [...EN, "spanning-tree mode rapid-pvst"],
     },
     teach: "One spanning-tree vlan 1,10 root primary covers several VLANs. show spanning-tree vlan 10 shows which ports are Root, Desg and Altn.",
+  }),
+  lab({
+    id: "stp-read", module: M, title: "Reading show spanning-tree",
+    cmds: ["show spanning-tree vlan"],
+    devices: tri([...trunks.slice(0, -1), "spanning-tree vlan 1 priority 4096", "end"], trunks, trunks), links: triLinks,
+    intro: "Answer from show spanning-tree on SW2.",
+    tasks: [
+      { text: "On SW2, display spanning tree for VLAN 1.", check: (t) => need(t.ran("SW2", /^show spanning-tree( vlan 1)?$/), "Run show spanning-tree vlan 1.") },
+      { text: "Which switch is the root bridge?", choices: ["SW1", "SW2", "SW3"], check: (t) => need(t.reply === "SW1", "The Root ID priority is 4097 (4096 + VLAN 1); compare its address with each switch's Bridge ID.") },
+      { text: "What is the root bridge's priority, as shown (with the VLAN added)?", ask: "number", check: (t) => need(is.num(t.reply, 4097), "Priority 4096 plus sys-id-ext 1.") },
+    ],
+    solution: { SW2: ["enable", "show spanning-tree vlan 1"] },
+    answers: { 1: "SW1", 2: "4097" },
+    teach: "The Root ID section describes the root; the Bridge ID section describes this switch. The shown priority includes the VLAN number (extended system ID).",
+  }),
+  lab({
+    id: "sim-stp-fix", module: M, title: "Sim: the wrong switch is the root", kind: "sim",
+    cmds: ["show spanning-tree", "no spanning-tree vlan priority", "spanning-tree vlan root primary"],
+    devices: tri(trunks, trunks, [...trunks.slice(0, -1), "spanning-tree vlan 1 priority 0", "end"]), links: triLinks,
+    intro: "SW1 is the core switch and must be the root for VLAN 1, but traffic flows through SW3. Someone set a priority on SW3 by mistake.",
+    tasks: [
+      { text: "Find the current root.", check: (t) => need(["SW1", "SW2", "SW3"].some((s) => t.ran(s, /^show spanning-tree/)), "Run show spanning-tree vlan 1.") },
+      { text: "Put SW3's priority for VLAN 1 back to the default.", check: (t) => need(!t.dev("SW3").stp.vlans[1], "Expected no spanning-tree vlan 1 priority on SW3.") },
+      { text: "Make SW1 the root for VLAN 1 with the root macro.", check: (t) => need(t.root("SW1", 1) && t.dev("SW1").stp.vlans[1]?.root === "primary", "Expected spanning-tree vlan 1 root primary on SW1.") },
+    ],
+    solution: { SW1: ["enable", "show spanning-tree vlan 1"], SW3: [...EN, "no spanning-tree vlan 1 priority"], "SW1#2": ["configure terminal", "spanning-tree vlan 1 root primary"] },
+    teach: "root primary cannot beat a root with priority 0 (it would need a negative priority), so the stray priority has to go first. Order matters in the exam too.",
   }),
 ];
