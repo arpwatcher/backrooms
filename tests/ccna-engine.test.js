@@ -137,3 +137,81 @@ test("spanning tree blocks one port of a triangle, on the switch with the higher
   exec(l.devices.SW3, "enable");
   assert.match(exec(l.devices.SW3, "show spanning-tree vlan 1"), /Cost {8}4\n {13}Port {8}25 \(GigabitEthernet0\/1\)/);
 });
+
+test("a PC reaches its gateway only through the right VLAN, trunk and subinterface", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { cfg, R, S, HOST } = await import("../ccna/labs/kit.js");
+  const def = (pcVlan, allowed) => ({
+    id: "t", tasks: [], solution: {},
+    devices: [
+      R("R1", 50, 10, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.1.10.1 255.255.255.0", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.1.20.1 255.255.255.0")),
+      S("SW1", 50, 30, cfg("vlan 10", "vlan 20", "interface fa0/1", "switchport mode access", `switchport access vlan ${pcVlan}`, "interface g0/1", "switchport mode trunk", ...(allowed ? [`switchport trunk allowed vlan ${allowed}`] : []))),
+      HOST("PC1", 50, 50, "windows", { ip: "10.1.10.11/24", gateway: "10.1.10.1" }),
+      HOST("PC2", 70, 50, "linux", { ip: "10.1.20.11/24", gateway: "10.1.20.1" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"]],
+  });
+  const ok = (l) => /Received = 4/.test(exec(l.devices.PC1, "ping 10.1.10.1"));
+  assert.equal(ok(buildLab(def(10))), true);
+  assert.equal(ok(buildLab(def(20))), false, "wrong access VLAN");
+  assert.equal(ok(buildLab(def(10, "20"))), false, "VLAN not allowed on the trunk");
+  // PC2 sits on an access port left in VLAN 1, so it reaches nothing
+  const l = buildLab(def(10));
+  assert.match(exec(l.devices.PC2, "ping -c 1 10.1.20.1"), /0 received/);
+  // inter-VLAN: PC1 to the other subinterface's address works through the router
+  assert.equal(/Received = 4/.test(exec(l.devices.PC1, "ping 10.1.20.1")), true);
+});
+
+test("an HSRP virtual IP answers as a gateway, with the virtual MAC", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const { cfg, HOST } = await import("../ccna/labs/kit.js");
+  const base = LABS.find((x) => x.id === "hsrp-priority");
+  const def = { ...base, devices: base.devices.map((d) => (d.name === "PC1" ? HOST("PC1", d.x, d.y, "windows", { ip: "10.10.10.50/24", gateway: "10.10.10.1" }) : d)) };
+  const l = buildLab(def);
+  const pc = l.devices.PC1;
+  assert.match(exec(pc, "ping 10.10.10.1"), /Received = 4/);
+  assert.match(exec(pc, "arp -a"), /10\.10\.10\.1\s+00-00-0c-07-ac-01\s+dynamic/);
+});
+
+test("a ping off the subnet needs a route there and a route back", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { cfg, R, HOST } = await import("../ccna/labs/kit.js");
+  const def = (backRoute) => ({
+    id: "t", tasks: [], solution: {},
+    devices: [
+      R("R1", 20, 20, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 10.2.2.0 255.255.255.0 10.0.12.2")),
+      R("R2", 70, 20, cfg("interface g0/0", "ip address 10.2.2.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", ...(backRoute ? ["ip route 10.1.1.0 255.255.255.0 10.0.12.1"] : []))),
+      HOST("PC1", 20, 50, "linux", { ip: "10.1.1.10/24", gateway: "10.1.1.1" }),
+      HOST("PC2", 70, 50, "windows", { ip: "10.2.2.10/24", gateway: "10.2.2.1" }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/0", "PC1", "fa0"], ["R2", "g0/0", "PC2", "fa0"]],
+  });
+  assert.match(exec(buildLab(def(false)).devices.PC1, "ping -c 2 10.2.2.10"), /0 received/);
+  const l = buildLab(def(true));
+  assert.match(exec(l.devices.PC1, "ping -c 2 10.2.2.10"), /2 received/);
+  assert.match(exec(l.devices.PC1, "traceroute 10.2.2.10"), / 1  10\.1\.1\.1 .*\n 2  10\.0\.12\.2 .*\n 3  10\.2\.2\.10 /);
+});
+
+test("ospf routes come from the adjacencies that are up, and beat a floating static", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { cfg, R, PC } = await import("../ccna/labs/kit.js");
+  const { routeTable } = await import("../ccna/engine/show.js");
+  const def = (area2) => ({
+    id: "t", tasks: [], solution: {},
+    devices: [
+      R("R1", 20, 20, cfg("interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 10.2.2.0 255.255.255.0 10.0.12.2 200", "router ospf 1", "network 10.0.12.0 0.0.0.3 area 0")),
+      R("R2", 70, 20, cfg("interface g0/0", "ip address 10.2.2.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface lo0", "ip address 2.2.2.2 255.255.255.255", "router ospf 1", `network 10.0.12.0 0.0.0.3 area ${area2}`, "network 10.2.2.0 0.0.0.255 area 0", "network 2.2.2.2 0.0.0.0 area 0")),
+      PC("PC2", 70, 50, "10.2.2.10/24", "10.2.2.1"),
+    ],
+    // (a LAN interface with nothing plugged in is down, and ospf leaves it out)
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/0", "PC2", "fa0"]],
+  });
+  const up = routeTable(buildLab(def(0)).devices.R1);
+  assert.deepEqual(up.filter((r) => r.code === "O").map((r) => `${r.net}/${r.bits} [${r.ad}/${r.metric}] via ${r.via}`).sort(), ["10.2.2.0/24 [110/2] via 10.0.12.2", "2.2.2.2/32 [110/2] via 10.0.12.2"]);
+  assert.ok(!up.some((r) => r.code === "S"), "the floating static stays out");
+  // an area mismatch: no adjacency, no ospf routes, the floating static comes in
+  const down = routeTable(buildLab(def(1)).devices.R1);
+  assert.ok(!down.some((r) => r.code.startsWith("O")));
+  assert.ok(down.some((r) => r.code === "S" && r.net === "10.2.2.0" && r.ad === 200));
+});

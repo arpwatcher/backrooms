@@ -5,6 +5,8 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64 } from "./ip.js";
+import { status, operMode, carries, hsrpRanking } from "./net.js";
+import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
 export const osName = (os) => OS_NAME[os] ?? os;
@@ -63,26 +65,157 @@ function linkUp(dev) {
 const bitsOf = (dev) => maskBits(own(dev).mask);
 const local = (dev, ip) => own(dev).ip && network(ip, bitsOf(dev)) === network(own(dev).ip, bitsOf(dev));
 
+// --- layer 2: what this PC's frames reach -----------------------------------------------------
+
+const isSwitch = (d) => d.type === "switch" || d.type === "l3switch";
+// a member of an EtherChannel switches as its port-channel does
+const asSwitched = (d, f) => (f.channel ? d.interfaces[`Port-channel${f.channel.group}`] ?? f : f);
+
+// every layer 3 interface in this PC's broadcast domain: frames go out
+// untagged, into the access VLAN (or the native VLAN of a trunk), across
+// every switch port that carries that VLAN, tagged where a trunk tags it, and
+// stop at hosts, routed ports, router (sub)interfaces and SVIs of the VLAN
+export function segment(dev) {
+  const start = dev.links[own(dev).name];
+  if (!start) return [];
+  const found = [];
+  const seen = new Set();
+  const flood = (sw, vlan) => {
+    const key = `${sw.name}:${vlan}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const svi = sw.interfaces[`Vlan${vlan}`];
+    if (svi?.ip && !svi.shutdown) found.push({ device: sw, iface: svi });
+    for (const q of Object.values(sw.interfaces)) {
+      const link = sw.links[q.name];
+      if (!link || !q.switchport || q.errdisabled || status(sw, q)[0] !== "up") continue;
+      const eff = asSwitched(sw, q);
+      if (!carries(sw, eff, vlan)) continue;
+      const tagged = operMode(sw, eff) === "trunk" && vlan !== eff.nativeVlan;
+      arrive(link.device, link.device.interfaces[link.iface], vlan, tagged);
+    }
+  };
+  const arrive = (d, f, vlan, tagged) => {
+    if (!f || f.shutdown || f.errdisabled) return;
+    if (isSwitch(d) && f.switchport) {
+      const eff = asSwitched(d, f);
+      const mode = operMode(d, eff);
+      if (mode === "trunk") {
+        if (!tagged) return flood(d, eff.nativeVlan);
+        if (carries(d, eff, vlan)) flood(d, vlan);
+        return;
+      }
+      if (!tagged) flood(d, eff.accessVlan);
+      return;
+    }
+    if (d.type === "pc" || d.type === "server" || d.type === "cloud") {
+      if (!tagged) found.push({ device: d, iface: f });
+      return;
+    }
+    // a router or a routed port: the interface itself for untagged frames,
+    // or the subinterface for the frame's VLAN
+    for (const s of Object.values(d.interfaces)) {
+      const mine = s === f || s.name.startsWith(`${f.name}.`);
+      if (!mine || s.shutdown || !s.ip) continue;
+      const enc = s.encap;
+      if (tagged ? enc?.vlan === vlan && !enc.native : s === f ? !enc : enc?.native) found.push({ device: d, iface: s });
+    }
+  };
+  arrive(start.device, start.device.interfaces[start.iface], null, false);
+  return found;
+}
+
+// the addresses answering on this PC's segment, with the HSRP virtual IP on
+// the active router
+function neighbors(dev) {
+  const out = [];
+  for (const { device, iface } of segment(dev)) {
+    out.push({ ip: iface.ip, device, iface, mac: device.mac });
+    for (const [g, grp] of Object.entries(iface.hsrp?.groups ?? {})) {
+      if (!grp.ip) continue;
+      const active = hsrpRanking(device, grp.ip, device.lab?.all ?? [device])[0];
+      if (active?.device === device && active.iface === iface) out.push({ ip: grp.ip, device, iface, mac: (iface.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")) });
+    }
+  }
+  return out;
+}
+const onSegment = (dev, ip) => neighbors(dev).find((n) => n.ip === ip) ?? null;
+
 function learnArp(dev, ip) {
-  const o = owner(dev, ip);
-  if (!o || dev.host.arp.some((a) => a.ip === ip)) return;
-  dev.host.arp.push({ ip, mac: o.device.mac });
+  const n = onSegment(dev, ip);
+  if (!n || dev.host.arp.some((a) => a.ip === ip)) return;
+  dev.host.arp.push({ ip, mac: n.mac });
+}
+
+// --- layer 3: hop by hop through the routers' tables --------------------------------------------
+
+const ROUTER = (d) => d.type === "router" || (d.type === "l3switch" && d.ipRouting);
+const ownsIp = (d, ip) => Object.values(d.interfaces).some((f) => f.ip === ip && status(d, f)[1] === "up");
+
+// from a router, the addresses a packet for ip passes (each next router's
+// ingress address), ending at ip; null when some router has no route, or
+// the last subnet has no such host
+function pathFrom(router, ip, seen = new Set()) {
+  if (ownsIp(router, ip)) return [];
+  if (seen.has(router) || seen.size > 15) return null;
+  seen.add(router);
+  const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
+  if (!best) return null;
+  if (best.code === "C") {
+    const o = owner(router, ip);
+    return o || router.lab?.extern?.includes(ip) ? [ip] : null;
+  }
+  // next hop, or the far end of the exit interface
+  let next = best.via;
+  if (!next && best.out) {
+    const end = router.links[best.out];
+    next = end && Object.values(end.device.interfaces).find((f) => f.ip && f.name === end.iface)?.ip;
+  }
+  const o = next && owner(router, next);
+  if (!o) return router.lab?.extern?.includes(ip) || isExternal(router, best) ? [ip] : null;
+  if (!ROUTER(o.device)) return null;
+  const rest = pathFrom(o.device, ip, seen);
+  if (rest === null) return null;
+  // the router that owns ip answers from ip itself
+  return ownsIp(o.device, ip) ? [ip] : [next, ...rest];
+}
+// a route that leaves the drawn network (toward an ISP cloud)
+function isExternal(router, route) {
+  const end = route.out && router.links[route.out];
+  return end?.device.type === "cloud";
+}
+
+// the router a host's gateway address belongs to
+function gatewayRouter(dev) {
+  const gw = dev.host?.gw ?? dev.gateway;
+  const n = gw && (dev.host ? onSegment(dev, gw) : null);
+  return n && ROUTER(n.device) ? n.device : null;
 }
 
 // does a packet from this PC get to ip and back
 function reaches(dev, ip) {
   const f = own(dev);
   if (ip === "127.0.0.1") return true;
-  if (!f.ip || !linkUp(dev) || dev.host.apipa && !local(dev, ip)) return false;
+  if (!f.ip || !linkUp(dev)) return false;
   if (local(dev, ip)) {
-    if (!owner(dev, ip)) return false;
+    if (!onSegment(dev, ip)) return false;
     learnArp(dev, ip);
     return true;
   }
+  if (dev.host.apipa) return false;
   const gw = dev.host.gw;
-  if (!gw || !local(dev, gw) || !owner(dev, gw)) return false;
+  if (!gw || !local(dev, gw) || !onSegment(dev, gw)) return false;
   learnArp(dev, gw);
-  return Boolean(owner(dev, ip)) || dev.host.extern.includes(ip);
+  if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
+    const r = gatewayRouter(dev);
+    return Boolean(r && routeTable(r).some((x) => network(ip, x.bits) === x.net));
+  }
+  const r = gatewayRouter(dev);
+  if (!r || pathFrom(r, ip) === null) return false;
+  // and back: from the router that answers, or from the target's own gateway
+  const target = owner(dev, ip)?.device;
+  const back = !target ? r : ROUTER(target) ? target : target.host ? gatewayRouter(target) : target.gateway && owner(dev, target.gateway)?.device;
+  return Boolean(back && pathFrom(back, f.ip) !== null);
 }
 
 // a name through the PC's DNS servers (the lab's records stand in for them)
@@ -187,35 +320,17 @@ function release(dev) {
 // with an ip helper-address that leads to one
 export function dhcpOffer(dev) {
   if (!linkUp(dev)) return null;
-  const segment = new Set();
-  const end = dev.links[own(dev).name];
-  const walk = (d, seen = new Set()) => {
-    if (seen.has(d)) return;
-    seen.add(d);
-    for (const [ifname, link] of Object.entries(d.links)) {
-      const fi = d.interfaces[ifname];
-      if (!fi || fi.shutdown) continue;
-      const other = link.device;
-      if (["switch"].includes(other.type) || other.type === "l3switch" && link.device.interfaces[link.iface]?.switchport) walk(other, seen);
-      else if (other.type === "router" || other.type === "l3switch") segment.add({ device: other, iface: other.interfaces[link.iface] });
-    }
-  };
-  if (end) {
-    if (end.device.type === "switch" || end.device.type === "l3switch") {
-      walk(end.device);
-      // an SVI on a layer 3 switch is a gateway on the segment too
-      if (end.device.type === "l3switch") for (const fi of Object.values(end.device.interfaces)) if (fi.name.startsWith("Vlan") && fi.ip) segment.add({ device: end.device, iface: fi });
-    } else segment.add({ device: end.device, iface: end.device.interfaces[end.iface] });
-  }
   const poolFor = (d, gwIf) => Object.values(d.dhcp?.pools ?? {}).find((p) => p.network && gwIf.ip && network(gwIf.ip, maskBits(p.mask)) === p.network);
-  for (const { device, iface } of segment) {
-    if (!iface?.ip || iface.shutdown) continue;
+  for (const { device, iface } of segment(dev)) {
+    if (["pc", "server", "cloud"].includes(device.type)) continue;
     const local = poolFor(device, iface);
     if (local) return { pool: local, server: iface.ip, gw: iface, from: device };
+    // a relay: the server must have a pool for the relay's subnet (giaddr),
+    // and the relay must have a route to the server
     for (const helper of iface.helpers ?? []) {
       const o = owner(dev, helper);
       const p = o && poolFor(o.device, iface);
-      if (p) return { pool: p, server: helper, gw: iface, from: o.device };
+      if (p && (ownsIp(device, helper) || pathFrom(device, helper) !== null)) return { pool: p, server: helper, gw: iface, from: o.device };
     }
   }
   return null;
@@ -288,7 +403,11 @@ function noRoute(dev, ip) {
 
 function hopsTo(dev, ip) {
   if (local(dev, ip)) return [ip];
-  return [dev.host.gw, ...(dev.host.hops[ip] ?? []), ip].filter(Boolean);
+  if (dev.host.hops[ip]) return [dev.host.gw, ...dev.host.hops[ip], ip];
+  const r = gatewayRouter(dev);
+  const path = r && pathFrom(r, ip);
+  if (!path) return [dev.host.gw, ip].filter(Boolean);
+  return [dev.host.gw, ...path].filter((x, i, all) => x && all.indexOf(x) === i);
 }
 
 function tracertWin(dev, target) {
