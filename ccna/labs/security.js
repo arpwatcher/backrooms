@@ -1,4 +1,4 @@
-import { lab, R, S, PC, SRV, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, SRV, cfg, EN, need, is } from "./kit.js";
 
 const M = "security";
 const ps = (t, sw, p) => t.f(sw, p).ps;
@@ -147,5 +147,36 @@ export default [
     ],
     solution: { SW1: [...EN, "interface range fa0/1 - 4", "switchport port-security", "switchport port-security maximum 1", "switchport port-security mac-address sticky", "switchport port-security violation shutdown", "exit", "ip dhcp snooping", "ip dhcp snooping vlan 20", "ip arp inspection vlan 20", "interface g0/1", "ip dhcp snooping trust", "ip arp inspection trust", "interface range fa0/5 - 24", "shutdown"] },
     teach: "Default values (maximum 1, violation shutdown) do not show in show run. If the exam asks for them explicitly, type them anyway.",
+  }),
+  lab({
+    id: "port-security-read", module: M, title: "Reading show port-security interface",
+    cmds: ["show port-security interface"],
+    devices: [S("SW1", 50, 25, cfg("interface fa0/1", "switchport mode access", "switchport port-security", "switchport port-security maximum 3", "switchport port-security violation protect")), PC("PC1", 50, 55)],
+    links: [["SW1", "fa0/1", "PC1", "fa0"]],
+    intro: "Answer from the output on SW1.",
+    tasks: [
+      { text: "Display the port security status of Fa0/1.", check: (t) => need(t.ran("SW1", /^show port-security interface FastEthernet0\/1$/), "Run show port-security interface fa0/1.") },
+      { text: "How many MAC addresses may the port learn?", ask: "number", check: (t) => need(is.num(t.reply, 3), "Read Maximum MAC Addresses.") },
+      { text: "What happens to frames from a fourth MAC address?", choices: ["Dropped silently", "Dropped and logged", "The port goes err-disabled"], check: (t) => need(t.reply === "Dropped silently", "Violation Mode protect drops without a log or counter.") },
+    ],
+    solution: { SW1: ["enable", "show port-security interface fa0/1"] },
+    answers: { 1: "3", 2: "Dropped silently" },
+    teach: "show port-security interface shows the status (Secure-up or Secure-shutdown), the violation mode, the maximum, the learned and sticky counts, and the last source MAC that caused a violation.",
+  }),
+  lab({
+    id: "sim-port-security-fix", module: M, title: "Sim: the phone took the desk offline", kind: "sim",
+    cmds: ["show port-security interface", "switchport port-security maximum", "shutdown", "no shutdown"],
+    devices: [S("SW1", 50, 25, cfg("interface fa0/1", "switchport mode access", "switchport port-security")), PC("PC1", 50, 55)],
+    links: [["SW1", "fa0/1", "PC1", "fa0"]],
+    errdisabled: { SW1: ["fa0/1"] },
+    intro: "An IP phone was put between Fa0/1 and the user's PC. Since then the port is down. The policy allows a phone and a PC on each desk port, and a violation must only drop and log, not shut the port.",
+    tasks: [
+      { text: "Find out why the port is down.", check: (t) => need(t.ran("SW1", /^show (port-security|interfaces status)/), "Run show port-security interface fa0/1 or show interfaces status.") },
+      { text: "Allow two MAC addresses on Fa0/1.", check: (t) => need(t.f("SW1", "fa0/1").ps.max === 2, "Expected switchport port-security maximum 2.") },
+      { text: "Make a future violation drop and log instead of shutting the port.", check: (t) => need(t.f("SW1", "fa0/1").ps.violation === "restrict", "Expected switchport port-security violation restrict.") },
+      { text: "Bring the port back up.", check: (t) => need(!t.f("SW1", "fa0/1").errdisabled && t.enabled("SW1", "fa0/1"), "An err-disabled port needs shutdown and then no shutdown.") },
+    ],
+    solution: { SW1: ["enable", "show port-security interface fa0/1", "configure terminal", "interface fa0/1", "switchport port-security maximum 2", "switchport port-security violation restrict", "shutdown", "no shutdown"] },
+    teach: "The default port security (maximum 1, violation shutdown) err-disables a port the moment a second device appears, which is exactly what a phone with a PC behind it does.",
   }),
 ];
