@@ -160,6 +160,13 @@ main { padding: 16px; min-width: 0; }
   .progress { display: none; }
   main { padding: 12px; }
   .screen { height: 320px; font-size: 13px; }
+  .top { gap: 10px; padding: 0 10px; }
+}
+/* a phone: the brand shrinks to its mark so the three views fit */
+@media (max-width: 480px) {
+  .brand b { display: none; }
+  .views { gap: 0; }
+  .views a { padding: 6px 7px; font-size: 15px; }
 }
 
 /* a task that asks for an answer */

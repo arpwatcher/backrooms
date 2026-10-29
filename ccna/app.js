@@ -384,6 +384,7 @@ function renderHome() {
   current = null;
   $("#main").innerHTML = `<section class="welcome"><h1>CCNA CLI Labs</h1>
   <p>Mini labs for the CCNA 200-301 commands. You type IOS commands into a router or switch console (modes, abbreviations, <code>?</code>, Tab), and the check looks at whether the resulting <b>configuration</b> is correct, not whether you typed the same words.</p>
+  <p>In the Host OS chapter the PCs have their own Windows, Linux or macOS terminal, for checking a client's IP settings the way the exam asks.</p>
   <p>Labs marked <span class="tag sim">sim</span> are short scenarios with 3 to 6 tasks, like the exam simulations. The others are one lab per command.</p>
   <div class="grid">${MODULES.map((m) => {
     const labs = byModule(m.id);
