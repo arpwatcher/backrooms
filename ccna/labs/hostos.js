@@ -1,0 +1,255 @@
+import { lab, R, S, SRV, HOST, cfg, EN, need, is } from "./kit.js";
+
+// verifying a client's IP settings on Windows, Linux and macOS (200-301 1.10)
+const M = "hostos";
+const records = { "www.mycompany.lab": "10.10.20.80", "dns.mycompany.lab": "10.10.20.10", "intranet.mycompany.lab": "10.10.20.81" };
+const extern = ["10.10.20.80", "10.10.20.81"];
+const R1MAC = "00d0.97a1.2b01";
+const R1 = (extra = []) => R("R1", 72, 18, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.10.20.1 255.255.255.0", "no shutdown", ...extra), { mac: R1MAC });
+const DNS = SRV("DNS", 72, 50, "10.10.20.10/24", "10.10.20.1");
+// one PC behind a switch, its gateway R1, and the DNS server behind R1
+const site = (pc, extra = []) => ({
+  devices: [pc, S("SW1", 40, 18), R1(extra), DNS],
+  links: [["SW1", "fa0/1", pc.name, "fa0"], ["SW1", "g0/1", "R1", "g0/0"], ["R1", "g0/1", "DNS", "fa0"]],
+  records, extern,
+});
+const pc = (os, more = {}) => HOST("PC1", 12, 46, os, { ip: "10.10.10.21/24", gateway: "10.10.10.1", dns: ["10.10.20.10"], domain: "mycompany.lab", mac: "0050.7966.6801", ...more });
+const ran = (t, re) => t.ran("PC1", re);
+
+export default [
+  lab({
+    id: "win-ipconfig", module: M, title: "Windows: ipconfig",
+    cmds: ["ipconfig"],
+    ...site(pc("windows")),
+    intro: "PC1 runs Windows. Find its IP settings from the command prompt.",
+    tasks: [
+      { text: "Run the command that shows the IPv4 address, mask and default gateway.", check: (t) => need(ran(t, /^ipconfig$/), "Run ipconfig.") },
+      { text: "What is PC1's IPv4 address?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.21"), t.reply ? "Not quite. Read the IPv4 Address line." : "Type the address shown by ipconfig.") },
+      { text: "What is PC1's default gateway?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "Read the Default Gateway line.") },
+    ],
+    solution: { PC1: ["ipconfig"] },
+    answers: { 1: "10.10.10.21", 2: "10.10.10.1" },
+    teach: "ipconfig shows the basics for each adapter: IPv4 address, subnet mask, default gateway and the link-local IPv6 address. It does not show the MAC or the DNS servers; ipconfig /all does.",
+  }),
+  lab({
+    id: "win-ipconfig-all", module: M, title: "Windows: ipconfig /all",
+    cmds: ["ipconfig /all"],
+    ...site(pc("windows", { dhcp: true, dhcpServer: "10.10.10.1" }), ["ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.10.20.10"]),
+    intro: "The help desk needs PC1's MAC address and DNS server.",
+    tasks: [
+      { text: "Run the command that shows every detail of the adapter.", check: (t) => need(ran(t, /^ipconfig \/all$/), "Run ipconfig /all.") },
+      { text: "What is PC1's MAC (physical) address?", ask: "xx-xx-xx-xx-xx-xx", check: (t) => need(is.mac(t.reply, "0050.7966.6801"), "Read the Physical Address line.") },
+      { text: "Which DNS server does PC1 use?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.20.10"), "Read the DNS Servers line.") },
+      { text: "Did PC1 get its address from DHCP?", choices: ["Yes", "No"], check: (t) => need(t.reply === "Yes", "Look at DHCP Enabled and DHCP Server.") },
+    ],
+    solution: { PC1: ["ipconfig /all"] },
+    answers: { 1: "00-50-79-66-68-01", 2: "10.10.20.10", 3: "Yes" },
+    teach: "ipconfig /all adds the host name, the MAC (Physical Address), DHCP Enabled, the DHCP server, the lease times and the DNS servers.",
+  }),
+  lab({
+    id: "win-release-renew", module: M, title: "Windows: ipconfig /release and /renew",
+    cmds: ["ipconfig /release", "ipconfig /renew"],
+    ...site(pc("windows", { dhcp: true, dhcpServer: "10.10.10.1" }), ["ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.10.20.10"]),
+    intro: "The DHCP scope changed, and PC1 must get a fresh lease without a reboot.",
+    tasks: [
+      { text: "Give up PC1's current lease.", check: (t) => need(ran(t, /^ipconfig \/release$/), "Run ipconfig /release.") },
+      { text: "Ask DHCP for a new lease, and end with a valid address.", check: (t) => need(ran(t, /^ipconfig \/renew$/) && t.dev("PC1").host.leased, "Run ipconfig /renew after the release.") },
+      { text: "Which address is the DHCP server?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "ipconfig /all shows the DHCP Server.") },
+    ],
+    solution: { PC1: ["ipconfig /release", "ipconfig /renew", "ipconfig /all"] },
+    answers: { 2: "10.10.10.1" },
+    teach: "/release sends a DHCP Release and drops the address; /renew runs DORA again (Discover, Offer, Request, Ack). With a lease still valid, a renew only sends a Request.",
+  }),
+  lab({
+    id: "win-apipa", module: M, title: "Windows: a 169.254 address (APIPA)", kind: "sim",
+    cmds: ["ipconfig", "ipconfig /renew", "ip dhcp pool"],
+    ...site(pc("windows", { ip: undefined, gateway: undefined, dns: [], dhcp: true })),
+    intro: "Users on PC1's LAN say they have no network. PC1 is a DHCP client.",
+    tasks: [
+      { text: "Check PC1's address.", check: (t) => need(ran(t, /^ipconfig( \/all)?$/), "Start with ipconfig on PC1.") },
+      { text: "What does PC1's address tell you?", choices: ["No DHCP server answered", "The DNS server is down", "The default gateway is wrong", "The cable is unplugged"], check: (t) => need(t.reply === "No DHCP server answered", "169.254.x.x (APIPA) is what Windows picks when no DHCP server answers.") },
+      { text: "On R1, create pool LAN for 10.10.10.0/24 with gateway 10.10.10.1 and DNS 10.10.20.10.", check: (t) => { const p = t.dev("R1").dhcp.pools.LAN; return need(p?.network === "10.10.10.0" && p.router.includes("10.10.10.1") && p.dns.includes("10.10.20.10"), "R1 needs ip dhcp pool LAN with network, default-router and dns-server."); } },
+      { text: "Get PC1 a real lease.", check: (t) => need(t.dev("PC1").host.leased, "Run ipconfig /renew on PC1 once the pool exists.") },
+    ],
+    solution: { PC1: ["ipconfig"], R1: [...EN, "ip dhcp excluded-address 10.10.10.1 10.10.10.10", "ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.10.20.10"], "PC1#2": ["ipconfig /renew"] },
+    answers: { 1: "No DHCP server answered" },
+    teach: "APIPA (169.254.0.0/16) lets hosts on one link talk to each other, but there is no gateway, so nothing beyond the LAN works. Check that the DHCP server is up, has a pool for the subnet, and that a relay (ip helper-address) exists when the server is on another subnet.",
+  }),
+  lab({
+    id: "win-arp", module: M, title: "Windows: arp -a",
+    cmds: ["ping", "arp -a", "netsh interface ip delete arpcache"],
+    ...site(pc("windows")),
+    intro: "Find the MAC address of PC1's default gateway.",
+    tasks: [
+      { text: "Ping the default gateway, so PC1 learns its MAC.", check: (t) => need(ran(t, /^ping (-n \d+ )?10\.10\.10\.1$/), "Run ping 10.10.10.1.") },
+      { text: "Display PC1's ARP cache.", check: (t) => need(ran(t, /^arp -a$/), "Run arp -a.") },
+      { text: "What is the gateway's MAC address?", ask: "xx-xx-xx-xx-xx-xx", check: (t) => need(is.mac(t.reply, R1MAC), "Read the dynamic entry for 10.10.10.1 in arp -a.") },
+      { text: "Clear the ARP cache.", check: (t) => need(ran(t, /^(netsh int(erface)? ip delete arpcache|arp -d( \*)?)$/), "Run netsh interface ip delete arpcache (or arp -d *).") },
+    ],
+    solution: { PC1: ["ping 10.10.10.1", "arp -a", "netsh interface ip delete arpcache"] },
+    answers: { 2: "00-d0-97-a1-2b-01" },
+    teach: "A host ARPs only for addresses on its own subnet. For anything else it ARPs for the default gateway, so arp -a shows the router's MAC, not the remote host's.",
+  }),
+  lab({
+    id: "win-dns", module: M, title: "Windows: nslookup and the DNS cache",
+    cmds: ["nslookup", "ipconfig /displaydns", "ipconfig /flushdns"],
+    ...site(pc("windows")),
+    intro: "Users reach the intranet by name. Check how PC1 resolves it.",
+    tasks: [
+      { text: "Resolve www.mycompany.lab with nslookup.", check: (t) => need(ran(t, /^nslookup www\.mycompany\.lab/), "Run nslookup www.mycompany.lab.") },
+      { text: "What address does www.mycompany.lab have?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.20.80"), "Read the Address under Name in the nslookup answer.") },
+      { text: "Ping intranet.mycompany.lab, then show the DNS cache.", check: (t) => need(ran(t, /^ping intranet(\.mycompany\.lab)?$/) && ran(t, /^ipconfig \/displaydns$/), "Run ping intranet.mycompany.lab and then ipconfig /displaydns.") },
+      { text: "Empty the DNS cache.", check: (t) => need(ran(t, /^ipconfig \/flushdns$/), "Run ipconfig /flushdns.") },
+    ],
+    solution: { PC1: ["nslookup www.mycompany.lab", "ping intranet.mycompany.lab", "ipconfig /displaydns", "ipconfig /flushdns"] },
+    answers: { 1: "10.10.20.80" },
+    teach: "If a ping by IP works but a ping by name fails, the problem is DNS. nslookup asks the DNS server directly; the cache (displaydns) holds answers until their TTL expires.",
+  }),
+  lab({
+    id: "win-tracert", module: M, title: "Windows: tracert",
+    cmds: ["tracert"],
+    ...site(pc("windows")),
+    intro: "Find the path from PC1 to the web server.",
+    tasks: [
+      { text: "Trace the route from PC1 to 10.10.20.80.", check: (t) => need(ran(t, /^tracert (-d )?10\.10\.20\.80$/), "Windows uses tracert, not traceroute: tracert 10.10.20.80.") },
+      { text: "What is the first hop?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "The first hop is always the default gateway.") },
+      { text: "How many hops does the trace take in total?", ask: "number", check: (t) => need(is.num(t.reply, 2), "Count the numbered lines in the tracert output.") },
+    ],
+    solution: { PC1: ["tracert 10.10.20.80"] },
+    answers: { 1: "10.10.10.1", 2: "2" },
+    teach: "Windows tracert sends ICMP echoes; Linux and macOS traceroute send UDP probes by default. Cisco IOS uses traceroute.",
+  }),
+  lab({
+    id: "linux-ip-addr", module: M, title: "Linux: ip addr",
+    cmds: ["ip addr", "ip link"],
+    ...site(pc("linux", { dhcp: true, dhcpServer: "10.10.10.1" }), ["ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.10.20.10"]),
+    intro: "PC1 runs Ubuntu. Find its addressing.",
+    tasks: [
+      { text: "Show PC1's IP addresses.", check: (t) => need(ran(t, /^ip a(ddr|ddress)?( show)?$/), "Run ip addr (or ip a).") },
+      { text: "What is the IPv4 address with its prefix length?", ask: "a.b.c.d/nn", check: (t) => need(t.reply.replace(/\s/g, "") === "10.10.10.21/24", "Read the inet line of eth0.") },
+      { text: "Was the address assigned by DHCP?", choices: ["Yes", "No"], check: (t) => need(t.reply === "Yes", "dynamic next to the address means it came from DHCP.") },
+      { text: "Show only the interfaces and their MAC addresses.", check: (t) => need(ran(t, /^ip l(ink)?( show)?$/), "Run ip link.") },
+    ],
+    solution: { PC1: ["ip addr", "ip link"] },
+    answers: { 1: "10.10.10.21/24", 2: "Yes" },
+    teach: "ip addr (ip a) replaces the older ifconfig. The MAC is on the link/ether line, the address on the inet line, and dynamic marks a DHCP lease.",
+  }),
+  lab({
+    id: "linux-ip-route", module: M, title: "Linux: ip route",
+    cmds: ["ip route"],
+    ...site(pc("linux")),
+    intro: "Find PC1's default gateway on Linux.",
+    tasks: [
+      { text: "Show PC1's routing table.", check: (t) => need(ran(t, /^ip r(oute)?( show)?$/), "Run ip route.") },
+      { text: "What is the default gateway?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "Read the default via line.") },
+    ],
+    solution: { PC1: ["ip route"] },
+    answers: { 1: "10.10.10.1" },
+    teach: "On Linux the default gateway is the default via line of ip route. The other line is the connected subnet (proto kernel scope link).",
+  }),
+  lab({
+    id: "linux-dns", module: M, title: "Linux: DNS settings and dig",
+    cmds: ["resolvectl status", "cat /etc/resolv.conf", "dig"],
+    ...site(pc("linux")),
+    intro: "Check which DNS server PC1 uses and resolve the web server's name.",
+    tasks: [
+      { text: "Show PC1's DNS settings.", check: (t) => need(ran(t, /^(resolvectl( status)?|cat \/etc\/resolv\.conf)$/), "Run resolvectl status or cat /etc/resolv.conf.") },
+      { text: "Which DNS server does PC1 use?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.20.10"), "Read the DNS Servers (or nameserver) line.") },
+      { text: "Resolve www.mycompany.lab with dig.", check: (t) => need(ran(t, /^dig www\.mycompany\.lab/), "Run dig www.mycompany.lab.") },
+      { text: "What address did dig return?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.20.80"), "Read the ANSWER SECTION.") },
+    ],
+    solution: { PC1: ["resolvectl status", "dig www.mycompany.lab"] },
+    answers: { 1: "10.10.20.10", 3: "10.10.20.80" },
+    teach: "dig gives the full DNS answer (status, flags, TTL, the server that answered). nslookup works on Linux and macOS too.",
+  }),
+  lab({
+    id: "linux-arp", module: M, title: "Linux: the ARP table",
+    cmds: ["ping -c", "ip neigh", "arp -n"],
+    ...site(pc("linux")),
+    intro: "Find the MAC address of the default gateway from Linux.",
+    tasks: [
+      { text: "Send 4 pings to the gateway.", check: (t) => need(ran(t, /^ping -c ?4 10\.10\.10\.1$/), "On Linux ping runs until Ctrl+C: use ping -c 4 10.10.10.1.") },
+      { text: "Show the ARP (neighbor) table.", check: (t) => need(ran(t, /^(ip n(eigh|eighbor|eighbour)?( show)?|arp -n|arp -a)$/), "Run ip neigh (or arp -n).") },
+      { text: "What is the gateway's MAC address?", ask: "xx:xx:xx:xx:xx:xx", check: (t) => need(is.mac(t.reply, R1MAC), "Read the lladdr of 10.10.10.1.") },
+    ],
+    solution: { PC1: ["ping -c 4 10.10.10.1", "ip neigh"] },
+    answers: { 2: "00:d0:97:a1:2b:01" },
+    teach: "ip neigh is the modern form of arp -n. REACHABLE means the entry was confirmed recently; STALE means it should be checked again before use.",
+  }),
+  lab({
+    id: "linux-ifconfig", module: M, title: "Linux: ifconfig and traceroute",
+    cmds: ["ifconfig", "traceroute"],
+    ...site(pc("linux")),
+    intro: "An older Linux server still has the net-tools commands.",
+    tasks: [
+      { text: "Show the interfaces with ifconfig.", check: (t) => need(ran(t, /^ifconfig( eth0)?$/), "Run ifconfig.") },
+      { text: "What is eth0's subnet mask?", ask: "a.b.c.d", check: (t) => need(is.prefix(t.reply, 24), "Read netmask on the inet line.") },
+      { text: "Trace the path to 10.10.20.80.", check: (t) => need(ran(t, /^traceroute 10\.10\.20\.80$/), "Run traceroute 10.10.20.80.") },
+    ],
+    solution: { PC1: ["ifconfig", "traceroute 10.10.20.80"] },
+    answers: { 1: "255.255.255.0" },
+    teach: "ifconfig is from the old net-tools package and is not installed by default on many distributions; ip addr and ip route are the replacements.",
+  }),
+  lab({
+    id: "mac-ifconfig", module: M, title: "macOS: ifconfig en0",
+    cmds: ["ifconfig en0"],
+    ...site(pc("mac")),
+    intro: "PC1 is a Mac. Find its address, mask and MAC.",
+    tasks: [
+      { text: "Show the settings of the wired interface en0.", check: (t) => need(ran(t, /^ifconfig( en0)?$/), "Run ifconfig en0.") },
+      { text: "What prefix length does the mask 0xffffff00 mean?", ask: "/nn", check: (t) => need(is.prefix(t.reply, 24), "0xffffff00 is ff.ff.ff.00 = 255.255.255.0.") },
+      { text: "What is the MAC address?", ask: "xx:xx:xx:xx:xx:xx", check: (t) => need(is.mac(t.reply, "0050.7966.6801"), "Read the ether line.") },
+    ],
+    solution: { PC1: ["ifconfig en0"] },
+    answers: { 1: "/24", 2: "00:50:79:66:68:01" },
+    teach: "macOS ifconfig prints the mask in hex: 0xffffff00 = 255.255.255.0 = /24, 0xfffffff0 = /28. The MAC is on the ether line.",
+  }),
+  lab({
+    id: "mac-netstat", module: M, title: "macOS: netstat -rn",
+    cmds: ["netstat -rn"],
+    ...site(pc("mac")),
+    intro: "Find the Mac's default gateway.",
+    tasks: [
+      { text: "Show the routing table without name lookups.", check: (t) => need(ran(t, /^netstat -(rn|nr)( -f inet)?$/), "Run netstat -rn.") },
+      { text: "What is the default gateway?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.10.1"), "Read the default line.") },
+    ],
+    solution: { PC1: ["netstat -rn"] },
+    answers: { 1: "10.10.10.1" },
+    teach: "netstat -rn: r for the routing table, n for numbers instead of names. The default line is the gateway, with flags UG (up, gateway).",
+  }),
+  lab({
+    id: "mac-dns", module: M, title: "macOS: scutil --dns",
+    cmds: ["scutil --dns", "nslookup"],
+    ...site(pc("mac")),
+    intro: "Check the Mac's DNS settings and resolve the intranet.",
+    tasks: [
+      { text: "Show the DNS configuration.", check: (t) => need(ran(t, /^scutil --dns$/), "Run scutil --dns.") },
+      { text: "Which DNS server does the Mac use?", ask: "a.b.c.d", check: (t) => need(is.ip(t.reply, "10.10.20.10"), "Read nameserver[0].") },
+      { text: "Resolve intranet.mycompany.lab.", check: (t) => need(ran(t, /^(nslookup|dig) intranet\.mycompany\.lab$/), "Run nslookup intranet.mycompany.lab.") },
+    ],
+    solution: { PC1: ["scutil --dns", "nslookup intranet.mycompany.lab"] },
+    answers: { 1: "10.10.20.10" },
+    teach: "On macOS, /etc/resolv.conf exists but is not what the system uses; scutil --dns shows the real resolver configuration.",
+  }),
+  lab({
+    id: "sim-three-hosts", module: M, title: "Sim: one wrong client on three operating systems", kind: "sim",
+    cmds: ["ipconfig /all", "ip route", "netstat -rn", "ping"],
+    devices: [
+      HOST("WIN", 10, 52, "windows", { ip: "10.10.10.21/24", gateway: "10.10.10.1", dns: ["10.10.20.10"], domain: "mycompany.lab", mac: "0050.7966.6801" }),
+      HOST("LNX", 40, 56, "linux", { ip: "10.10.10.22/24", gateway: "10.10.10.254", dns: ["10.10.20.10"], domain: "mycompany.lab", mac: "0050.7966.6802" }),
+      HOST("MAC", 70, 52, "mac", { ip: "10.10.10.23/24", gateway: "10.10.10.1", dns: ["10.10.20.10"], domain: "mycompany.lab", mac: "0050.7966.6803" }),
+      S("SW1", 40, 30), R("R1", 40, 6, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.10.20.1 255.255.255.0", "no shutdown")),
+    ],
+    links: [["SW1", "fa0/1", "WIN", "fa0"], ["SW1", "fa0/2", "LNX", "fa0"], ["SW1", "fa0/3", "MAC", "fa0"], ["SW1", "g0/1", "R1", "g0/0"]],
+    records, extern,
+    intro: "All three users can reach each other, but one of them cannot reach www.mycompany.lab (10.10.20.80). Find out which, and why.",
+    tasks: [
+      { text: "Check the default gateway of all three PCs, using each OS's own command.", check: (t) => need(t.ran("WIN", /^ipconfig( \/all)?$/) && t.ran("LNX", /^ip r(oute)?( show)?$/) && t.ran("MAC", /^netstat -(rn|nr)/), "Use ipconfig on WIN, ip route on LNX and netstat -rn on MAC.") },
+      { text: "Which PC cannot reach the web server?", choices: ["WIN", "LNX", "MAC"], check: (t) => need(t.reply === "LNX", "Ping 10.10.10.1 and 10.10.20.80 from each PC.") },
+      { text: "What is wrong with it?", choices: ["Wrong default gateway", "Wrong subnet mask", "Wrong DNS server", "No IP address"], check: (t) => need(t.reply === "Wrong default gateway", "Compare its gateway with R1's address on the LAN (10.10.10.1).") },
+    ],
+    solution: { WIN: ["ipconfig"], LNX: ["ip route", "ping -c 4 10.10.20.80"], MAC: ["netstat -rn"] },
+    answers: { 1: "LNX", 2: "Wrong default gateway" },
+    teach: "A host with the wrong gateway still reaches its own subnet, because that traffic never uses the gateway. Only traffic to other networks fails.",
+  }),
+];

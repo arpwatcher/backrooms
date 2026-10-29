@@ -70,3 +70,29 @@ test("interface names and ranges", () => {
   assert.equal(normalize("Gi0/0.10"), "GigabitEthernet0/0.10");
   assert.deepEqual(expandRange("fa0/1 - 3, g0/1"), ["FastEthernet0/1", "FastEthernet0/2", "FastEthernet0/3", "GigabitEthernet0/1"]);
 });
+
+test("a PC's terminal answers like its operating system", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const lab = (id) => buildLab(LABS.find((l) => l.id === id));
+  const win = lab("win-ipconfig").devices.PC1;
+  assert.equal(prompt(win), "C:\\Users\\student>");
+  assert.match(exec(win, "IPCONFIG"), /IPv4 Address\. \. \. \. \. \. \. \. \. \. \. : 10\.10\.10\.21/);
+  assert.match(exec(win, "traceroute 10.10.10.1"), /'traceroute' is not recognized as an internal or external command/);
+  const lnx = lab("linux-ip-route").devices.PC1;
+  assert.match(exec(lnx, "ip r"), /^default via 10\.10\.10\.1 dev eth0/);
+  assert.equal(exec(lnx, "ipconfig"), "ipconfig: command not found");
+  const mac = lab("mac-ifconfig").devices.PC1;
+  assert.match(exec(mac, "ifconfig en0"), /netmask 0xffffff00/);
+});
+
+test("a DHCP client gets APIPA with no server, and a lease once a pool exists", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "win-apipa"));
+  const pc = l.devices.PC1, r1 = l.devices.R1;
+  assert.match(exec(pc, "ipconfig"), /Autoconfiguration IPv4 Address\. \. : 169\.254\./);
+  assert.match(exec(pc, "ipconfig /renew"), /unable to contact your DHCP server/);
+  for (const line of ["enable", "configure terminal", "ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1"]) exec(r1, line);
+  assert.match(exec(pc, "ipconfig /renew"), /IPv4 Address[ .]+: 10\.10\.10\.\d+\n[^\n]*\n\s+Default Gateway[ .]+: 10\.10\.10\.1/);
+});

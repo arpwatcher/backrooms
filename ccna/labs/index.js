@@ -15,6 +15,7 @@ import ipv6 from "./ipv6.js";
 import management from "./management.js";
 import legacy from "./legacy.js";
 import troubleshooting from "./troubleshooting.js";
+import hostos from "./hostos.js";
 
 export const MODULES = [
   { id: "basics", title: "IOS basics", blurb: "modes, hostname, passwords, interfaces, saving" },
@@ -32,7 +33,8 @@ export const MODULES = [
   { id: "security", title: "Security", blurb: "SSH, local users, port security, DHCP snooping, DAI" },
   { id: "ipv6", title: "IPv6", blurb: "addressing, EUI-64, link-local, SLAAC, static routes" },
   { id: "management", title: "Device management", blurb: "IOS image, boot system, config-register, TFTP" },
+  { id: "hostos", title: "Host OS commands", blurb: "Windows, Linux and macOS: ipconfig, ip addr, ifconfig, ARP, DNS" },
   { id: "legacy", title: "Legacy (not on 200-301)", blurb: "RIP, EIGRP, VTP" },
 ];
 
-export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...troubleshooting, ...hsrp, ...services, ...nat, ...acl, ...security, ...ipv6, ...management, ...legacy];
+export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...troubleshooting, ...hsrp, ...services, ...nat, ...acl, ...security, ...ipv6, ...management, ...hostos, ...legacy];
