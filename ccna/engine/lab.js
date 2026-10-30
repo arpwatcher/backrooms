@@ -8,7 +8,7 @@ import { normalize } from "./iface.js";
 import { maskBits, network, parseIp } from "./ip.js";
 import { status, operMode, bundled, ospfNeighbors, stpRoot, hsrpRanking, ospfOf, passive, routerId, carries, far } from "./net.js";
 import { routeTable, cost } from "./show.js";
-import { makeHost, canReach } from "./host.js";
+import { makeHost, canReach, vtySession } from "./host.js";
 
 export function buildLab(def) {
   const devices = {};
@@ -96,6 +96,9 @@ export function tools(lab) {
     acl: (name, id) => D(name).acls[String(id)] ?? null,
     // a PC's ping to ip would get there and back
     reach: (name, ip) => canReach(D(name), ip),
+    // a telnet or ssh session from a device: "ok", "refused", "timeout",
+    // "nopass" or "noauth"
+    session: (name, ip, proto = "ssh") => vtySession(D(name), ip, proto).result,
     network, maskBits, parseIp,
   };
   return t;

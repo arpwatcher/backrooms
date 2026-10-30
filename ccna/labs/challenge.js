@@ -402,4 +402,36 @@ export default [
     answers: { 7: "10.30.30.11", 8: "FLOOR-IN dropped them: they come from 0.0.0.0, not from 10.30.30.0/24" },
     teach: "DHCP through a relay has more pieces than it looks: the VLAN must reach the router, the subinterface needs ip helper-address, an inbound ACL must let the Discover from 0.0.0.0 in, the server needs a pool for the giaddr's subnet and a route back to that giaddr, and the pool's default-router must be the real gateway or the client gets an address it cannot leave the subnet with.",
   }),
+  // --- only the admin PC gets in ----------------------------------------------------------------------
+  hard({
+    id: "ch-mgmt-lockdown", title: "Challenge: only the admin PC gets in",
+    cmds: ["crypto key generate rsa", "ip ssh version 2", "login local", "transport input ssh", "access-class", "ssh -l"],
+    devices: [
+      R("R1", 34, 18, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 192.168.10.1 255.255.255.0", "interface g0/0.99", "encapsulation dot1q 99", "ip address 192.168.99.1 255.255.255.0", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown")),
+      R("R2", 80, 18, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "exit", "ip route 192.168.0.0 255.255.0.0 10.0.12.1")),
+      S("SW1", 34, 48, cfg("vlan 10", "name USERS", "vlan 99", "name MGMT", "exit", "interface g0/1", "switchport mode trunk", "switchport trunk allowed vlan 10,99", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/24", "switchport mode access", "switchport access vlan 99")),
+      HOST("USER", 8, 80, "windows", { ip: "192.168.10.20/24", gateway: "192.168.10.1", mac: "0050.7966.6911" }),
+      HOST("ADMIN", 62, 80, "linux", { ip: "192.168.99.50/24", gateway: "192.168.99.1", mac: "0050.7966.6912", user: "admin" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["R1", "g0/1", "R2", "g0/1"], ["SW1", "fa0/1", "USER", "fa0"], ["SW1", "fa0/24", "ADMIN", "fa0"]],
+    intro: "R1, R2 and SW1 are reachable but nobody can manage them remotely. Set up SSH on all three so that the admin PC (192.168.99.50) and only the admin PC can log in, with the local user admin. Every device uses the domain corp.lab and 2048-bit keys.",
+    tasks: [
+      { text: "SW1 is managed at 192.168.99.2/24 in VLAN 99, with gateway 192.168.99.1.", check: (t) => need(t.ip("SW1", "vlan99") === "192.168.99.2/24" && t.enabled("SW1", "vlan99") && t.dev("SW1").defaultGateway === "192.168.99.1", "interface vlan 99, the address, no shutdown, and ip default-gateway 192.168.99.1.") },
+      { text: "On R1, R2 and SW1: domain corp.lab, 2048-bit RSA keys, SSH version 2, and the local user admin with a secret.", check: (t) => need(["R1", "R2", "SW1"].every((d) => t.dev(d).domainName === "corp.lab" && t.dev(d).rsa === 2048 && t.dev(d).sshVersion === 2 && t.dev(d).users.admin?.secret), "Each device needs ip domain-name corp.lab, crypto key generate rsa modulus 2048, ip ssh version 2 and username admin secret ...") },
+      { text: "Their vty lines take SSH only, checked against the local users.", check: (t) => need(["R1", "R2", "SW1"].every((d) => t.dev(d).lines.vty.loginLocal && t.dev(d).lines.vty.transport.join() === "ssh"), "line vty 0 15 (0 4 is not enough on a switch with 16 lines), login local, transport input ssh.") },
+      { text: "Only 192.168.99.50 may open a session: standard ACL 10 as access-class on all three.", check: (t) => need(["R1", "R2", "SW1"].every((d) => t.dev(d).lines.vty.accessClass === "10" && aclAllows(t.dev(d), "10", { src: "192.168.99.50" }) && !aclAllows(t.dev(d), "10", { src: "192.168.99.51" }) && !aclAllows(t.dev(d), "10", { src: "192.168.10.20" })), "access-list 10 permit host 192.168.99.50, then access-class 10 in under the vty lines.") },
+      { text: "From ADMIN, ssh admin@ to R1 (192.168.99.1), R2 (10.0.12.2) and SW1 (192.168.99.2) all reach a password prompt.", check: (t) => need(["192.168.99.1", "10.0.12.2", "192.168.99.2"].every((ip) => t.session("ADMIN", ip) === "ok") && t.ran("ADMIN", /^ssh /), "Try ssh admin@192.168.99.1 and the others on ADMIN; what fails tells you which device is missing a piece.") },
+      { text: "What does ssh admin@10.0.12.2 print on USER?", choices: ["ssh: connect to host 10.0.12.2 port 22: Connection refused", "ssh: connect to host 10.0.12.2 port 22: Connection timed out", "admin@10.0.12.2's password:"], check: (t) => need(t.reply === "ssh: connect to host 10.0.12.2 port 22: Connection refused", "USER reaches R2 (ping it), so the connection is not timing out; R2's access-class turns it away.") },
+      { text: "On R1, ssh -l admin 192.168.99.2: what happens?", choices: ["Password prompt", "% Connection refused by remote host", "% Connection timed out; remote host not responding"], check: (t) => need(t.reply === "% Connection refused by remote host", "R1 connects from 192.168.99.1, its interface on that subnet, and ACL 10 permits only .50.") },
+      { text: "Which source address does R2 see when R1 opens ssh -l admin 10.0.12.2?", ask: "Address", check: (t) => need(is.ip(t.reply, "10.0.12.1"), "A router's own session is sent from its exit interface: the one towards R2.") },
+    ],
+    solution: Object.fromEntries([
+      ...["R1", "R2", "SW1"].map((d) => [d, [...EN, ...(d === "SW1" ? ["interface vlan 99", "ip address 192.168.99.2 255.255.255.0", "no shutdown", "exit", "ip default-gateway 192.168.99.1"] : []), "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username admin secret Adm1nPass", "access-list 10 permit host 192.168.99.50", "line vty 0 15", "login local", "transport input ssh", "access-class 10 in", "end"]]),
+      ["ADMIN", ["ssh admin@192.168.99.1", "ssh admin@10.0.12.2", "ssh admin@192.168.99.2"]],
+      ["USER", ["ssh admin@10.0.12.2"]],
+    ]),
+    failingPings: true,
+    answers: { 5: "ssh: connect to host 10.0.12.2 port 22: Connection refused", 6: "% Connection refused by remote host", 7: "10.0.12.1" },
+    teach: "SSH needs a hostname, a domain name, RSA keys (768 bits or more for version 2), a local user and login local on the vty lines; transport input ssh keeps Telnet out. access-class filters who may open a session, by source address, which for a router's own session is its exit interface. A refused connection means the device answered and said no; a timeout means nothing answered.",
+  }),
 ];
