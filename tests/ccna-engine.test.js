@@ -400,3 +400,21 @@ test("a lab's extern hosts answer through the routers", async () => {
   const l = buildLab(LABS.find((x) => x.id === "sim-dns-fault"));
   assert.match(exec(l.devices.PC1, "ping -c 1 10.10.20.80"), /1 received, 0% packet loss/);
 });
+
+test("NTP syncs only to a server that answers and has time itself", async () => {
+  const { buildLab, runSolution } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ntp-master"));
+  const { R1, R2 } = l.devices;
+  // R2 points at R1 before R1 has any time: nothing to sync to
+  for (const c of ["enable", "configure terminal", "ntp server 10.0.0.1", "end"]) exec(R2, c);
+  assert.match(exec(R2, "show ntp status"), /Clock is unsynchronized, stratum 16/);
+  assert.match(exec(R2, "show ntp associations"), / ~10\.0\.0\.1\s+\.INIT\.\s+16/);
+  runSolution(l);
+  exec(R2, "end");
+  assert.match(exec(R2, "show ntp status"), /Clock is synchronized, stratum 4, reference is 10\.0\.0\.1/);
+  // a server nobody owns never answers
+  for (const c of ["configure terminal", "no ntp server 10.0.0.1", "ntp server 10.0.0.99", "end"]) exec(R2, c);
+  assert.match(exec(R2, "show ntp status"), /unsynchronized/);
+  void R1;
+});

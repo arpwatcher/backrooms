@@ -5,6 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
+import { ntpSync } from "./host.js";
 import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -561,10 +562,21 @@ function flash(dev) {
 }
 
 function ntpStatus(dev) {
-  if (dev.ntp.master) return `Clock is synchronized, stratum ${dev.ntp.master}, reference is 127.127.1.1\nnominal freq is 250.0000 Hz, actual freq is 249.9990 Hz, precision is 2**19`;
-  if (!dev.ntp.servers.length) return "%NTP is not enabled.";
-  const ok = dev.lab?.ntpReachable ?? true;
-  return ok ? `Clock is synchronized, stratum 2, reference is ${dev.ntp.servers[0].ip}\nnominal freq is 250.0000 Hz, actual freq is 249.9990 Hz, precision is 2**24` : "Clock is unsynchronized, stratum 16, no reference clock";
+  if (!dev.ntp.master && !dev.ntp.servers.length) return "%NTP is not enabled.";
+  const s = ntpSync(dev);
+  if (!s) return "Clock is unsynchronized, stratum 16, no reference clock\nnominal freq is 250.0000 Hz, actual freq is 250.0000 Hz, precision is 2**24\nreference time is 00000000.00000000 (00:00:00.000 UTC Mon Jan 1 1900)";
+  return `Clock is synchronized, stratum ${s.stratum}, reference is ${s.ref}\nnominal freq is 250.0000 Hz, actual freq is 249.9990 Hz, precision is 2**${dev.ntp.master ? 19 : 24}`;
+}
+// each configured server: * the one in use, its stratum and reference;
+// one that never answered stays at .INIT. and stratum 16
+function ntpAssociations(dev) {
+  const s = ntpSync(dev);
+  const rows = dev.ntp.servers.map((sv) => {
+    const used = s?.server === sv.ip;
+    return used ? `*~${pad(sv.ip, 16)}${pad(s.peerRef, 16)}${pad(s.peer, 5)}    14     64   377  1.204   0.009   0.184` : ` ~${pad(sv.ip, 16)}${pad(".INIT.", 16)}16      -     64     0  0.000   0.000 15937.`;
+  });
+  if (dev.ntp.master) rows.unshift(`*~${pad("127.127.1.1", 16)}${pad(".LOCL.", 16)}${pad(dev.ntp.master - 1, 5)}     6     16   377  0.000   0.000   0.240`);
+  return ["  address         ref clock       st   when   poll reach  delay  offset   disp", ...rows, " * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured"].join("\n");
 }
 
 function logging(dev) {
@@ -670,7 +682,7 @@ export const SHOWS = {
     ["show ipv6 route", (d) => ipv6Route(d)],
     ["show clock [detail]", (d) => `*${d.clock.set ?? "12:13:47.123 UTC Mon Mar 1 1993"}`.replace(/^\*(\d+:\d+(:\d+)?) (\d+) (\w+) (\d+)$/, "*$1.000 UTC $4 $3 $5")],
     ["show ntp status", (d) => ntpStatus(d)],
-    ["show ntp associations", (d) => ["  address         ref clock       st   when   poll reach  delay  offset   disp", ...d.ntp.servers.map((s) => `*~${pad(s.ip, 16)}${pad("127.127.1.1", 16)}1     14     64   377  1.204   0.009   0.184`), " * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured"].join("\n")],
+    ["show ntp associations", (d) => ntpAssociations(d)],
     ["show logging", (d) => logging(d)],
     ["show history", (d) => d.history.slice(-20).map((h) => "  " + h).join("\n")],
     ["show flash: ", (d) => flash(d)],

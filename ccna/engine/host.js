@@ -277,6 +277,7 @@ function exitOf(router, route, ip) {
 }
 // what goes out and what comes back: a ping, or a TCP session to a port
 const ICMP = { go: (src, dst, from) => ({ proto: "icmp", icmp: "echo", src, dst, from }), back: (src, dst, from) => ({ proto: "icmp", icmp: "echo-reply", src, dst, from }) };
+const udp = (port) => ({ go: (src, dst, from) => ({ proto: "udp", src, dst, sport: port, dport: port, from }), back: (src, dst, from) => ({ proto: "udp", src, dst, sport: port, dport: port, from }) });
 const tcp = (port) => ({ go: (src, dst, from) => ({ proto: "tcp", src, dst, sport: 49152, dport: port, from }), back: (src, dst, from) => ({ proto: "tcp", src, dst, sport: port, dport: 49152, ack: true, from }) });
 
 // a route that leaves the drawn network: out an interface, or to a next hop
@@ -902,6 +903,26 @@ function macos(dev, line) {
     default:
       return `zsh: command not found: ${cmd}`;
   }
+}
+
+// --- ntp -------------------------------------------------------------------------------------------
+
+// where a device gets its time: its own ntp master, or the first server it
+// reaches over UDP 123 that has time itself (a router synced in turn, a
+// server, or a host beyond the drawn network); its stratum is one more
+export function ntpSync(dev, depth = 0) {
+  if (dev.ntp.master) return { stratum: dev.ntp.master, ref: "127.127.1.1" };
+  if (!dev.ntp.servers.length || depth > 4) return null;
+  // a device on its own, outside a lab, has nothing to check against
+  if (!dev.lab?.all) return { stratum: 2, ref: dev.ntp.servers[0].ip, server: dev.ntp.servers[0].ip, peer: 1, peerRef: ".GPS." };
+  const servers = [...dev.ntp.servers].sort((a, b) => Number(b.prefer) - Number(a.prefer));
+  for (const sv of servers) {
+    if (!fromRouter(dev, sv.ip, udp(123))?.ok) continue;
+    const t = owner(dev, sv.ip)?.device;
+    const up = !t ? (dev.lab.extern?.includes(sv.ip) ? { stratum: 1, ref: ".GPS." } : null) : t.type === "server" ? { stratum: 1, ref: ".GPS." } : t.ntp ? ntpSync(t, depth + 1) : null;
+    if (up) return { stratum: up.stratum + 1, ref: sv.ip, server: sv.ip, peer: up.stratum, peerRef: up.ref };
+  }
+  return null;
 }
 
 // --- remote sessions -------------------------------------------------------------------------------
