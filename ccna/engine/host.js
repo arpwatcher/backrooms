@@ -199,6 +199,31 @@ function natted(router, ip) {
   if (router.nat.statics.some((s) => s.local === ip && !s.proto)) return true;
   return router.nat.dynamic.some((d) => aclPermits(router.acls[d.acl], ip));
 }
+// a ping that went out through NAT leaves an icmp translation on the router,
+// as show ip nat translations lists it (one per inside host and target)
+function translate(router, local, target) {
+  const nat = router.nat;
+  const st = nat.statics.find((s) => s.local === local && !s.proto);
+  const rule = !st && nat.dynamic.find((d) => aclPermits(router.acls[d.acl], local));
+  nat.live ??= [];
+  if (nat.live.some((t) => t.local === local && t.target === target)) return;
+  let global = st?.global;
+  if (!global && rule?.out) global = router.interfaces[rule.out]?.ip;
+  if (!global && rule?.pool) {
+    const p = nat.pools[rule.pool];
+    const used = nat.live.filter((t) => t.pool === rule.pool && !t.overload).map((t) => t.global);
+    const free = p && range(p.start, p.end).find((a) => rule.overload || !used.includes(a) || nat.live.some((t) => t.global === a && t.local === local));
+    global = free;
+  }
+  if (!global) return;
+  const id = nat.live.filter((t) => t.global === global).length + 1;
+  nat.live.push({ local, target, global, id, pool: rule?.pool ?? null, overload: Boolean(rule?.overload), dynamic: !st });
+}
+const range = (start, end) => {
+  const out = [];
+  for (let n = parseIp(start); n !== null && n <= parseIp(end) && out.length < 256; n++) out.push([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join("."));
+  return out;
+};
 function aclPermits(acl, ip) {
   for (const e of acl?.entries ?? []) {
     const s = e.src;
@@ -218,8 +243,9 @@ function gatewayRouter(dev) {
 // for the labs' checks: does this PC get to ip and back
 export const canReach = (dev, ip) => reaches(dev, ip);
 
-// does a packet from this PC get to ip and back
-function reaches(dev, ip) {
+// does a packet from this PC get to ip and back (a real ping also leaves
+// its NAT translation behind)
+function reaches(dev, ip, ping = false) {
   const f = own(dev);
   if (ip === "127.0.0.1") return true;
   if (!f.ip || !linkUp(dev)) return false;
@@ -237,7 +263,10 @@ function reaches(dev, ip) {
     const seen = new Set();
     if (!r || pathFrom(r, ip, seen) === null) return false;
     // out to the Internet, a private source needs NAT on the way out
-    return !seen.exit || !isPrivate(f.ip) || natted(seen.exit, f.ip);
+    if (!seen.exit || !isPrivate(f.ip)) return true;
+    if (!natted(seen.exit, f.ip)) return false;
+    if (ping) translate(seen.exit, f.ip, ip);
+    return true;
   }
   const r = gatewayRouter(dev);
   if (!r || pathFrom(r, ip) === null) return false;
@@ -408,7 +437,7 @@ function pingWin(dev, target, count) {
   if (r.error) return `Ping request could not find host ${target}. Please check the name and try again.`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return `\nPinging ${r.ip} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
-  const ok = reaches(dev, r.ip);
+  const ok = reaches(dev, r.ip, true);
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
   const lines = Array.from({ length: count }, (_, i) => (ok ? `Reply from ${r.ip}: bytes=32 time${i === 0 ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
   const stats = `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${ok ? count : 0}, Lost = ${ok ? 0 : count} (${ok ? 0 : 100}% loss),`;
@@ -578,7 +607,7 @@ function pingUnix(dev, target, count, mac) {
   if (r.error) return mac ? `ping: cannot resolve ${target}: Unknown host` : `ping: ${target}: ${r.error === "noserver" ? "Temporary failure in name resolution" : "Name or service not known"}`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return mac ? `PING ${r.ip} (${r.ip}): 56 data bytes\nping: sendto: No route to host\n\n--- ${r.ip} ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss` : "ping: connect: Network is unreachable";
-  const ok = reaches(dev, r.ip);
+  const ok = reaches(dev, r.ip, true);
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
   const replies = ok ? Array.from({ length: count }, (_, i) => (mac ? `64 bytes from ${r.ip}: icmp_seq=${i} ttl=${ttl(dev, r.ip)} time=1.${2 + i}04 ms` : `64 bytes from ${r.name ? shown : r.ip}: icmp_seq=${i + 1} ttl=${ttl(dev, r.ip)} time=1.${2 + i}4 ms`)) : mac ? Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}`) : [];
   if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${ok ? count : 0} packets received, ${ok ? "0.0" : "100.0"}% packet loss`, ...(ok ? ["round-trip min/avg/max/stddev = 1.204/1.354/1.504/0.112 ms"] : [])].join("\n");

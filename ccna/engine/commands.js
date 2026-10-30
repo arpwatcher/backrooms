@@ -168,7 +168,7 @@ def("priv", "(undebug all | no debug all)", (c) => {
 });
 def("priv", "clear ip ospf process", (c) => c.ask({ prompt: "Reset ALL OSPF processes? [no]: ", answer: (a) => (/^\s*y/i.test(a) ? "" : "") }));
 def("priv", "clear mac address-table dynamic", () => {});
-def("priv", "clear ip nat translation *", () => {});
+def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
 def("priv", "clear (counters | arp-cache | ip dhcp binding *)", () => {});
 def("priv", "terminal (length <n:num:0-512> | monitor | no monitor)", () => {});
 def(EXEC, "dir [flash:]", (c) => c.say(SHOWS.flash(c.dev)));

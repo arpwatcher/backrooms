@@ -225,6 +225,12 @@ test("a private address gets no answer from the Internet without NAT", async () 
   assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 0/);
   for (const c of ["interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "access-list 1 permit 192.168.10.0 0.0.0.255", "ip nat inside source list 1 interface g0/1 overload"]) exec(r1, c);
   assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 4/);
+  // the ping left its translation behind, and clearing removes it
+  exec(r1, "end");
+  assert.match(exec(r1, "show ip nat translations"), /icmp 203\.0\.113\.\d+:1\s+192\.168\.10\.11:1\s+8\.8\.8\.8:1\s+8\.8\.8\.8:1/);
+  assert.match(exec(r1, "show ip nat statistics"), /Total active translations: 1 \(0 static, 1 dynamic; 1 extended\)/);
+  exec(r1, "clear ip nat translation *");
+  assert.doesNotMatch(exec(r1, "show ip nat translations"), /icmp/);
 });
 
 test("a port-channel of two gig links costs 3 in spanning tree and is port 65", async () => {

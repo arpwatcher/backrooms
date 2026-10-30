@@ -377,10 +377,20 @@ function dhcpPool(dev) {
     .join("\n");
 }
 
+const natCounts = (dev) => {
+  const live = dev.nat.live ?? [];
+  const simple = new Set(live.filter((t) => t.dynamic && !t.overload).map((t) => t.local)).size;
+  return { total: dev.nat.statics.length + live.length + simple, dynamic: live.length + simple, extended: live.length };
+};
 function natTranslations(dev) {
   const rows = [`${pad("Pro", 5)}${pad("Inside global", 22)}${pad("Inside local", 22)}${pad("Outside local", 22)}Outside global`];
   for (const s of dev.nat.statics) rows.push(`${pad(s.proto ?? "---", 5)}${pad(s.global + (s.gport ? ":" + s.gport : ""), 22)}${pad(s.local + (s.lport ? ":" + s.lport : ""), 22)}${pad("---", 22)}---`);
   for (const t of dev.lab?.natTranslations ?? []) rows.push(t);
+  // what pings through the router left behind
+  for (const t of dev.nat.live ?? []) {
+    rows.push(`${pad("icmp", 5)}${pad(`${t.global}:${t.id}`, 22)}${pad(`${t.local}:${t.id}`, 22)}${pad(`${t.target}:${t.id}`, 22)}${t.target}:${t.id}`);
+    if (t.dynamic && !t.overload) rows.push(`${pad("---", 5)}${pad(t.global, 22)}${pad(t.local, 22)}${pad("---", 22)}---`);
+  }
   return rows.join("\n");
 }
 
@@ -582,7 +592,7 @@ export const SHOWS = {
     ["show ip dhcp binding", (d) => ["Bindings from all pools not associated with VRF:", `${pad("IP address", 18)}${pad("Client-ID/", 20)}${pad("Lease expiration", 26)}Type`, `${pad("", 18)}Hardware address/`, ...(d.lab?.bindings ?? []).map((b) => `${pad(b.ip, 18)}${pad(b.mac, 20)}${pad("Mar 02 2026 12:00 AM", 26)}Automatic`)].join("\n")],
     ["show ip dhcp conflict", () => "IP address        Detection method   Detection time          VRF"],
     ["show ip nat translations [verbose]", (d) => natTranslations(d)],
-    ["show ip nat statistics", (d) => `Total active translations: ${d.nat.statics.length} (${d.nat.statics.length} static, 0 dynamic; 0 extended)\nOutside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "outside").map((f) => f.name).join(", ")}\nInside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "inside").map((f) => f.name).join(", ")}\nHits: 0  Misses: 0\nDynamic mappings:\n${d.nat.dynamic.map((m) => `-- Inside Source\n[Id: 1] access-list ${m.acl} ${m.pool ? "pool " + m.pool : "interface " + m.out} refcount 0`).join("\n")}`],
+    ["show ip nat statistics", (d) => `Total active translations: ${natCounts(d).total} (${d.nat.statics.length} static, ${natCounts(d).dynamic} dynamic; ${natCounts(d).extended} extended)\nOutside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "outside").map((f) => f.name).join(", ")}\nInside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "inside").map((f) => f.name).join(", ")}\nHits: 0  Misses: 0\nDynamic mappings:\n${d.nat.dynamic.map((m) => `-- Inside Source\n[Id: 1] access-list ${m.acl} ${m.pool ? "pool " + m.pool : "interface " + m.out} refcount ${(d.nat.live ?? []).filter((t) => t.dynamic && t.pool === m.pool).length}`).join("\n")}`],
     ["show (access-lists | ip access-lists) [(<n:num:1-2699> | <name:word>)]", (d, a, c) => accessLists(d, a.n ?? a.name, c.has("ip"))],
     ["show port-security [interface <name:iface>]", (d, a) => portSecurity(d, a.name)],
     ["show port-security address", (d) => ["          Secure Mac Address Table", "-----------------------------------------------------------------------------", "Vlan    Mac Address       Type                          Ports   Remaining Age", ...Object.values(d.interfaces).flatMap((f) => f.ps.macs.map((m) => `${pad(f.accessVlan, 8)}${pad(m, 18)}${pad(f.ps.sticky ? "SecureSticky" : "SecureConfigured", 30)}${pad(short(f.name), 8)}-`))].join("\n")],
