@@ -116,6 +116,32 @@ export function suspended(dev, f) {
   return Boolean(po && po.switchport && !sameL2(f, po));
 }
 
+// --- acls ------------------------------------------------------------------------------------------------
+
+// does the ACL named on an interface let this packet through? A packet is
+// { proto: "icmp" | "tcp" | "udp", src, dst, icmp?, sport?, dport?, ack? }.
+// The first entry that matches decides, and nothing matching is the
+// implicit deny; an ACL applied but never written permits everything.
+export function aclAllows(dev, name, pkt) {
+  const acl = dev.acls[String(name)];
+  if (!acl) return true;
+  const addr = (a, ip) => a.any || (a.host ? a.host === ip : wildcardMatch(ip, a.net, a.wild));
+  const port = (p, n) => !p || (n !== undefined && (p.op === "eq" ? n === p.port : p.op === "neq" ? n !== p.port : p.op === "lt" ? n < p.port : p.op === "gt" ? n > p.port : n >= p.port && n <= p.to));
+  for (const e of acl.entries) {
+    if (!addr(e.src, pkt.src)) continue;
+    if (acl.type !== "standard") {
+      if (e.proto !== "ip" && e.proto !== pkt.proto) continue;
+      if (!addr(e.dst, pkt.dst)) continue;
+      if (e.proto !== "ip" && !port(e.srcPort, pkt.sport)) continue;
+      if (e.proto !== "ip" && !port(e.dstPort, pkt.dport)) continue;
+      if (e.icmp && e.icmp !== pkt.icmp) continue;
+      if (e.established && !pkt.ack) continue;
+    }
+    return e.action === "permit";
+  }
+  return false;
+}
+
 // --- ospf -----------------------------------------------------------------------------------------------
 
 // which ospf process and area an interface is in, if any

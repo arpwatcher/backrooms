@@ -303,3 +303,32 @@ test("a router's ping loses the first packet to ARP, needs a real target and a r
   for (const c of ["enable", "configure terminal", "ip route 0.0.0.0 0.0.0.0 10.0.24.1", "end"]) exec(R4, c);
   assert.match(exec(R1, "traceroute 192.168.4.10"), /  2 10\.0\.24\.2 .*\n  3 192\.168\.4\.10 /);
 });
+
+test("ACLs filter pings and DHCP, and the first matching entry decides", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, HOST, cfg } = await import("../ccna/labs/kit.js");
+  const l = buildLab({
+    id: "t", tasks: [], solution: {},
+    devices: [
+      R("R1", 50, 0, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.2.2.1 255.255.255.0", "no shutdown", "exit", "ip dhcp pool LAN", "network 10.1.1.0 255.255.255.0", "default-router 10.1.1.1")),
+      HOST("PC1", 20, 40, "windows", { dhcp: true, mac: "0050.7966.6891" }),
+      HOST("PC2", 80, 40, "windows", { ip: "10.2.2.10/24", gateway: "10.2.2.1", mac: "0050.7966.6892" }),
+    ],
+    links: [["R1", "g0/0", "PC1", "fa0"], ["R1", "g0/1", "PC2", "fa0"]],
+  });
+  const { R1, PC1, PC2 } = l.devices;
+  const cmds = (...lines) => lines.forEach((c) => exec(R1, c));
+  assert.match(exec(PC1, "ipconfig /renew"), /10\.1\.1\.\d+/);
+  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 4/);
+  // outbound towards PC2: echoes from 10.1.1.0/24 dropped
+  cmds("enable", "configure terminal", "access-list 101 deny icmp 10.1.1.0 0.0.0.255 any echo", "access-list 101 permit ip any any", "interface g0/1", "ip access-group 101 out");
+  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 0/);
+  // the reply direction is a different packet: PC2's own pings still work
+  assert.match(exec(PC2, "ping 10.1.1.1"), /Received = 4/);
+  cmds("no ip access-group 101 out", "exit");
+  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 4/);
+  // inbound on the LAN, permitting only the subnet: the Discover comes from 0.0.0.0
+  cmds("access-list 10 permit 10.1.1.0 0.0.0.255", "interface g0/0", "ip access-group 10 in", "end");
+  exec(PC1, "ipconfig /release");
+  assert.match(exec(PC1, "ipconfig /renew"), /unable to contact your DHCP server/);
+});

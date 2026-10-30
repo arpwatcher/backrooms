@@ -5,7 +5,7 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch } from "./ip.js";
-import { status, operMode, carries, hsrpRanking } from "./net.js";
+import { status, operMode, carries, hsrpRanking, aclAllows } from "./net.js";
 import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
@@ -154,13 +154,18 @@ const ownsIp = (d, ip) => Object.values(d.interfaces).some((f) => f.ip === ip &&
 
 // from a router, the addresses a packet for ip passes (each next router's
 // ingress address), ending at ip; null when some router has no route, or
-// the last subnet has no such host
-function pathFrom(router, ip, seen = new Set()) {
+// the last subnet has no such host. With a packet, the ACLs on the way are
+// checked too: inbound where it arrives (inIf), outbound where it leaves,
+// except on the router that sent it (pkt.from)
+function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
+  if (pkt && inIf?.aclIn && !aclAllows(router, inIf.aclIn, pkt)) return null;
   if (ownsIp(router, ip)) return [];
   if (seen.has(router) || seen.size > 15) return null;
   seen.add(router);
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
   if (!best) return null;
+  const exit = exitOf(router, best, ip);
+  if (pkt && pkt.from !== router && exit?.aclOut && !aclAllows(router, exit.aclOut, pkt)) return null;
   if (best.code === "C") {
     const o = owner(router, ip);
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
@@ -177,7 +182,7 @@ function pathFrom(router, ip, seen = new Set()) {
     return router.lab?.extern?.includes(ip) ? [ip] : null;
   }
   if (!ROUTER(o.device)) return null;
-  const rest = pathFrom(o.device, ip, seen);
+  const rest = pathFrom(o.device, ip, seen, pkt, o.iface);
   if (rest === null) return null;
   // the router that owns ip answers from ip itself
   return ownsIp(o.device, ip) ? [ip] : [next, ...rest];
@@ -194,7 +199,7 @@ export function fromRouter(router, ip) {
   const exit = best.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && first && network(first, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
   const src = router.interfaces[exit]?.ip;
   const seen = new Set();
-  const path = pathFrom(router, ip, seen);
+  const path = pathFrom(router, ip, seen, echo(src, ip, router));
   if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first };
   if (seen.exit) return { ok: true, hops: path, arp: first };
   const o = owner(router, ip);
@@ -205,10 +210,12 @@ export function fromRouter(router, ip) {
     // switch through its gateway unless the source is on its own subnet
     const f = o.iface;
     const near = f.mask && network(src, maskBits(f.mask)) === network(f.ip, maskBits(f.mask));
-    if (ROUTER(target)) ok = pathFrom(target, src) !== null;
-    else if (!near) {
-      const gw = target.host ? gatewayRouter(target) : target.defaultGateway && owner(router, target.defaultGateway)?.device;
-      ok = Boolean(gw && pathFrom(gw, src) !== null);
+    const reply = echoReply(ip, src);
+    if (ROUTER(target)) ok = pathFrom(target, src, new Set(), { ...reply, from: target }) !== null;
+    else if (near) ok = !router.interfaces[exit]?.aclIn || aclAllows(router, router.interfaces[exit].aclIn, reply);
+    else {
+      const gw = target.host ? onSegment(target, target.host.gw) : target.defaultGateway && owner(router, target.defaultGateway);
+      ok = Boolean(gw && ROUTER(gw.device) && pathFrom(gw.device, src, new Set(), reply, gw.iface) !== null);
     }
   }
   return { ok, hops: ok ? path : partial(router, ip, src), arp: first };
@@ -231,6 +238,15 @@ function partial(router, ip, src) {
   return out;
 }
 
+// the interface a route leaves by
+function exitOf(router, route, ip) {
+  if (route.out) return router.interfaces[route.out];
+  const hop = route.via ?? ip;
+  return Object.values(router.interfaces).find((f) => f.ip && f.mask && network(hop, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)) && status(router, f)[1] === "up");
+}
+const echo = (src, dst, from) => ({ proto: "icmp", icmp: "echo", src, dst, from });
+const echoReply = (src, dst, from) => ({ proto: "icmp", icmp: "echo-reply", src, dst, from });
+
 // a route that leaves the drawn network: out an interface, or to a next hop
 // on a subnet, that faces an ISP cloud
 function isExternal(router, route) {
@@ -250,20 +266,27 @@ function natted(router, ip) {
 }
 // a ping that went out through NAT leaves an icmp translation on the router,
 // as show ip nat translations lists it (one per inside host and target)
+// the inside global address the router would give an inside host, or null
+function natGlobal(router, local) {
+  if (!natted(router, local)) return null;
+  const nat = router.nat;
+  const st = nat.statics.find((s) => s.local === local && !s.proto);
+  if (st) return st.global;
+  const rule = nat.dynamic.find((d) => aclPermits(router.acls[d.acl], local));
+  if (rule?.out) return router.interfaces[rule.out]?.ip ?? null;
+  const p = rule?.pool && nat.pools[rule.pool];
+  if (!p) return null;
+  const live = nat.live ?? [];
+  const used = live.filter((t) => t.pool === rule.pool && !t.overload && t.local !== local).map((t) => t.global);
+  return range(p.start, p.end).find((a) => rule.overload || !used.includes(a)) ?? null;
+}
 function translate(router, local, target) {
   const nat = router.nat;
   const st = nat.statics.find((s) => s.local === local && !s.proto);
   const rule = !st && nat.dynamic.find((d) => aclPermits(router.acls[d.acl], local));
   nat.live ??= [];
   if (nat.live.some((t) => t.local === local && t.target === target)) return;
-  let global = st?.global;
-  if (!global && rule?.out) global = router.interfaces[rule.out]?.ip;
-  if (!global && rule?.pool) {
-    const p = nat.pools[rule.pool];
-    const used = nat.live.filter((t) => t.pool === rule.pool && !t.overload).map((t) => t.global);
-    const free = p && range(p.start, p.end).find((a) => rule.overload || !used.includes(a) || nat.live.some((t) => t.global === a && t.local === local));
-    global = free;
-  }
+  const global = natGlobal(router, local);
   if (!global) return;
   const id = nat.live.filter((t) => t.global === global).length + 1;
   nat.live.push({ local, target, global, id, pool: rule?.pool ?? null, overload: Boolean(rule?.overload), dynamic: !st });
@@ -307,22 +330,35 @@ function reaches(dev, ip, ping = false) {
   const gw = dev.host.gw;
   if (!gw || !local(dev, gw) || !onSegment(dev, gw)) return false;
   learnArp(dev, gw);
+  const gwIf = onSegment(dev, gw).iface;
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
     const r = gatewayRouter(dev);
     const seen = new Set();
-    if (!r || pathFrom(r, ip, seen) === null) return false;
+    if (!r || pathFrom(r, ip, seen, echo(f.ip, ip), gwIf) === null) return false;
+    if (!seen.exit) return true;
     // out to the Internet, a private source needs NAT on the way out
-    if (!seen.exit || !isPrivate(f.ip)) return true;
-    if (!natted(seen.exit, f.ip)) return false;
-    if (ping) translate(seen.exit, f.ip, ip);
+    const global = isPrivate(f.ip) ? natGlobal(seen.exit, f.ip) : f.ip;
+    if (!global) return false;
+    // the reply comes in on the outside interface, still to the global
+    // address, and is routed back in once translated
+    const outside = exitOf(seen.exit, routeTable(seen.exit).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0] ?? {}, ip);
+    if (outside?.aclIn && !aclAllows(seen.exit, outside.aclIn, echoReply(ip, global))) return false;
+    if (pathFrom(seen.exit, f.ip, new Set(), echoReply(ip, f.ip)) === null) return false;
+    if (ping && global !== f.ip) translate(seen.exit, f.ip, ip);
     return true;
   }
   const r = gatewayRouter(dev);
-  if (!r || pathFrom(r, ip) === null) return false;
+  if (!r || pathFrom(r, ip, new Set(), echo(f.ip, ip), gwIf) === null) return false;
   // and back: from the router that answers, or from the target's own gateway
-  const target = owner(dev, ip)?.device;
-  const back = !target ? r : ROUTER(target) ? target : target.host ? gatewayRouter(target) : target.gateway && owner(dev, target.gateway)?.device;
-  return Boolean(back && pathFrom(back, f.ip) !== null);
+  const o = owner(dev, ip);
+  const target = o?.device;
+  const reply = echoReply(ip, f.ip);
+  if (!target || ROUTER(target)) {
+    const from = target ?? r;
+    return pathFrom(from, f.ip, new Set(), { ...reply, from }) !== null;
+  }
+  const back = target.host ? onSegment(target, target.host.gw) : target.gateway && owner(dev, target.gateway);
+  return Boolean(back && ROUTER(back.device) && pathFrom(back.device, f.ip, new Set(), reply, back.iface) !== null);
 }
 
 // a name through the PC's DNS servers (the lab's records stand in for them)
@@ -429,8 +465,12 @@ function release(dev) {
 export function dhcpOffer(dev) {
   if (!linkUp(dev)) return null;
   const poolFor = (d, gwIf) => Object.values(d.dhcp?.pools ?? {}).find((p) => p.network && gwIf.ip && network(gwIf.ip, maskBits(p.mask)) === p.network);
+  // a Discover is a broadcast from 0.0.0.0, and an inbound ACL on the
+  // router's interface sees it like any other packet
+  const discover = { proto: "udp", src: "0.0.0.0", dst: "255.255.255.255", sport: 68, dport: 67 };
   for (const { device, iface } of segment(dev)) {
     if (["pc", "server", "cloud"].includes(device.type)) continue;
+    if (iface.aclIn && !aclAllows(device, iface.aclIn, discover)) continue;
     const local = poolFor(device, iface);
     if (local) return { pool: local, server: iface.ip, gw: iface, from: device };
     // a relay: the server must have a pool for the relay's subnet (giaddr),
