@@ -25,6 +25,8 @@ export default [
   }),
   lab({
     id: "extended-ping", module: M, title: "Extended ping with a source",
+    // the answer pings before the fix, to see the fault
+    failingPings: true,
     cmds: ["ping source"],
     devices: line(), links,
     intro: "R1 can reach 10.3.3.1, but PC1's LAN cannot. A ping from R1's G0/1 address hides the problem.",
@@ -59,6 +61,8 @@ export default [
   }),
   lab({
     id: "sim-connectivity", module: M, title: "Sim: PC1 cannot reach PC3", kind: "sim",
+    // the answer pings before the fix, to see the fault
+    failingPings: true,
     cmds: ["ping", "traceroute", "show ip interface brief", "show ip route"],
     devices: [R("R1", 18, 28, r1), R("R2", 50, 28, r2()), R("R3", 82, 28, r3(["interface g0/2", "shutdown"])), PC("PC1", 18, 52, "10.1.1.10/24", "10.1.1.1"), PC("PC3", 82, 52, "10.3.3.10/24", "10.3.3.1")],
     links,

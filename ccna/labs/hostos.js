@@ -233,6 +233,8 @@ export default [
   }),
   lab({
     id: "sim-three-hosts", module: M, title: "Sim: one wrong client on three operating systems", kind: "sim",
+    // the answer pings before the fix, to see the fault
+    failingPings: true,
     cmds: ["ipconfig /all", "ip route", "netstat -rn", "ping"],
     devices: [
       HOST("WIN", 10, 52, "windows", { ip: "10.10.10.21/24", gateway: "10.10.10.1", dns: ["10.10.20.10"], domain: "mycompany.lab", mac: "0050.7966.6801" }),
