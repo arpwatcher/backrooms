@@ -189,11 +189,29 @@ function ipRoute(dev, args) {
 function ipProtocols(dev) {
   const out = [];
   for (const [pid, p] of Object.entries(dev.ospf)) {
-    out.push(`Routing Protocol is "ospf ${pid}"`, "  Outgoing update filter list for all interfaces is not set", "  Incoming update filter list for all interfaces is not set", `  Router ID ${routerId(dev, Number(pid))}`, "  Number of areas in this router is 1. 1 normal 0 stub 0 nssa", `  Maximum path: ${p.maxPaths ?? 4}`, "  Routing for Networks:");
+    const areas = new Set(Object.values(dev.interfaces).map((f) => ospfOf(dev, f)).filter((o) => o && String(o.pid) === pid).map((o) => String(o.area)));
+    const n = Math.max(areas.size, 1);
+    out.push(`Routing Protocol is "ospf ${pid}"`, "  Outgoing update filter list for all interfaces is not set", "  Incoming update filter list for all interfaces is not set", `  Router ID ${routerId(dev, Number(pid))}`);
+    if (areas.size > 1) out.push("  It is an area border router");
+    if (p.defaultOriginate) out.push("  It is an autonomous system boundary router", " Redistributing External Routes from,");
+    out.push(`  Number of areas in this router is ${n}. ${n} normal 0 stub 0 nssa`, `  Maximum path: ${p.maxPaths ?? 4}`, "  Routing for Networks:");
     for (const n of p.networks) out.push(`    ${n.net} ${n.wild} area ${n.area}`);
     const pass = Object.keys(dev.interfaces).filter((n) => passive(dev, Number(pid), n));
     if (pass.length) out.push("  Passive Interface(s):", ...pass.map((n) => `    ${n}`));
-    out.push("  Routing Information Sources:", "    Gateway         Distance      Last Update", `  Distance: (default is ${p.distance ?? 110})`, "");
+    // every router whose LSAs this one has, over adjacencies that are up
+    const seen = new Set([dev]);
+    const queue = [dev];
+    const sources = [];
+    while (queue.length) {
+      for (const nb of ospfNeighbors(queue.shift())) {
+        if (!nb.up || seen.has(nb.device)) continue;
+        seen.add(nb.device);
+        queue.push(nb.device);
+        sources.push(nb.rid);
+      }
+    }
+    sources.sort((a, b) => parseIp(a) - parseIp(b));
+    out.push("  Routing Information Sources:", "    Gateway         Distance      Last Update", ...sources.map((rid) => `    ${pad(rid, 16)}${String(p.distance ?? 110).padStart(8)}      00:00:${String(10 + (parseIp(rid) % 40)).padStart(2, "0")}`), `  Distance: (default is ${p.distance ?? 110})`, "");
   }
   if (dev.rip) {
     out.push('Routing Protocol is "rip"', `  Default version control: send version ${dev.rip.version}, receive ${dev.rip.version === 2 ? "2" : "any version"}`, `  Automatic network summarization is ${dev.rip.autoSummary ? "in effect" : "not in effect"}`, "  Routing for Networks:", ...dev.rip.networks.map((n) => `    ${n.net}`), "  Distance: (default is 120)", "");
