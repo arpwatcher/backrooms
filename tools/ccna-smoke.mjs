@@ -29,8 +29,8 @@ await new Promise((resolve) => server.listen(0, resolve));
 const base = `http://localhost:${server.address().port}/ccna/index.html`;
 
 // one of each kind: single device, two routers, a switch sim, a sim with
-// prompts, and PCs with terminals and answer boxes
-const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts"];
+// prompts, PCs with terminals and answer boxes, and two challenge labs
+const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts", "ch-floor-dhcp", "ch-bundle-stp"];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -68,6 +68,16 @@ for (const id of LABS) {
   ok(ticks.length > 0 && ticks.every((c) => c === "ok"), `${id}: typing the answer ticks every task (${ticks.join(" ")})`);
   ok((await page.textContent(".result")).includes("Correct"), `${id}: the result says so`);
 }
+
+// a challenge lab draws its topology across the full width, and the bundle
+// it built is circled
+ok(await page.locator(".work.wide").count() === 1, "a challenge lab gets the wide layout");
+ok(await page.locator(".topo ellipse.bundle").count() === 1, "the EtherChannel is drawn as a bundle");
+await page.goto(`${base}#exam`);
+await page.waitForTimeout(200);
+await page.click("[data-hard]");
+await page.waitForFunction(() => window.__ccna.current?.def);
+ok(await page.evaluate(() => window.__ccna.current.def.hard === true), "the harder exam starts with a challenge lab");
 
 await page.goto(`${base}#commands`);
 await page.waitForTimeout(200);
