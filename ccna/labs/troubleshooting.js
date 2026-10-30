@@ -3,7 +3,9 @@ import { lab, R, PC, cfg, EN, need } from "./kit.js";
 const M = "troubleshooting";
 const r1 = cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 10.3.3.0 255.255.255.0 10.0.12.2");
 const r2 = (extra = []) => cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "no shutdown", "ip route 10.3.3.0 255.255.255.0 10.0.23.2", ...extra);
-const r3 = (extra = []) => cfg("interface g0/0", "ip address 10.3.3.1 255.255.255.0", "no shutdown", "interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", "ip route 10.1.1.0 255.255.255.0 10.0.23.1", ...extra);
+// R3 also knows the R1-R2 link, so a plain ping from R1 (sourced from
+// 10.0.12.1) gets its answer back
+const r3 = (extra = []) => cfg("interface g0/0", "ip address 10.3.3.1 255.255.255.0", "no shutdown", "interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", "ip route 10.1.1.0 255.255.255.0 10.0.23.1", "ip route 10.0.12.0 255.255.255.252 10.0.23.1", ...extra);
 const line = (b = [], c = []) => [R("R1", 18, 28, r1), R("R2", 50, 28, r2(b)), R("R3", 82, 28, r3(c)), PC("PC1", 18, 52, "10.1.1.10/24", "10.1.1.1"), PC("PC3", 82, 52, "10.3.3.10/24", "10.3.3.1")];
 const links = [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R1", "g0/0", "PC1", "fa0"], ["R3", "g0/0", "PC3", "fa0"]];
 const routeBack = (t) => t.statics("R2").some((r) => r.net === "10.1.1.0" && r.mask === "255.255.255.0" && r.via === "10.0.12.1");

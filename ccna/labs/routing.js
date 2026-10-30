@@ -83,13 +83,14 @@ export default [
       { text: "R1: a route to 10.3.3.0/24.", check: (t) => need(has(t, "R1", "10.3.3.0", "255.255.255.0", "10.0.12.2") || has(t, "R1", "0.0.0.0", "0.0.0.0", "10.0.12.2"), "R1 does not know 10.3.3.0/24 (nor a default route through R2).") },
       { text: "R3: a route to 10.1.1.0/24.", check: (t) => need(has(t, "R3", "10.1.1.0", "255.255.255.0", "10.0.23.1") || has(t, "R3", "0.0.0.0", "0.0.0.0", "10.0.23.1"), "R3 does not know 10.1.1.0/24.") },
       { text: "R2: routes to both LANs (10.1.1.0/24 and 10.3.3.0/24).", check: (t) => need(has(t, "R2", "10.1.1.0", "255.255.255.0", "10.0.12.1") && has(t, "R2", "10.3.3.0", "255.255.255.0", "10.0.23.2"), "R2 needs both routes. Return traffic needs a route back too.") },
-      { text: "From R1, ping 10.3.3.1 to verify.", check: (t) => need(t.ran("R1", /^ping 10\.3\.3\.1/), "Run ping 10.3.3.1 from R1.") },
+      { text: "From R1, verify with a ping to 10.3.3.1 sourced from its LAN (ping 10.3.3.1 source g0/0).", check: (t) => need(t.ran("R1", /^ping 10\.3\.3\.1 source (GigabitEthernet0\/0|10\.1\.1\.1)/), "Run ping 10.3.3.1 source g0/0 on R1. A plain ping is sent from 10.0.12.1, which R3 has no route to.") },
     ],
     solution: {
-      R1: [...EN, "ip route 10.3.3.0 255.255.255.0 10.0.12.2", "end", "ping 10.3.3.1"],
+      R1: [...EN, "ip route 10.3.3.0 255.255.255.0 10.0.12.2", "end"],
       R2: [...EN, "ip route 10.1.1.0 255.255.255.0 10.0.12.1", "ip route 10.3.3.0 255.255.255.0 10.0.23.2"],
       R3: [...EN, "ip route 10.1.1.0 255.255.255.0 10.0.23.1"],
+      "R1#2": ["ping 10.3.3.1 source g0/0"],
     },
-    teach: "The most common trap: traffic gets there but cannot come back. Every router on the path must know both ends.",
+    teach: "The most common trap: traffic gets there but cannot come back. Every router on the path must know both ends. A router's own ping is sent from its exit interface, here 10.0.12.1, so it also needs the far router to know that link; ping with source g0/0 tests what PC1 would see.",
   }),
 ];

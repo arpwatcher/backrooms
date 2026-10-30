@@ -190,14 +190,15 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
 // a ping or traceroute typed on a router: the hops to ip, whether a reply
 // comes back to the address it was sent from (the exit interface's), and
 // the first hop it has to ARP for; null when the lab has no other devices
-export function fromRouter(router, ip, kind = ICMP) {
+export function fromRouter(router, ip, kind = ICMP, from = null) {
   if (!router.lab?.all) return null;
+  if (!ROUTER(router)) return fromSwitch(router, ip, kind);
   if (ownsIp(router, ip)) return { ok: true, hops: [ip], arp: null };
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
   if (!best) return { ok: false, hops: [], arp: null, noRoute: true };
   const first = best.code === "C" ? ip : best.via;
   const exit = best.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && first && network(first, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
-  const src = router.interfaces[exit]?.ip;
+  const src = from ?? router.interfaces[exit]?.ip;
   const seen = new Set();
   const path = pathFrom(router, ip, seen, kind.go(src, ip, router));
   if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first, src };
@@ -214,12 +215,42 @@ export function fromRouter(router, ip, kind = ICMP) {
     if (ROUTER(target)) ok = pathFrom(target, src, new Set(), { ...reply, from: target }) !== null;
     else if (near) ok = !router.interfaces[exit]?.aclIn || aclAllows(router, router.interfaces[exit].aclIn, reply);
     else {
-      const gw = target.host ? onSegment(target, target.host.gw) : target.defaultGateway && owner(router, target.defaultGateway);
+      const tgw = target.gateway ?? target.defaultGateway;
+      const gw = target.host ? onSegment(target, target.host.gw) : tgw && owner(router, tgw);
       ok = Boolean(gw && ROUTER(gw.device) && pathFrom(gw.device, src, new Set(), reply, gw.iface) !== null);
     }
   }
   return { ok, hops: ok ? path : partial(router, ip, src), arp: first, src };
 }
+// a Layer 2 switch sends from its management SVI, like a host: straight to
+// its own subnet, through ip default-gateway to the rest
+function fromSwitch(sw, ip, kind) {
+  const svi = Object.values(sw.interfaces).find((f) => f.name.startsWith("Vlan") && f.ip && status(sw, f)[1] === "up");
+  if (!svi) return { ok: false, hops: [], arp: null, src: null };
+  const src = svi.ip, bits = maskBits(svi.mask);
+  const near = (x) => network(x, bits) === network(src, bits);
+  if (ip === src) return { ok: true, hops: [ip], arp: null, src };
+  if (near(ip)) {
+    const o = owner(sw, ip);
+    return { ok: Boolean(o), hops: o ? [ip] : [], arp: ip, src };
+  }
+  const gw = sw.defaultGateway;
+  const g = gw && near(gw) ? owner(sw, gw) : null;
+  if (!g || !ROUTER(g.device)) return { ok: false, hops: [], arp: gw ?? null, src };
+  const path = pathFrom(g.device, ip, new Set(), kind.go(src, ip), g.iface);
+  let ok = path !== null;
+  const o = owner(sw, ip);
+  if (ok && o) {
+    const t = o.device, reply = kind.back(ip, src);
+    if (ROUTER(t)) ok = pathFrom(t, src, new Set(), { ...reply, from: t }) !== null;
+    else {
+      const tgw = t.host ? onSegment(t, t.host.gw) : (t.gateway ?? t.defaultGateway) && owner(sw, t.gateway ?? t.defaultGateway);
+      ok = Boolean(tgw && ROUTER(tgw.device) && pathFrom(tgw.device, src, new Set(), reply, tgw.iface) !== null);
+    }
+  }
+  return { ok, hops: ok ? [gw, ...path].filter((x, i, a) => a.indexOf(x) === i) : [gw], arp: gw, src };
+}
+
 // the hops a traceroute still gets answers from before the path breaks: each
 // router on the way answers only if it has a route back to the source
 function partial(router, ip, src) {

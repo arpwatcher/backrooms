@@ -366,3 +366,30 @@ test("telnet and ssh connect only when the vty lines take them", async () => {
   assert.match(exec(ADMIN, "ssh netadmin@192.168.99.2"), /Connection refused/);
   assert.match(exec(R1, "ssh -l netadmin 192.168.99.77"), /% Connection timed out; remote host not responding/);
 });
+
+test("a Layer 2 switch pings through its SVI and default gateway", async () => {
+  const { buildLab, runSolution } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ch-access-hardening"));
+  runSolution(l);
+  const sw = l.devices.SW1;
+  exec(sw, "end");
+  assert.match(exec(sw, "ping 192.168.99.1"), /Success rate is (80|100) percent/);
+  assert.match(exec(sw, "ping 192.168.10.11"), /Success rate is (80|100) percent/);
+  assert.match(exec(sw, "traceroute 192.168.10.11"), /  1 192\.168\.99\.1 .*\n  2 192\.168\.10\.11 /);
+  assert.match(exec(sw, "ping 192.168.99.77"), /Success rate is 0 percent/);
+});
+
+test("ping with a source tests the path from that interface", async () => {
+  const { buildLab, runSolution } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "extended-ping"));
+  const r1 = l.devices.R1;
+  exec(r1, "enable");
+  // R2 has no route to 10.1.1.0/24 yet: the plain ping works, the LAN's doesn't
+  assert.match(exec(r1, "ping 10.3.3.1"), /Success rate is (80|100) percent/);
+  assert.match(exec(r1, "ping 10.3.3.1 source g0/0"), /Packet sent with a source address of 10\.1\.1\.1 \n\.\.\.\.\.\nSuccess rate is 0 percent/);
+  assert.match(exec(r1, "ping 10.3.3.1 source 10.9.9.9"), /% Invalid source address- IP address not on any of our up interfaces/);
+  runSolution(l);
+  assert.match(exec(r1, "ping 10.3.3.1 source g0/0"), /!!!!!\nSuccess rate is 100 percent/);
+});

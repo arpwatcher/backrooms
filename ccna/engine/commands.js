@@ -162,7 +162,17 @@ def("priv", "clock set <time:word> (<day:num:1-31> <month:word> | <month:word> <
   if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test(c.args.time)) fail("% Invalid input detected at '^' marker.");
   c.dev.clock.set = `${c.args.time} ${c.args.day} ${c.args.month} ${c.args.year}`;
 });
-def(EXEC, "ping <target:word> [source (<src:ip> | <srci:iface>)] [repeat <n:num:1-2147483647>]", (c) => c.say(ping(c.dev, c.args.target, c.args.n ?? 5)));
+def(EXEC, "ping <target:word> [source (<src:ip> | <srci:iface>)] [repeat <n:num:1-2147483647>]", (c) => {
+  // a source must be an address of this device, on an interface that is up
+  let src = null;
+  if (c.args.srci) {
+    const f = c.dev.interfaces[c.args.srci];
+    if (!f) fail("% Invalid input detected at '^' marker.");
+    src = f.ip && status(c.dev, f)[1] === "up" ? f.ip : "";
+  } else if (c.args.src) src = Object.values(c.dev.interfaces).some((f) => f.ip === c.args.src && status(c.dev, f)[1] === "up") ? c.args.src : "";
+  if (src === "") return c.say(`% Invalid source address- IP address not on any of our up interfaces`);
+  c.say(ping(c.dev, c.args.target, c.args.n ?? 5, src));
+});
 def("priv", "ping", (c) => c.say("% Extended ping is not simulated here; give a target: ping <address>"));
 def(EXEC, "traceroute <target:word>", (c) => c.say(trace(c.dev, c.args.target)));
 def(EXEC, "telnet <target:word>", (c) => c.say(telnet(c.dev, c.args.target)));
@@ -1091,13 +1101,13 @@ export function reachable(dev, ip) {
   return routeTable(dev).some((r) => network(ip, r.bits) === r.net);
 }
 
-function ping(dev, target, count) {
+function ping(dev, target, count, src = null) {
   const ip = resolve(dev, target);
   if (!ip) {
     if (!dev.domainLookup) return `% Unrecognized host or address, or protocol not running.\n`;
     return `Translating "${target}"...domain server (${dev.nameServers[0] ?? "255.255.255.255"})\n% Unrecognized host or address, or protocol not running.\n`;
   }
-  const r = fromRouter(dev, ip);
+  const r = fromRouter(dev, ip, undefined, src);
   const ok = r ? r.ok : reachable(dev, ip);
   // the first packet to a next hop the router has not ARPed for yet is lost
   dev.arped ??= [];
@@ -1105,7 +1115,7 @@ function ping(dev, target, count) {
   if (r?.arp && (ok || r.hops.length)) dev.arped.push(r.arp);
   const got = ok ? count - miss : 0;
   const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : ".".repeat(count);
-  return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${marks}\nSuccess rate is ${Math.floor((got * 100) / count)} percent (${got}/${count})${got ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
+  return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${src ? `Packet sent with a source address of ${src} \n` : ""}${marks}\nSuccess rate is ${Math.floor((got * 100) / count)} percent (${got}/${count})${got ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
 }
 
 // telnet and ssh from a router: the vty lines of the target decide
