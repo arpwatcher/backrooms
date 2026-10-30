@@ -147,8 +147,9 @@ English.
   switch hardened end to end, an Internet edge with static NAT and a
   filtered DMZ, OSPF broken in four places, a FastEthernet bundle that
   spanning tree routes around, a floating static that only fails over one
-  way, and a new floor whose DHCP is stopped by five faults. Exam mode has
-  a harder option made only of these. 202 labs, 39 of them sims.
+  way, a new floor whose DHCP is stopped by five faults, and SSH locked to
+  one admin PC. Exam mode has a harder option made only of these. 203
+  labs, 40 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -156,9 +157,13 @@ English.
   nothing on the Internet answers a private address that was not NATed.
   ACLs filter the packets themselves (echo and echo-reply separately, a
   DHCP Discover from 0.0.0.0 too), a ping leaves its NAT translation and a
-  renew its DHCP binding, a router's first ping shows `.!!!!`, and spanning
-  tree runs over port-channels with their real cost. `show ip route` prints
-  the classful headings IOS 15 does.
+  renew its DHCP binding, a router's first ping shows `.!!!!` (and
+  `ping ... source` tests from another interface), telnet and ssh from a
+  router or a PC are refused or let in by transport input, RSA keys,
+  access-class and login local, and spanning tree runs over port-channels
+  with their real cost. `show ip route` prints the classful headings IOS 15
+  does. A test replays every model answer and fails if one of its pings
+  gets no reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 
