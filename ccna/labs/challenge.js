@@ -1,4 +1,5 @@
 import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
+import { aclAllows } from "../engine/net.js";
 
 // harder sims: bigger topologies, several topics at once, more tasks, faults
 // to find and questions answered from the output
@@ -363,5 +364,42 @@ export default [
     },
     answers: { 2: "10.0.12.2", 4: "No: R4 still sends the replies to R2", 6: "Its static route has AD 1, which beats OSPF's 110" },
     teach: "A floating static only takes over when the primary route leaves the table, and a static route leaves the table only when its next hop's interface goes down on that router. A failure one hop away is invisible to the far end, so the return traffic keeps using the dead path. A routing protocol notices the lost neighbor and recalculates on both sides, but only if no static route with a lower AD is in its way.",
+  }),
+  // --- a new floor that gets no addresses -----------------------------------------------------------
+  hard({
+    id: "ch-floor-dhcp", title: "Challenge: the new floor gets no addresses",
+    cmds: ["show interfaces trunk", "ip helper-address", "show access-lists", "ip access-list extended", "show ip dhcp pool", "ipconfig /renew"],
+    devices: [
+      R("R1", 40, 22, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.10.10.1 255.255.255.0", "ip helper-address 10.0.12.2", "interface g0/0.30", "encapsulation dot1q 30", "ip address 10.30.30.1 255.255.255.0", "ip access-group FLOOR-IN in", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "exit", "ip access-list extended FLOOR-IN", "permit ip 10.30.30.0 0.0.0.255 any", "exit", "ip route 10.50.50.0 255.255.255.0 10.0.12.2")),
+      R("R2", 80, 22, cfg("interface g0/0", "ip address 10.50.50.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "exit", "ip route 10.10.10.0 255.255.255.0 10.0.12.1", "ip dhcp excluded-address 10.10.10.1 10.10.10.10", "ip dhcp excluded-address 10.30.30.1 10.30.30.10", "ip dhcp pool STAFF", "network 10.10.10.0 255.255.255.0", "default-router 10.10.10.1", "dns-server 10.50.50.10", "ip dhcp pool FLOOR3", "network 10.30.30.0 255.255.255.0", "default-router 10.30.30.254", "dns-server 10.50.50.10")),
+      S("SW1", 40, 50, cfg("vlan 10", "name STAFF", "vlan 30", "name FLOOR3", "exit", "interface g0/1", "switchport mode trunk", "switchport trunk allowed vlan 10", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface range fa0/2 - 3", "switchport mode access", "switchport access vlan 30")),
+      SRV("SRV", 80, 52, "10.50.50.10/24", "10.50.50.1"),
+      HOST("PC1", 10, 80, "windows", { dhcp: true, ip: "10.10.10.11/24", gateway: "10.10.10.1", dns: ["10.50.50.10"], dhcpServer: "10.0.12.2", mac: "0050.7966.6901" }),
+      HOST("PC2", 40, 84, "windows", { dhcp: true, mac: "0050.7966.6902" }),
+      HOST("PC3", 70, 80, "windows", { dhcp: true, mac: "0050.7966.6903" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/0", "SRV", "fa0"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"], ["SW1", "fa0/3", "PC3", "fa0"]],
+    intro: "Staff (VLAN 10) get their addresses from R2, the central DHCP server, through R1. The third floor was just added as VLAN 30 (10.30.30.0/24, gateway .1) with its own pool on R2, and an inbound ACL on R1 that should only stop spoofed sources. PC2 and PC3 on the new floor end up with 169.254.x.x. There are five faults on R1, R2 and SW1. Keep FLOOR-IN in place.",
+    tasks: [
+      { text: "Investigate on SW1 and R1.", check: (t) => need(t.ran("SW1", /^show /) && t.ran("R1", /^show /), "Look at show interfaces trunk on SW1, and show running-config or show ip interface on R1.") },
+      { text: "The trunk from SW1 to R1 carries VLAN 30.", check: (t) => need(t.carries("SW1", "g0/1", 30) && t.carries("SW1", "g0/1", 10), "switchport trunk allowed vlan add 30 on SW1 G0/1 (keep VLAN 10).") },
+      { text: "R1 relays the third floor's DHCP to R2.", check: (t) => need((t.f("R1", "g0/0.30").helpers ?? []).includes("10.0.12.2"), "ip helper-address 10.0.12.2 under interface g0/0.30.") },
+      { text: "FLOOR-IN stays inbound on G0/0.30 and still drops spoofed sources, but lets the clients' DHCP through.", check: (t) => { const R1 = t.dev("R1"); const ok = (p) => aclAllows(R1, "FLOOR-IN", p); const discover = { proto: "udp", src: "0.0.0.0", dst: "255.255.255.255", sport: 68, dport: 67 }; return need(t.f("R1", "g0/0.30").aclIn === "FLOOR-IN" && ok(discover) && ok({ proto: "icmp", icmp: "echo", src: "10.30.30.50", dst: "10.50.50.10" }) && !ok({ proto: "icmp", icmp: "echo", src: "10.99.0.1", dst: "10.50.50.10" }), "A DHCP Discover comes from 0.0.0.0 to 255.255.255.255, UDP port 67 (bootps). Add an entry that permits it, and nothing wider than that."); } },
+      { text: "R2 can send its Offers back to the relay on the third floor.", check: (t) => need(Boolean(t.route("R2", "10.30.30.0", 24)), "The server answers the relay at 10.30.30.1: R2 needs a route to 10.30.30.0/24.") },
+      { text: "The FLOOR3 pool gives out the right default gateway.", check: (t) => need(t.dev("R2").dhcp.pools.FLOOR3?.router?.[0] === "10.30.30.1", "default-router 10.30.30.1 in ip dhcp pool FLOOR3.") },
+      { text: "PC2 and PC3 have a lease from R2, with gateway 10.30.30.1.", check: (t) => need(["PC2", "PC3"].every((pc) => t.dev(pc).host.leased && t.dev(pc).host.gw === "10.30.30.1" && t.dev(pc).host.dhcpServer === "10.0.12.2"), "Run ipconfig /renew on PC2 and PC3 once everything is fixed.") },
+      { text: "Which address did PC2 get?", ask: "Address", check: (t) => need(is.ip(t.reply, "10.30.30.11"), "ipconfig on PC2 after the renew. The first ten addresses are excluded.") },
+      { text: "Why did the Discovers never reach R2, even with the helper address in place?", choices: ["FLOOR-IN dropped them: they come from 0.0.0.0, not from 10.30.30.0/24", "A helper address only forwards to servers on the same subnet", "R1 does not forward broadcasts between subinterfaces", "The pool was on the wrong router"], check: (t) => need(t.reply === "FLOOR-IN dropped them: they come from 0.0.0.0, not from 10.30.30.0/24", "A client with no address sends its Discover from 0.0.0.0. An inbound ACL sees it before the relay does.") },
+      { text: "PC2 reaches the server at 10.50.50.10.", check: (t) => need(t.reach("PC2", "10.50.50.10"), "Ping 10.50.50.10 from PC2. Something on the way there or back is still missing.") },
+    ],
+    solution: {
+      SW1: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk allowed vlan add 30"],
+      R1: ["enable", "show running-config", "configure terminal", "interface g0/0.30", "ip helper-address 10.0.12.2", "exit", "ip access-list extended FLOOR-IN", "permit udp host 0.0.0.0 host 255.255.255.255 eq bootps"],
+      R2: [...EN, "ip route 10.30.30.0 255.255.255.0 10.0.12.1", "ip dhcp pool FLOOR3", "default-router 10.30.30.1"],
+      PC2: ["ipconfig /renew"],
+      PC3: ["ipconfig /renew"],
+    },
+    answers: { 7: "10.30.30.11", 8: "FLOOR-IN dropped them: they come from 0.0.0.0, not from 10.30.30.0/24" },
+    teach: "DHCP through a relay has more pieces than it looks: the VLAN must reach the router, the subinterface needs ip helper-address, an inbound ACL must let the Discover from 0.0.0.0 in, the server needs a pool for the giaddr's subnet and a route back to that giaddr, and the pool's default-router must be the real gateway or the client gets an address it cannot leave the subnet with.",
   }),
 ];
