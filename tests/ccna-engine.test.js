@@ -256,6 +256,10 @@ test("a DHCP lease shows on the server until the PC releases it", async () => {
   assert.doesNotMatch(exec(r1, "show ip dhcp pool BRANCH"), /Pool HQ/);
   exec(l.devices.PC2, "ipconfig /release");
   assert.doesNotMatch(exec(r1, "show ip dhcp binding"), /10\.20\.20\.21/);
+  // the server sends its Offer to the relay's address: without a route back
+  // to the branch, the branch gets nothing
+  for (const c of ["configure terminal", "no ip route 10.20.20.0 255.255.255.0 10.0.12.2", "end"]) exec(r1, c);
+  assert.match(exec(l.devices.PC2, "ipconfig /renew"), /unable to contact your DHCP server/);
 });
 
 test("a member that differs from its port-channel is suspended, and po settings reach the members", async () => {

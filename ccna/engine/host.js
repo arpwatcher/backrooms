@@ -474,11 +474,13 @@ export function dhcpOffer(dev) {
     const local = poolFor(device, iface);
     if (local) return { pool: local, server: iface.ip, gw: iface, from: device };
     // a relay: the server must have a pool for the relay's subnet (giaddr),
-    // and the relay must have a route to the server
+    // the relay a route to the server, and the server a route back to the
+    // giaddr, where it sends the Offer
     for (const helper of iface.helpers ?? []) {
       const o = owner(dev, helper);
       const p = o && poolFor(o.device, iface);
-      if (p && (ownsIp(device, helper) || pathFrom(device, helper) !== null)) return { pool: p, server: helper, gw: iface, from: o.device };
+      if (!p) continue;
+      if (ownsIp(device, helper) || (pathFrom(device, helper) !== null && pathFrom(o.device, iface.ip) !== null)) return { pool: p, server: helper, gw: iface, from: o.device };
     }
   }
   return null;
