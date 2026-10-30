@@ -269,3 +269,21 @@ test("a member that differs from its port-channel is suspended, and po settings 
   assert.match(exec(sw2, "show etherchannel summary"), /Fa0\/23\(P\) Fa0\/24\(P\)/);
   assert.match(exec(sw2, "show running-config interface fa0/24"), /switchport trunk allowed vlan 10,20/);
 });
+
+test("show ip route groups subnets under their classful network, like IOS 15", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, PC: pc, cfg } = await import("../ccna/labs/kit.js");
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [R("R1", 20, 20), R("R2", 70, 20, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown")), pc("PC1", 20, 60, "192.168.1.10/24", "192.168.1.1")], links: [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/0", "PC1", "fa0"]] });
+  const r = l.devices.R1;
+  exec(r, "enable");
+  for (const c of ["configure terminal", "interface g0/0", "ip address 192.168.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "exit", "ip route 192.168.4.0 255.255.255.0 10.0.12.2", "ip route 0.0.0.0 0.0.0.0 10.0.12.2", "end"]) exec(r, c);
+  const out = exec(r, "show ip route");
+  assert.match(out, /\nS\*    0\.0\.0\.0\/0 \[1\/0\] via 10\.0\.12\.2/);
+  assert.match(out, /\n      10\.0\.0\.0\/8 is variably subnetted, 2 subnets, 2 masks\nC        10\.0\.12\.0\/30/);
+  assert.match(out, /\n      192\.168\.1\.0\/24 is variably subnetted, 2 subnets, 2 masks\n/);
+  assert.match(out, /\nS     192\.168\.4\.0\/24 \[1\/0\] via 10\.0\.12\.2/);
+  // a filtered view keeps the legend and the headings
+  const st = exec(r, "show ip route static");
+  assert.match(st, /^Codes:/);
+  assert.doesNotMatch(st, /directly connected/);
+});

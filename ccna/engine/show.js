@@ -178,13 +178,40 @@ function ipRoute(dev, args) {
   const def = routes.find((r) => r.net === "0.0.0.0" && r.bits === 0);
   const out = [CODES, "", def ? `Gateway of last resort is ${def.via ?? "0.0.0.0"} to network 0.0.0.0` : "Gateway of last resort is not set", ""];
   const sorted = [...routes].sort((a, b) => parseIp(a.net) - parseIp(b.net) || a.bits - b.bits);
+  // IOS groups subnets under their classful network ("10.0.0.0/8 is
+  // variably subnetted, 4 subnets, 2 masks"); a classful network or a
+  // supernet on its own gets no heading and a narrower code column. The
+  // heading counts the whole table even when only some routes are shown.
+  const shown = args?.only ? sorted.filter(args.only) : sorted;
+  const groups = new Map();
   for (const r of sorted) {
-    const code = r.code === "S" && r.bits === 0 ? "S*" : r.code;
-    if (r.code === "C" || r.code === "L") out.push(`${pad(code, 9)}${r.net}/${r.bits} is directly connected, ${r.out}`);
-    else out.push(`${pad(code, 9)}${r.net}/${r.bits} [${r.ad}/${r.metric}]${r.via ? ` via ${r.via}` : ""}${r.out ? `${r.via ? "," : " is directly connected,"} ${r.out}` : ""}`);
+    const cb = classfulBits(r.net);
+    const key = r.bits < cb ? `${r.net}/${r.bits}` : `${network(r.net, cb)}/${cb}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)).push(r);
+  }
+  for (const [key, all] of groups) {
+    const show = all.filter((r) => shown.includes(r));
+    if (!show.length) continue;
+    const [net, bits] = key.split("/");
+    const plain = all.length === 1 && all[0].bits <= Number(bits);
+    if (!plain) {
+      const masks = new Set(all.map((r) => r.bits)).size;
+      out.push(masks > 1 ? `      ${net}/${bits} is variably subnetted, ${all.length} subnets, ${masks} masks` : `      ${net}/${bits} is subnetted, ${all.length} subnet${all.length > 1 ? "s" : ""}`);
+    }
+    for (const r of show) {
+      const code = pad(r.code === "S" && r.bits === 0 ? "S*" : r.code, plain ? 6 : 9);
+      const age = r.code.startsWith("O") ? ", 00:12:41" : "";
+      if (r.code === "C" || r.code === "L") out.push(`${code}${r.net}/${r.bits} is directly connected, ${r.out}`);
+      else out.push(`${code}${r.net}/${r.bits} [${r.ad}/${r.metric}]${r.via ? ` via ${r.via}${age}` : ""}${r.out ? `${r.via ? "," : " is directly connected,"} ${r.out}` : ""}`);
+    }
   }
   return out.join("\n");
 }
+// the mask a network would have without subnetting: /8, /16 or /24
+const classfulBits = (ip) => {
+  const first = parseIp(ip) >>> 24;
+  return first < 128 ? 8 : first < 192 ? 16 : 24;
+};
 
 function ipProtocols(dev) {
   const out = [];
@@ -606,11 +633,10 @@ export const SHOWS = {
     ["show vlan id <id:num:1-4094>", (d, a) => (d.vlans[a.id] ? vlanBrief({ ...d, vlans: { [a.id]: d.vlans[a.id] } }, false).split("\n").slice(0, 3).join("\n") : `VLAN id ${a.id} not found in current VLAN database`)],
     ["show mac address-table [(dynamic | static)] [interface <name:iface>]", (d) => macTable(d)],
     ["show ip route [(<net:ip> | static | connected | ospf)]", (d, a, c) => {
-      const out = ipRoute(d, a);
-      if (c.has("static")) return out.split("\n").filter((l) => /^S/.test(l)).join("\n");
-      if (c.has("connected")) return out.split("\n").filter((l) => /^[CL] /.test(l)).join("\n");
-      if (c.has("ospf")) return out.split("\n").filter((l) => /^O/.test(l)).join("\n");
-      return out;
+      if (c.has("static")) return ipRoute(d, { only: (r) => r.code === "S" });
+      if (c.has("connected")) return ipRoute(d, { only: (r) => r.code === "C" || r.code === "L" });
+      if (c.has("ospf")) return ipRoute(d, { only: (r) => r.code.startsWith("O") });
+      return ipRoute(d, a);
     }],
     ["show ip protocols", (d) => ipProtocols(d)],
     ["show ip ospf neighbor [detail]", (d) => ospfNeighbor(d)],
