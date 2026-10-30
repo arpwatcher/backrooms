@@ -190,7 +190,7 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
 // a ping or traceroute typed on a router: the hops to ip, whether a reply
 // comes back to the address it was sent from (the exit interface's), and
 // the first hop it has to ARP for; null when the lab has no other devices
-export function fromRouter(router, ip) {
+export function fromRouter(router, ip, kind = ICMP) {
   if (!router.lab?.all) return null;
   if (ownsIp(router, ip)) return { ok: true, hops: [ip], arp: null };
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
@@ -199,9 +199,9 @@ export function fromRouter(router, ip) {
   const exit = best.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && first && network(first, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
   const src = router.interfaces[exit]?.ip;
   const seen = new Set();
-  const path = pathFrom(router, ip, seen, echo(src, ip, router));
-  if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first };
-  if (seen.exit) return { ok: true, hops: path, arp: first };
+  const path = pathFrom(router, ip, seen, kind.go(src, ip, router));
+  if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first, src };
+  if (seen.exit) return { ok: true, hops: path, arp: first, src };
   const o = owner(router, ip);
   const target = o?.device;
   let ok = true;
@@ -210,7 +210,7 @@ export function fromRouter(router, ip) {
     // switch through its gateway unless the source is on its own subnet
     const f = o.iface;
     const near = f.mask && network(src, maskBits(f.mask)) === network(f.ip, maskBits(f.mask));
-    const reply = echoReply(ip, src);
+    const reply = kind.back(ip, src);
     if (ROUTER(target)) ok = pathFrom(target, src, new Set(), { ...reply, from: target }) !== null;
     else if (near) ok = !router.interfaces[exit]?.aclIn || aclAllows(router, router.interfaces[exit].aclIn, reply);
     else {
@@ -218,7 +218,7 @@ export function fromRouter(router, ip) {
       ok = Boolean(gw && ROUTER(gw.device) && pathFrom(gw.device, src, new Set(), reply, gw.iface) !== null);
     }
   }
-  return { ok, hops: ok ? path : partial(router, ip, src), arp: first };
+  return { ok, hops: ok ? path : partial(router, ip, src), arp: first, src };
 }
 // the hops a traceroute still gets answers from before the path breaks: each
 // router on the way answers only if it has a route back to the source
@@ -244,8 +244,9 @@ function exitOf(router, route, ip) {
   const hop = route.via ?? ip;
   return Object.values(router.interfaces).find((f) => f.ip && f.mask && network(hop, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)) && status(router, f)[1] === "up");
 }
-const echo = (src, dst, from) => ({ proto: "icmp", icmp: "echo", src, dst, from });
-const echoReply = (src, dst, from) => ({ proto: "icmp", icmp: "echo-reply", src, dst, from });
+// what goes out and what comes back: a ping, or a TCP session to a port
+const ICMP = { go: (src, dst, from) => ({ proto: "icmp", icmp: "echo", src, dst, from }), back: (src, dst, from) => ({ proto: "icmp", icmp: "echo-reply", src, dst, from }) };
+const tcp = (port) => ({ go: (src, dst, from) => ({ proto: "tcp", src, dst, sport: 49152, dport: port, from }), back: (src, dst, from) => ({ proto: "tcp", src, dst, sport: port, dport: 49152, ack: true, from }) });
 
 // a route that leaves the drawn network: out an interface, or to a next hop
 // on a subnet, that faces an ISP cloud
@@ -317,7 +318,7 @@ export const canReach = (dev, ip) => reaches(dev, ip);
 
 // does a packet from this PC get to ip and back (a real ping also leaves
 // its NAT translation behind)
-function reaches(dev, ip, ping = false) {
+function reaches(dev, ip, ping = false, kind = ICMP) {
   const f = own(dev);
   if (ip === "127.0.0.1") return true;
   if (!f.ip || !linkUp(dev)) return false;
@@ -334,7 +335,7 @@ function reaches(dev, ip, ping = false) {
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
     const r = gatewayRouter(dev);
     const seen = new Set();
-    if (!r || pathFrom(r, ip, seen, echo(f.ip, ip), gwIf) === null) return false;
+    if (!r || pathFrom(r, ip, seen, kind.go(f.ip, ip), gwIf) === null) return false;
     if (!seen.exit) return true;
     // out to the Internet, a private source needs NAT on the way out
     const global = isPrivate(f.ip) ? natGlobal(seen.exit, f.ip) : f.ip;
@@ -342,22 +343,23 @@ function reaches(dev, ip, ping = false) {
     // the reply comes in on the outside interface, still to the global
     // address, and is routed back in once translated
     const outside = exitOf(seen.exit, routeTable(seen.exit).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0] ?? {}, ip);
-    if (outside?.aclIn && !aclAllows(seen.exit, outside.aclIn, echoReply(ip, global))) return false;
-    if (pathFrom(seen.exit, f.ip, new Set(), echoReply(ip, f.ip)) === null) return false;
+    if (outside?.aclIn && !aclAllows(seen.exit, outside.aclIn, kind.back(ip, global))) return false;
+    if (pathFrom(seen.exit, f.ip, new Set(), kind.back(ip, f.ip)) === null) return false;
     if (ping && global !== f.ip) translate(seen.exit, f.ip, ip);
     return true;
   }
   const r = gatewayRouter(dev);
-  if (!r || pathFrom(r, ip, new Set(), echo(f.ip, ip), gwIf) === null) return false;
+  if (!r || pathFrom(r, ip, new Set(), kind.go(f.ip, ip), gwIf) === null) return false;
   // and back: from the router that answers, or from the target's own gateway
   const o = owner(dev, ip);
   const target = o?.device;
-  const reply = echoReply(ip, f.ip);
+  const reply = kind.back(ip, f.ip);
   if (!target || ROUTER(target)) {
     const from = target ?? r;
     return pathFrom(from, f.ip, new Set(), { ...reply, from }) !== null;
   }
-  const back = target.host ? onSegment(target, target.host.gw) : target.gateway && owner(dev, target.gateway);
+  const tgw = target.gateway ?? target.defaultGateway;
+  const back = target.host ? onSegment(target, target.host.gw) : tgw && owner(dev, tgw);
   return Boolean(back && ROUTER(back.device) && pathFrom(back.device, f.ip, new Set(), reply, back.iface) !== null);
 }
 
@@ -632,6 +634,8 @@ function windows(dev, line) {
     case "netsh":
       if (a === "interface ip delete arpcache" || a === "int ip delete arpcache") return (dev.host.arp = []), "Ok.\n";
       return "The following command was not found: " + words.slice(1).join(" ") + ".";
+    case "ssh":
+      return sshClient(dev, words.slice(1), "windows");
     case "hostname":
       return dev.hostname;
     case "cls":
@@ -778,6 +782,8 @@ function linux(dev, line) {
       if (a === "/etc/resolv.conf") return resolvConf(dev);
       if (a === "/etc/hostname") return dev.hostname.toLowerCase();
       return `cat: ${a}: No such file or directory`;
+    case "ssh":
+      return sshClient(dev, words.slice(1), "linux");
     case "hostname":
       return dev.hostname.toLowerCase();
     case "clear":
@@ -853,6 +859,8 @@ function macos(dev, line) {
       return nslookup(dev, args[0], args[1], true);
     case "dig":
       return dig(dev, args.filter((w) => !w.startsWith("@") && !w.startsWith("+"))[0]);
+    case "ssh":
+      return sshClient(dev, words.slice(1), "mac");
     case "hostname":
       return dev.hostname;
     case "clear":
@@ -862,6 +870,52 @@ function macos(dev, line) {
     default:
       return `zsh: command not found: ${cmd}`;
   }
+}
+
+// --- remote sessions -------------------------------------------------------------------------------
+
+// a telnet or SSH session from a PC or a router to ip: does it get there and
+// back as TCP, and do the target's vty lines take it (transport input, RSA
+// keys for SSH, access-class against the real source address, a login)
+export function vtySession(dev, ip, proto) {
+  const port = proto === "ssh" ? 22 : 23;
+  let src;
+  if (dev.host) {
+    if (!reaches(dev, ip, false, tcp(port))) return { result: "timeout" };
+    src = own(dev).ip;
+  } else {
+    const r = fromRouter(dev, ip, tcp(port));
+    if (r && !r.ok) return { result: "timeout" };
+    src = r?.src;
+  }
+  const t = owner(dev, ip)?.device;
+  const v = t?.lines?.vty;
+  if (!v || t.host) return { result: "refused" };
+  if (!v.transport.includes(proto)) return { result: "refused" };
+  if (proto === "ssh" && !(t.rsa >= (t.sshVersion === 2 ? 768 : 360))) return { result: "refused" };
+  if (v.accessClass && src && !aclAllows(t, v.accessClass, { proto: "tcp", src, dst: ip, sport: 49152, dport: port })) return { result: "refused" };
+  if (!v.loginLocal && !v.password) return { result: "nopass" };
+  // SSH needs a username: a line password alone is not enough
+  if (proto === "ssh" && !v.loginLocal) return { result: "noauth" };
+  return { result: "ok", local: v.loginLocal };
+}
+
+// ssh user@host, ssh -l user host (OpenSSH on all three systems)
+function sshClient(dev, words, os) {
+  let user = dev.host.user, target = null;
+  for (let i = 0; i < words.length; i++) {
+    if (words[i] === "-l") user = words[++i];
+    else if (!words[i].startsWith("-")) target = words[i];
+  }
+  if (!target) return "usage: ssh [-46AaCfGgKkMNnqsTtVvXxYy] [-B bind_interface] [-b bind_address]\n           [-c cipher_spec] [-D [bind_address:]port] [-E log_file]\n           [-e escape_char] [-F configfile] [-I pkcs11] [-i identity_file]\n           [-J destination] [-L address] [-l login_name] [-m mac_spec]\n           [-O ctl_cmd] [-o option] [-P tag] [-p port] [-R address]\n           [-S ctl_path] [-W host:port] [-w local_tun[:remote_tun]]\n           destination [command [argument ...]]";
+  if (target.includes("@")) [user, target] = [target.slice(0, target.lastIndexOf("@")), target.slice(target.lastIndexOf("@") + 1)];
+  const r = lookup(dev, target);
+  if (r.error) return `ssh: Could not resolve hostname ${target.toLowerCase()}: ${os === "windows" ? "No such host is known." : os === "mac" ? "nodename nor servname provided, or not known" : "Name or service not known"}`;
+  const s = vtySession(dev, r.ip, "ssh");
+  if (s.result === "timeout") return `ssh: connect to host ${r.ip} port 22: ${os === "mac" ? "Operation timed out" : "Connection timed out"}`;
+  if (s.result === "refused") return `ssh: connect to host ${r.ip} port 22: Connection refused`;
+  if (s.result !== "ok") return `${user}@${r.ip}'s password:\nPermission denied, please try again.\n(the router has no username to check it against: login local)`;
+  return `${user}@${r.ip}'s password:\n(the remote session itself is not simulated here)`;
 }
 
 // --- the shell -----------------------------------------------------------------------------------

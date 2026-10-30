@@ -346,3 +346,23 @@ test("ACL entries print well-known ports by name, and no permit|deny removes one
   assert.match(out, /30 permit tcp any any eq 443/);
   assert.doesNotMatch(out, /echo-reply/);
 });
+
+test("telnet and ssh connect only when the vty lines take them", async () => {
+  const { buildLab, runSolution } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ch-access-hardening"));
+  runSolution(l);
+  const { ADMIN, PC1, R1, SW1 } = l.devices;
+  exec(R1, "end");
+  // the admin PC is in the management subnet; PC1 is not (access-class 10)
+  assert.match(exec(ADMIN, "ssh netadmin@192.168.99.2"), /netadmin@192\.168\.99\.2's password:/);
+  assert.match(exec(PC1, "ssh netadmin@192.168.99.2"), /port 22: Connection refused/);
+  assert.match(exec(PC1, "ping 192.168.99.2"), /Received = 4/);
+  // transport input ssh: telnet is refused
+  assert.match(exec(R1, "telnet 192.168.99.2"), /Trying 192\.168\.99\.2 \.\.\.\n% Connection refused by remote host/);
+  assert.match(exec(R1, "ssh -l netadmin 192.168.99.2"), /^Password:/);
+  // no keys, no SSH; nothing on the other end, a timeout
+  for (const c of ["configure terminal", "crypto key zeroize rsa", "end"]) exec(SW1, c);
+  assert.match(exec(ADMIN, "ssh netadmin@192.168.99.2"), /Connection refused/);
+  assert.match(exec(R1, "ssh -l netadmin 192.168.99.77"), /% Connection timed out; remote host not responding/);
+});

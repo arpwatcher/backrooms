@@ -7,7 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
-import { fromRouter } from "./host.js";
+import { fromRouter, vtySession } from "./host.js";
 import { status, stpRoot, bridgePriority } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
@@ -165,8 +165,8 @@ def("priv", "clock set <time:word> (<day:num:1-31> <month:word> | <month:word> <
 def(EXEC, "ping <target:word> [source (<src:ip> | <srci:iface>)] [repeat <n:num:1-2147483647>]", (c) => c.say(ping(c.dev, c.args.target, c.args.n ?? 5)));
 def("priv", "ping", (c) => c.say("% Extended ping is not simulated here; give a target: ping <address>"));
 def(EXEC, "traceroute <target:word>", (c) => c.say(trace(c.dev, c.args.target)));
-def(EXEC, "telnet <target:word>", (c) => c.say(`Trying ${resolve(c.dev, c.args.target) ?? c.args.target} ... Open\n(remote session simulated - nothing to log in to)`));
-def(EXEC, "ssh -l <user:word> <target:word>", (c) => c.say(`(SSH to ${c.args.target} as ${c.args.user} simulated)\nPassword:`));
+def(EXEC, "telnet <target:word>", (c) => c.say(telnet(c.dev, c.args.target)));
+def(EXEC, "ssh -l <user:word> <target:word>", (c) => c.say(sshFrom(c.dev, c.args.target)));
 def("priv", "debug <what:rest>", (c) => {
   c.dev.debugs.push(c.args.what);
   c.say(`${c.args.what.replace(/^ip /, "IP ").toUpperCase().startsWith("IP") ? c.args.what : c.args.what} debugging is on`);
@@ -1106,6 +1106,26 @@ function ping(dev, target, count) {
   const got = ok ? count - miss : 0;
   const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : ".".repeat(count);
   return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${marks}\nSuccess rate is ${Math.floor((got * 100) / count)} percent (${got}/${count})${got ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
+}
+
+// telnet and ssh from a router: the vty lines of the target decide
+function telnet(dev, target) {
+  const ip = resolve(dev, target);
+  if (!ip) return `Translating "${target}"\n% Bad IP address or host name\n% Unknown command or computer name, or unable to find computer address`;
+  const s = vtySession(dev, ip, "telnet");
+  if (s.result === "timeout") return `Trying ${ip} ...\n% Connection timed out; remote host not responding`;
+  if (s.result === "refused") return `Trying ${ip} ...\n% Connection refused by remote host`;
+  if (s.result === "nopass") return `Trying ${ip} ... Open\n\nPassword required, but none set\n\n[Connection to ${ip} closed by foreign host]`;
+  return `Trying ${ip} ... Open\n\n\nUser Access Verification\n\n${s.local ? "Username:" : "Password:"}\n(the remote session itself is not simulated here)`;
+}
+function sshFrom(dev, target) {
+  const ip = resolve(dev, target);
+  if (!ip) return "% Unrecognized host or address, or protocol not running.";
+  const s = vtySession(dev, ip, "ssh");
+  if (s.result === "timeout") return "% Connection timed out; remote host not responding";
+  if (s.result === "refused") return "% Connection refused by remote host";
+  if (s.result !== "ok") return "Password:\n% Authentication failed.";
+  return "Password:\n(the remote session itself is not simulated here)";
 }
 
 function trace(dev, target) {
