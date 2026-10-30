@@ -145,13 +145,20 @@ English.
   VLAN ticket, an OSPF triangle with an Internet edge and PAT, HSRP on two
   Layer 3 switches over LACP, DHCP for two sites through a relay, an access
   switch hardened end to end, an Internet edge with static NAT and a
-  filtered DMZ, and OSPF broken in four places. Exam mode has a harder
-  option made only of these. 199 labs, 36 of them sims.
+  filtered DMZ, OSPF broken in four places, a FastEthernet bundle that
+  spanning tree routes around, a floating static that only fails over one
+  way, and a new floor whose DHCP is stopped by five faults. Exam mode has
+  a harder option made only of these. 202 labs, 39 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
   a ping needs a route back, HSRP answers ARP with its virtual MAC, and
   nothing on the Internet answers a private address that was not NATed.
+  ACLs filter the packets themselves (echo and echo-reply separately, a
+  DHCP Discover from 0.0.0.0 too), a ping leaves its NAT translation and a
+  renew its DHCP binding, a router's first ping shows `.!!!!`, and spanning
+  tree runs over port-channels with their real cost. `show ip route` prints
+  the classful headings IOS 15 does.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 
