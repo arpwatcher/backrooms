@@ -36,6 +36,14 @@ export function buildLab(def) {
   // PCs with an operating system get a terminal of their own
   for (const d of def.devices) if (d.os) makeHost(devices[d.name], d, def);
   for (const d of def.devices) if (d.setup?.length) apply(devices[d.name], d.setup);
+  // a PC that starts with a lease is in its server's bindings too
+  for (const dev of all) {
+    const h = dev.host, f = h && Object.values(dev.interfaces)[0];
+    if (!h?.leased || !h.dhcpServer || !f?.ip) continue;
+    const srv = all.find((x) => Object.values(x.interfaces).some((i) => i.ip === h.dhcpServer))?.dhcp;
+    const pool = srv && Object.keys(srv.pools).find((k) => srv.pools[k].network && srv.pools[k].network === network(f.ip, maskBits(srv.pools[k].mask)));
+    if (pool) (srv.leases ??= []).push({ ip: f.ip, mac: dev.mac, clientId: h.os !== "linux", pool, days: srv.pools[pool].lease ?? 1 });
+  }
   // ports that start err-disabled (a port-security or bpduguard story)
   for (const [name, ports] of Object.entries(def.errdisabled ?? {})) for (const p of ports) devices[name].interfaces[normalize(p)].errdisabled = true;
   return { def, devices, answers: {} };
