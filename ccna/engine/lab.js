@@ -14,7 +14,7 @@ export function buildLab(def) {
   const devices = {};
   for (const d of def.devices) {
     const dev = createDevice({ name: d.name, type: d.type, hostname: d.hostname ?? (d.keepDefaultName ? undefined : d.name), ports: d.ports, mac: d.mac });
-    dev.lab = { learned: def.learned?.[d.name], macs: def.macs?.[d.name], bindings: def.bindings?.[d.name], arp: def.arp?.[d.name], natTranslations: def.natTranslations?.[d.name], lease: def.lease?.[d.name] };
+    dev.lab = { learned: def.learned?.[d.name], macs: def.macs?.[d.name], bindings: def.bindings?.[d.name], arp: def.arp?.[d.name], natTranslations: def.natTranslations?.[d.name], lease: def.lease?.[d.name], extern: def.extern ?? [] };
     if (d.ip) {
       const [ip, bits] = d.ip.split("/");
       const f = Object.values(dev.interfaces)[0];

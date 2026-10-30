@@ -393,3 +393,10 @@ test("ping with a source tests the path from that interface", async () => {
   runSolution(l);
   assert.match(exec(r1, "ping 10.3.3.1 source g0/0"), /!!!!!\nSuccess rate is 100 percent/);
 });
+
+test("a lab's extern hosts answer through the routers", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "sim-dns-fault"));
+  assert.match(exec(l.devices.PC1, "ping -c 1 10.10.20.80"), /1 received, 0% packet loss/);
+});

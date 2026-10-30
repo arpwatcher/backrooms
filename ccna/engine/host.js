@@ -368,8 +368,9 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     const seen = new Set();
     if (!r || pathFrom(r, ip, seen, kind.go(f.ip, ip), gwIf) === null) return false;
     if (!seen.exit) return true;
-    // out to the Internet, a private source needs NAT on the way out
-    const global = isPrivate(f.ip) ? natGlobal(seen.exit, f.ip) : f.ip;
+    // out to the Internet, a private source needs NAT on the way out (a
+    // private address beyond the cloud is a company WAN, reached as it is)
+    const global = isPrivate(f.ip) && !isPrivate(ip) ? natGlobal(seen.exit, f.ip) : f.ip;
     if (!global) return false;
     // the reply comes in on the outside interface, still to the global
     // address, and is routed back in once translated
