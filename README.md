@@ -160,8 +160,9 @@ English.
   renew its DHCP binding, a router's first ping shows `.!!!!` (and
   `ping ... source` tests from another interface), telnet and ssh from a
   router or a PC are refused or let in by transport input, RSA keys,
-  access-class and login local, and spanning tree runs over port-channels
-  with their real cost. `show ip route` prints the classful headings IOS 15
+  access-class and login local, NTP syncs only to a server that answers
+  and has time itself, and spanning tree runs over port-channels with their
+  real cost. `show ip route` prints the classful headings IOS 15
   does. A test replays every model answer and fails if one of its pings
   gets no reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
