@@ -332,3 +332,13 @@ test("ACLs filter pings and DHCP, and the first matching entry decides", async (
   exec(PC1, "ipconfig /release");
   assert.match(exec(PC1, "ipconfig /renew"), /unable to contact your DHCP server/);
 });
+
+test("ACL entries print well-known ports by name, and no permit|deny removes one", () => {
+  const r = router();
+  for (const c of ["configure terminal", "ip access-list extended EDGE", "permit tcp any host 192.0.2.10 eq 80", "permit udp any any eq 53", "permit tcp any any eq 443", "permit icmp any any echo-reply", "no permit icmp any any echo-reply", "end"]) exec(r, c);
+  const out = exec(r, "show access-lists EDGE");
+  assert.match(out, /10 permit tcp any host 192\.0\.2\.10 eq www/);
+  assert.match(out, /20 permit udp any any eq domain/);
+  assert.match(out, /30 permit tcp any any eq 443/);
+  assert.doesNotMatch(out, /echo-reply/);
+});

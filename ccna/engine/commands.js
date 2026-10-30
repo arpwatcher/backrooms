@@ -6,7 +6,7 @@ import { IosError, newInterface, iface, DEFAULT_NAME } from "./state.js";
 import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6Prefix, expandIpv6, eui64 } from "./ip.js";
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
-import { runningConfig } from "./config.js";
+import { runningConfig, aceText } from "./config.js";
 import { fromRouter } from "./host.js";
 import { status, stpRoot, bridgePriority } from "./net.js";
 
@@ -921,6 +921,15 @@ def("config", "ip access-list (standard | extended) (<n:num:1-2699> | <name:word
 def("config", "no ip access-list (standard | extended) (<n:num:1-2699> | <name:word>)", (c) => delete c.dev.acls[String(c.args.n ?? c.args.name)]);
 for (const [mode, type] of [["acl-std", "standard"], ["acl-ext", "extended"]]) {
   def(mode, "[<seq:num:1-2147483647>] (permit | deny) <ace:rest>", (c) => addAce(c, c.dev.ctx.acl, type, c.has("permit") ? "permit" : "deny", c.args.ace, c.args.seq));
+  // no permit|deny with the entry's own text removes that entry
+  def(mode, "no (permit | deny) <ace:rest>", (c) => {
+    const acl = c.dev.acls[c.dev.ctx.acl];
+    const parsed = parseAce(c.args.ace, type === "standard");
+    if (parsed.bad !== undefined) throw c.invalidAt(offsetOf(c.line, c.args.ace, parsed.bad));
+    const action = c.has("permit") ? "permit" : "deny";
+    const text = aceText({ action, ...parsed.ace }, type === "standard");
+    acl.entries = acl.entries.filter((e) => aceText(e, type === "standard") !== text);
+  });
   def(mode, "no <seq:num:1-2147483647>", (c) => {
     const acl = c.dev.acls[c.dev.ctx.acl];
     acl.entries = acl.entries.filter((e) => e.seq !== c.args.seq);

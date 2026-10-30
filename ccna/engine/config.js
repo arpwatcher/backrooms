@@ -31,13 +31,19 @@ function aclAddr(a) {
   if (a.host) return `host ${a.host}`;
   return `${a.net} ${a.wild}`;
 }
-function aclPort(p) {
+// IOS prints the well-known ports by name (80 is www), the rest as numbers
+const NAMES = {
+  tcp: { 20: "ftp-data", 21: "ftp", 23: "telnet", 25: "smtp", 53: "domain", 80: "www", 110: "pop3", 514: "cmd" },
+  udp: { 53: "domain", 67: "bootps", 68: "bootpc", 69: "tftp", 123: "ntp", 161: "snmp", 514: "syslog" },
+};
+function aclPort(p, proto) {
   if (!p) return "";
-  return p.op === "range" ? ` range ${p.port} ${p.to}` : ` ${p.op} ${p.port}`;
+  const n = (x) => NAMES[proto]?.[x] ?? x;
+  return p.op === "range" ? ` range ${n(p.port)} ${n(p.to)}` : ` ${p.op} ${n(p.port)}`;
 }
 export function aceText(e, standard) {
   if (standard) return `${e.action} ${e.src.any ? "any" : e.src.host ? (e.src.host) : `${e.src.net} ${e.src.wild}`}${e.log ? " log" : ""}`;
-  return `${e.action} ${e.proto} ${aclAddr(e.src)}${aclPort(e.srcPort)} ${aclAddr(e.dst)}${aclPort(e.dstPort)}${e.icmp ? " " + e.icmp : ""}${e.established ? " established" : ""}${e.log ? " log" : ""}`;
+  return `${e.action} ${e.proto} ${aclAddr(e.src)}${aclPort(e.srcPort, e.proto)} ${aclAddr(e.dst)}${aclPort(e.dstPort, e.proto)}${e.icmp ? " " + e.icmp : ""}${e.established ? " established" : ""}${e.log ? " log" : ""}`;
 }
 
 function interfaceBlock(dev, f) {
