@@ -182,6 +182,55 @@ function pathFrom(router, ip, seen = new Set()) {
   // the router that owns ip answers from ip itself
   return ownsIp(o.device, ip) ? [ip] : [next, ...rest];
 }
+// a ping or traceroute typed on a router: the hops to ip, whether a reply
+// comes back to the address it was sent from (the exit interface's), and
+// the first hop it has to ARP for; null when the lab has no other devices
+export function fromRouter(router, ip) {
+  if (!router.lab?.all) return null;
+  if (ownsIp(router, ip)) return { ok: true, hops: [ip], arp: null };
+  const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
+  if (!best) return { ok: false, hops: [], arp: null, noRoute: true };
+  const first = best.code === "C" ? ip : best.via;
+  const exit = best.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && first && network(first, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
+  const src = router.interfaces[exit]?.ip;
+  const seen = new Set();
+  const path = pathFrom(router, ip, seen);
+  if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first };
+  if (seen.exit) return { ok: true, hops: path, arp: first };
+  const o = owner(router, ip);
+  const target = o?.device;
+  let ok = true;
+  if (target && src) {
+    // the reply: a router answers from its routing table, a host or a
+    // switch through its gateway unless the source is on its own subnet
+    const f = o.iface;
+    const near = f.mask && network(src, maskBits(f.mask)) === network(f.ip, maskBits(f.mask));
+    if (ROUTER(target)) ok = pathFrom(target, src) !== null;
+    else if (!near) {
+      const gw = target.host ? gatewayRouter(target) : target.defaultGateway && owner(router, target.defaultGateway)?.device;
+      ok = Boolean(gw && pathFrom(gw, src) !== null);
+    }
+  }
+  return { ok, hops: ok ? path : partial(router, ip, src), arp: first };
+}
+// the hops a traceroute still gets answers from before the path breaks: each
+// router on the way answers only if it has a route back to the source
+function partial(router, ip, src) {
+  const out = [];
+  let r = router;
+  const seen = new Set();
+  while (r && !seen.has(r) && out.length < 15) {
+    seen.add(r);
+    const best = routeTable(r).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0];
+    if (!best || best.code === "C" || !best.via) break;
+    const o = owner(r, best.via);
+    if (!o || !ROUTER(o.device) || (src && pathFrom(o.device, src) === null)) break;
+    out.push(best.via);
+    r = o.device;
+  }
+  return out;
+}
+
 // a route that leaves the drawn network: out an interface, or to a next hop
 // on a subnet, that faces an ISP cloud
 function isExternal(router, route) {

@@ -7,6 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig } from "./config.js";
+import { fromRouter } from "./host.js";
 import { status, stpRoot, bridgePriority } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
@@ -1087,13 +1088,26 @@ function ping(dev, target, count) {
     if (!dev.domainLookup) return `% Unrecognized host or address, or protocol not running.\n`;
     return `Translating "${target}"...domain server (${dev.nameServers[0] ?? "255.255.255.255"})\n% Unrecognized host or address, or protocol not running.\n`;
   }
-  const ok = reachable(dev, ip);
-  const marks = ok ? "!".repeat(count) : ".".repeat(count);
-  return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${marks}\nSuccess rate is ${ok ? 100 : 0} percent (${ok ? count : 0}/${count})${ok ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
+  const r = fromRouter(dev, ip);
+  const ok = r ? r.ok : reachable(dev, ip);
+  // the first packet to a next hop the router has not ARPed for yet is lost
+  dev.arped ??= [];
+  const miss = ok && r?.arp && !dev.arped.includes(r.arp) ? 1 : 0;
+  if (r?.arp && (ok || r.hops.length)) dev.arped.push(r.arp);
+  const got = ok ? count - miss : 0;
+  const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : ".".repeat(count);
+  return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${marks}\nSuccess rate is ${Math.floor((got * 100) / count)} percent (${got}/${count})${got ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
 }
 
 function trace(dev, target) {
   const ip = resolve(dev, target);
   if (!ip) return "% Unrecognized host or address, or protocol not running.";
-  return `Type escape sequence to abort.\nTracing the route to ${ip}\n\n  1 ${reachable(dev, ip) ? ip + " 1 msec 0 msec 1 msec" : "*  *  *"}`;
+  const head = `Type escape sequence to abort.\nTracing the route to ${ip}\nVRF info: (vrf in name/id, vrf out name/id)`;
+  const r = fromRouter(dev, ip);
+  if (!r) return `${head}\n  1 ${reachable(dev, ip) ? ip + " 1 msec 0 msec 1 msec" : "*  *  *"}`;
+  if (r.arp && (r.ok || r.hops.length)) (dev.arped ??= []).push(r.arp);
+  const rows = r.hops.map((h, i) => `${String(i + 1).padStart(3)} ${h} ${i} msec ${i + 1} msec ${i} msec`);
+  // past the last router that answers, every probe times out
+  if (!r.ok) for (let n = rows.length, i = n; i < n + 3; i++) rows.push(`${String(i + 1).padStart(3)}  *  *  *`);
+  return `${head}\n${rows.join("\n")}`;
 }

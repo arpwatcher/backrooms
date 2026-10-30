@@ -287,3 +287,19 @@ test("show ip route groups subnets under their classful network, like IOS 15", a
   assert.match(st, /^Codes:/);
   assert.doesNotMatch(st, /directly connected/);
 });
+
+test("a router's ping loses the first packet to ARP, needs a real target and a route back", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ch-backup-oneway"));
+  const { R1, R4 } = l.devices;
+  for (const c of ["enable", "configure terminal", "ip route 192.168.4.0 255.255.255.0 10.0.12.2", "end"]) exec(R1, c);
+  assert.match(exec(R1, "ping 192.168.1.10"), /\n\.!!!!\nSuccess rate is 80 percent \(4\/5\)/);
+  assert.match(exec(R1, "ping 192.168.1.10"), /\n!!!!!\nSuccess rate is 100 percent/);
+  assert.match(exec(R1, "ping 192.168.1.99"), /Success rate is 0 percent/);
+  // R4 has no route back to 10.0.12.1, so neither it nor PC4 answers
+  assert.match(exec(R1, "ping 192.168.4.10"), /Success rate is 0 percent/);
+  assert.match(exec(R1, "traceroute 192.168.4.10"), /  1 10\.0\.12\.2 .*\n  2  \*  \*  \*/);
+  for (const c of ["enable", "configure terminal", "ip route 0.0.0.0 0.0.0.0 10.0.24.1", "end"]) exec(R4, c);
+  assert.match(exec(R1, "traceroute 192.168.4.10"), /  2 10\.0\.24\.2 .*\n  3 192\.168\.4\.10 /);
+});
