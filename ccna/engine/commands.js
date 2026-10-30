@@ -26,7 +26,15 @@ const fail = (msg) => {
 // --- the interface(s) a sub-mode is on --------------------------------------------
 
 function each(c, fn) {
-  for (const name of c.dev.ctx.ifaces ?? []) fn(c.dev.interfaces[name], name);
+  for (const name of c.dev.ctx.ifaces ?? []) {
+    const f = c.dev.interfaces[name];
+    fn(f, name);
+    // what is set on a layer 2 port-channel is set on its members too
+    if (!name.startsWith("Port-channel") || !f?.switchport) continue;
+    for (const m of Object.values(c.dev.interfaces)) {
+      if (m.channel?.group === Number(name.slice(12))) Object.assign(m, { mode: f.mode, accessVlan: f.accessVlan, nativeVlan: f.nativeVlan, allowed: Array.isArray(f.allowed) ? [...f.allowed] : f.allowed, trunkEncap: f.trunkEncap });
+    }
+  }
 }
 
 const isPhysical = (name) => /^(FastEthernet|GigabitEthernet|Ethernet|Serial)\d/.test(name) && !isSub(name);

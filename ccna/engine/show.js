@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -335,7 +335,7 @@ function etherchannel(dev) {
     const po = dev.interfaces[`Port-channel${g}`];
     const anyUp = members.some((m) => bundled(dev, m));
     const layer = po && po.switchport === false ? "R" : "S";
-    const ports = members.map((m) => `${short(m.name)}(${bundled(dev, m) ? "P" : m.shutdown ? "D" : protocolOf(m.channel.mode) === "-" ? "D" : "I"})`).join(" ");
+    const ports = members.map((m) => `${short(m.name)}(${bundled(dev, m) ? "P" : m.shutdown ? "D" : suspended(dev, m) ? "s" : protocolOf(m.channel.mode) === "-" ? "D" : "I"})`).join(" ");
     out.push(`${pad(g, 7)}${pad(`Po${g}(${layer}${anyUp ? "U" : "D"})`, 14)}${pad(protocolOf(members[0].channel.mode), 12)}${ports}`);
   }
   return out.join("\n");

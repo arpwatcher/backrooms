@@ -105,10 +105,15 @@ export function bundled(dev, f) {
   const end = far(dev, f.name);
   if (!end?.iface?.channel || end.iface.shutdown) return false;
   if (!compatible(f.channel.mode, end.iface.channel.mode)) return false;
-  // members must match: same mode, vlan, native, allowed
-  const same = (x, y) => x.mode === y.mode && x.accessVlan === y.accessVlan && x.nativeVlan === y.nativeVlan && JSON.stringify(x.allowed) === JSON.stringify(y.allowed);
-  const siblings = Object.values(dev.interfaces).filter((m) => m.channel?.group === f.channel.group);
-  return siblings.every((m) => same(m, f));
+  // a member must match its port-channel (mode, vlan, native, allowed), at
+  // both ends; one that differs is suspended and the others stay bundled
+  return !suspended(dev, f) && !suspended(end.device, end.iface);
+}
+const sameL2 = (x, y) => x.mode === y.mode && x.accessVlan === y.accessVlan && x.nativeVlan === y.nativeVlan && JSON.stringify(x.allowed) === JSON.stringify(y.allowed);
+// a member whose settings differ from its port-channel's
+export function suspended(dev, f) {
+  const po = f.channel && dev.interfaces[`Port-channel${f.channel.group}`];
+  return Boolean(po && po.switchport && !sameL2(f, po));
 }
 
 // --- ospf -----------------------------------------------------------------------------------------------

@@ -257,3 +257,15 @@ test("a DHCP lease shows on the server until the PC releases it", async () => {
   exec(l.devices.PC2, "ipconfig /release");
   assert.doesNotMatch(exec(r1, "show ip dhcp binding"), /10\.20\.20\.21/);
 });
+
+test("a member that differs from its port-channel is suspended, and po settings reach the members", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { S, cfg } = await import("../ccna/labs/kit.js");
+  const po = ["interface range fa0/23 - 24", "switchport mode trunk", "channel-group 1 mode active"];
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [S("SW1", 20, 20, cfg(...po)), S("SW2", 70, 20, cfg(...po, "interface fa0/24", "switchport trunk allowed vlan 10"))], links: [["SW1", "fa0/23", "SW2", "fa0/23"], ["SW1", "fa0/24", "SW2", "fa0/24"]] });
+  const sw2 = l.devices.SW2;
+  assert.match(exec(sw2, "show etherchannel summary"), /Po1\(SU\)\s+LACP\s+Fa0\/23\(P\) Fa0\/24\(s\)/);
+  for (const c of ["enable", "configure terminal", "interface port-channel 1", "switchport trunk allowed vlan 10,20", "end"]) exec(sw2, c);
+  assert.match(exec(sw2, "show etherchannel summary"), /Fa0\/23\(P\) Fa0\/24\(P\)/);
+  assert.match(exec(sw2, "show running-config interface fa0/24"), /switchport trunk allowed vlan 10,20/);
+});
