@@ -2,6 +2,8 @@
 // and a link light at each end (green up, amber coming up, red down), the
 // way Packet Tracer and the exam draw them.
 
+import { normalize } from "./engine/iface.js";
+
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs = {}, parent) => {
   const e = document.createElementNS(NS, name);
@@ -86,8 +88,30 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
   svg.style.aspectRatio = String(ratio);
   const links = el("g", { class: "links" }, svg);
   const labels = el("g", { class: "labels" }, svg);
-  for (const [a, ai, b, bi] of lab.def.links) {
-    const A = pos[a], B = pos[b];
+  // links between the same two devices are drawn side by side, and an
+  // EtherChannel's are circled where they run together
+  const pairs = {};
+  for (const l of lab.def.links) (pairs[[l[0], l[2]].sort().join("|")] ??= []).push(l);
+  for (const group of Object.values(pairs)) {
+    if (group.length < 2) continue;
+    const A = pos[group[0][0]], B = pos[group[0][2]];
+    const ang = (Math.atan2(B.y - A.y, B.x - A.x) * 180) / Math.PI;
+    const channel = group.every((l) => lab.devices[l[0]].interfaces[normalize(l[1])]?.channel);
+    if (channel) el("ellipse", { cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, rx: 16, ry: group.length * 14 + 10, transform: `rotate(${ang} ${(A.x + B.x) / 2} ${(A.y + B.y) / 2})`, class: "bundle" }, labels);
+  }
+  for (const link of lab.def.links) {
+    const [a, ai, b, bi] = link;
+    const group = pairs[[a, b].sort().join("|")];
+    let A = pos[a], B = pos[b];
+    if (group.length > 1) {
+      // keep the offset's direction the same whichever end a link lists first
+      const [P, Q] = a < b ? [A, B] : [B, A];
+      const len = Math.hypot(Q.x - P.x, Q.y - P.y) || 1;
+      const off = (group.indexOf(link) - (group.length - 1) / 2) * 28;
+      const nx = (-(Q.y - P.y) / len) * off, ny = ((Q.x - P.x) / len) * off;
+      A = { x: A.x + nx, y: A.y + ny };
+      B = { x: B.x + nx, y: B.y + ny };
+    }
     el("line", { x1: A.x, y1: A.y, x2: B.x, y2: B.y, class: "link" }, links);
     // lights and labels a little way along the cable from each end
     for (const [P, Q, name, iface] of [[A, B, a, ai], [B, A, b, bi]]) {
