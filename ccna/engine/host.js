@@ -364,6 +364,7 @@ function release(dev) {
   const h = dev.host, f = own(dev);
   if (!h.dhcp) return "\nWindows IP Configuration\n\nThe operation failed as no adapter is in the state permissible for\nthis operation.";
   h.lastIp = f.ip ?? h.lastIp;
+  dropLease(dev);
   f.ip = null;
   f.mask = null;
   h.gw = null;
@@ -394,6 +395,9 @@ export function dhcpOffer(dev) {
   return null;
 }
 
+const dropLease = (dev) => {
+  for (const d of dev.lab?.all ?? []) if (d.dhcp?.leases) d.dhcp.leases = d.dhcp.leases.filter((l) => l.mac !== dev.mac);
+};
 function renew(dev) {
   const h = dev.host, f = own(dev);
   if (!h.dhcp) return "\nWindows IP Configuration\n\nThe operation failed as no adapter is in the state permissible for\nthis operation.";
@@ -413,6 +417,11 @@ function renew(dev) {
   }
   f.ip = ip;
   f.mask = offer.pool.mask;
+  // the server keeps the lease (show ip dhcp binding, show ip dhcp pool)
+  dropLease(dev);
+  const srv = offer.from.dhcp;
+  srv.leases ??= [];
+  srv.leases.push({ ip, mac: dev.mac, clientId: h.os !== "linux", pool: Object.keys(srv.pools).find((k) => srv.pools[k] === offer.pool), days: offer.pool.lease ?? 1 });
   h.gw = offer.pool.router?.[0] ?? null;
   h.dns = offer.pool.dns?.length ? [...offer.pool.dns] : h.saveDns ?? [];
   h.domain = offer.pool.domain ?? h.domain;

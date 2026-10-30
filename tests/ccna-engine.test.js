@@ -243,3 +243,17 @@ test("a port-channel of two gig links costs 3 in spanning tree and is port 65", 
   assert.match(out, /Cost\s+3\n\s+Port\s+65 \(Port-channel1\)/);
   assert.match(exec(l.devices.SW2, "show spanning-tree interface g0/1"), /no spanning tree info available for GigabitEthernet0\/1/);
 });
+
+test("a DHCP lease shows on the server until the PC releases it", async () => {
+  const { buildLab, runSolution } = await import("../ccna/engine/lab.js");
+  const { LABS } = await import("../ccna/labs/index.js");
+  const l = buildLab(LABS.find((x) => x.id === "ch-dhcp-sites"));
+  runSolution(l);
+  const r1 = l.devices.R1;
+  exec(r1, "end");
+  assert.match(exec(r1, "show ip dhcp binding"), /10\.20\.20\.21\s+0100\.5079\.6668\.42/);
+  assert.match(exec(r1, "show ip dhcp pool BRANCH"), /10\.20\.20\.22\s+10\.20\.20\.1\s+- 10\.20\.20\.254\s+1 \/ 20 \/ 254/);
+  assert.doesNotMatch(exec(r1, "show ip dhcp pool BRANCH"), /Pool HQ/);
+  exec(l.devices.PC2, "ipconfig /release");
+  assert.doesNotMatch(exec(r1, "show ip dhcp binding"), /10\.20\.20\.21/);
+});

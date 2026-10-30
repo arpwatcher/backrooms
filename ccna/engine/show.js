@@ -385,12 +385,36 @@ function dhcpLease(dev) {
   }).join("\n\n");
 }
 
-function dhcpPool(dev) {
+// a Windows or macOS client sends a client ID: 01 and its MAC
+const clientId = (mac) => {
+  const hex = "01" + mac.replace(/[^0-9a-f]/gi, "").toLowerCase();
+  return hex.match(/.{1,4}/g).join(".");
+};
+// a lease's end, in IOS's "Oct 31 2026 04:12 AM"
+const expires = (days) => {
+  const t = new Date(Date.now() + days * 86400000);
+  const h = t.getHours() % 12 || 12;
+  return `${t.toLocaleString("en-US", { month: "short" })} ${String(t.getDate()).padStart(2, "0")} ${t.getFullYear()} ${String(h).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")} ${t.getHours() < 12 ? "AM" : "PM"}`;
+};
+function dhcpPool(dev, only) {
   return Object.entries(dev.dhcp.pools)
+    .filter(([name]) => !only || name === only)
     .map(([name, p]) => {
       const bits = p.mask ? maskBits(p.mask) : 0;
       const size = p.mask ? 2 ** (32 - bits) - 2 : 0;
-      return `\nPool ${name} :\n Utilization mark (high/low)    : 100 / 0\n Subnet size (first/next)       : 0 / 0\n Total addresses                : ${size}\n Leased addresses               : 0\n Excluded addresses             : ${dev.dhcp.excluded.length}\n Pending event                  : none\n\n 1 subnet is currently in the pool :\n Current index        IP address range                    Leased/Excluded/Total\n ${pad(p.network ?? "0.0.0.0", 21)}${p.network ?? "0.0.0.0"}     - ${p.network ?? "0.0.0.0"}  0 / 0 / ${size}`;
+      // the pool's hosts, the excluded ones among them, its leases, and the
+      // next address it would hand out
+      const base = p.network ? parseIp(p.network) : 0;
+      const ipOf = (n) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+      const isExcl = (n) => dev.dhcp.excluded.some((e) => n >= parseIp(e.from) && n <= parseIp(e.to ?? e.from));
+      const leases = (dev.dhcp.leases ?? []).filter((l) => l.pool === name);
+      let excl = 0, next = null;
+      for (let n = base + 1; n <= base + size; n++) {
+        if (isExcl(n)) excl++;
+        else if (next === null && !leases.some((l) => parseIp(l.ip) === n)) next = n;
+      }
+      const first = p.network ? ipOf(base + 1) : "0.0.0.0", last = p.network ? ipOf(base + size) : "0.0.0.0";
+      return `\nPool ${name} :\n Utilization mark (high/low)    : 100 / 0\n Subnet size (first/next)       : 0 / 0\n Total addresses                : ${size}\n Leased addresses               : ${leases.length}\n Excluded addresses             : ${excl}\n Pending event                  : none\n\n 1 subnet is currently in the pool :\n Current index        IP address range                    Leased/Excluded/Total\n ${pad(next === null ? "0.0.0.0" : ipOf(next), 21)}${first}     - ${last}  ${leases.length} / ${excl} / ${size}`;
     })
     .join("\n");
 }
@@ -606,8 +630,8 @@ export const SHOWS = {
     ["show cdp", (d) => (d.cdp ? "Global CDP information:\n        Sending CDP packets every 60 seconds\n        Sending a holdtime value of 180 seconds\n        Sending CDPv2 advertisements is  enabled" : "% CDP is not enabled")],
     ["show lldp neighbors [detail]", (d) => cdpNeighbors(d, true)],
     ["show lldp", (d) => (d.lldp ? "Global LLDP Information:\n    Status: ACTIVE\n    LLDP advertisements are sent every 30 seconds\n    LLDP hold time advertised is 120 seconds" : "% LLDP is not enabled")],
-    ["show ip dhcp pool [<name:word>]", (d) => dhcpPool(d)],
-    ["show ip dhcp binding", (d) => ["Bindings from all pools not associated with VRF:", `${pad("IP address", 18)}${pad("Client-ID/", 20)}${pad("Lease expiration", 26)}Type`, `${pad("", 18)}Hardware address/`, ...(d.lab?.bindings ?? []).map((b) => `${pad(b.ip, 18)}${pad(b.mac, 20)}${pad("Mar 02 2026 12:00 AM", 26)}Automatic`)].join("\n")],
+    ["show ip dhcp pool [<name:word>]", (d, a) => dhcpPool(d, a.name)],
+    ["show ip dhcp binding", (d) => ["Bindings from all pools not associated with VRF:", `${pad("IP address", 18)}${pad("Client-ID/", 20)}${pad("Lease expiration", 26)}Type`, `${pad("", 18)}Hardware address/`, ...(d.lab?.bindings ?? []).map((b) => `${pad(b.ip, 18)}${pad(b.mac, 20)}${pad("Mar 02 2026 12:00 AM", 26)}Automatic`), ...(d.dhcp?.leases ?? []).map((l) => `${pad(l.ip, 18)}${pad(l.clientId ? clientId(l.mac) : l.mac, 20)}${pad(expires(l.days), 26)}Automatic`)].join("\n")],
     ["show ip dhcp conflict", () => "IP address        Detection method   Detection time          VRF"],
     ["show ip nat translations [verbose]", (d) => natTranslations(d)],
     ["show ip nat statistics", (d) => `Total active translations: ${natCounts(d).total} (${d.nat.statics.length} static, ${natCounts(d).dynamic} dynamic; ${natCounts(d).extended} extended)\nOutside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "outside").map((f) => f.name).join(", ")}\nInside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "inside").map((f) => f.name).join(", ")}\nHits: 0  Misses: 0\nDynamic mappings:\n${d.nat.dynamic.map((m) => `-- Inside Source\n[Id: 1] access-list ${m.acl} ${m.pool ? "pool " + m.pool : "interface " + m.out} refcount ${(d.nat.live ?? []).filter((t) => t.dynamic && t.pool === m.pool).length}`).join("\n")}`],
