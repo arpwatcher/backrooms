@@ -241,6 +241,22 @@ function ospfInterface(dev, name, brief) {
 
 export const cost = ospfCost;
 
+// one port in every VLAN it forwards, with its real role, cost and port ID
+function stpInterface(dev, name) {
+  const f = dev.interfaces[name];
+  const none = `no spanning tree info available for ${name}`;
+  if (!f || !f.switchport || f.channel || status(dev, f)[0] !== "up") return none;
+  const rows = [];
+  for (const v of Object.keys(dev.vlans).map(Number).filter((v) => v < 1002 && carries(dev, f, v)).sort((a, b) => a - b)) {
+    const p = stpPorts(dev, v).ports.find((x) => x.f === f);
+    if (!p) continue;
+    const edge = f.stp.portfast === "edge" || (dev.stp.portfastDefault && f.mode === "access");
+    rows.push(`${pad(`VLAN${String(v).padStart(4, "0")}`, 20)}${pad(p.role, 5)}${pad(p.state, 4)}${pad(stpCost(dev, f, v), 10)}${pad(`${f.stp.priority ?? 128}.${stpPortNumber(f)}`, 9)}P2p${edge ? " Edge" : ""}`);
+  }
+  if (!rows.length) return none;
+  return ["Vlan                Role Sts Cost      Prio.Nbr Type", "------------------- ---- --- --------- -------- --------------------------------", ...rows, ...(f.stp.bpduguard ? ["   Bpdu guard is enabled"] : [])].join("\n");
+}
+
 function spanningTree(dev, vlanArg) {
   const vlans = vlanArg ? [vlanArg] : Object.keys(dev.vlans).map(Number).filter((v) => v < 1002 && sortedInterfaces(dev).some((f) => f.switchport && carries(dev, f, v) && status(dev, f)[0] === "up")).sort((a, b) => a - b);
   if (!vlans.length) return "No spanning tree instance exists.";
@@ -554,7 +570,7 @@ export const SHOWS = {
     ["show ip eigrp neighbors", () => "EIGRP-IPv4 Neighbors for AS(100)\nH   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq"],
     ["show spanning-tree [vlan <v:num:1-4094>]", (d, a) => spanningTree(d, a.v)],
     ["show spanning-tree summary", (d) => stpSummary(d)],
-    ["show spanning-tree interface <name:iface> [detail]", (d, a) => (d.interfaces[a.name] ? `Vlan                Role Sts Cost      Prio.Nbr Type\n------------------- ---- --- --------- -------- --------------------------------\nVLAN${String(d.interfaces[a.name].accessVlan).padStart(4, "0")}            Desg FWD 19        128.${a.name.split("/").pop()}   P2p${d.interfaces[a.name].stp.portfast === "edge" ? " Edge" : ""}${d.interfaces[a.name].stp.bpduguard ? "\n   Bpdu guard is enabled" : ""}` : "no spanning tree info available for " + a.name)],
+    ["show spanning-tree interface <name:iface> [detail]", (d, a) => stpInterface(d, a.name)],
     ["show etherchannel summary", (d) => etherchannel(d)],
     ["show etherchannel port-channel", (d) => etherchannel(d)],
     ["show cdp neighbors", (d) => cdpNeighbors(d, false)],

@@ -272,13 +272,26 @@ export function stpRoot(dev, vlan) {
 export function stpCost(dev, f, vlan) {
   const set = f.stp.vlan[vlan]?.cost ?? f.stp.cost;
   if (set) return set;
-  // a link runs at the slower end's speed
-  const end = far(dev, f.name);
-  const gig = (f.name.startsWith("Gig") || f.name.startsWith("Port-channel")) && !end?.iface?.name.startsWith("Fast");
-  return dev.stp.pathcost === "long" ? (gig ? 20000 : 200000) : gig ? 4 : 19;
+  const long = dev.stp.pathcost === "long";
+  // a port-channel costs less than one member: two Gig links cost 3, two
+  // FastEthernet links 12 (short method), or 20000000 / Mbps (long method)
+  if (f.name.startsWith("Port-channel")) {
+    const group = Number(f.name.slice(12));
+    const up = Object.values(dev.interfaces).filter((m) => m.channel?.group === group && bundled(dev, m));
+    if (!up.length) return long ? 20000 : 4;
+    const gig = up.every((m) => linkGig(dev, m));
+    const n = up.length;
+    if (long) return Math.round(20000000 / (n * (gig ? 1000 : 100)));
+    return gig ? (n >= 8 ? 1 : n >= 4 ? 2 : n >= 2 ? 3 : 4) : (n >= 4 ? 8 : n === 3 ? 9 : n === 2 ? 12 : 19);
+  }
+  const gig = linkGig(dev, f);
+  return long ? (gig ? 20000 : 200000) : gig ? 4 : 19;
 }
-// the port number in a port ID (a 2960's G0/1 is port 25)
+// a link runs at the slower end's speed
+const linkGig = (dev, f) => f.name.startsWith("Gig") && !far(dev, f.name)?.iface?.name.startsWith("Fast");
+// the port number in a port ID (a 2960's G0/1 is port 25, Port-channel1 is 65)
 export function stpPortNumber(f) {
+  if (f.name.startsWith("Port-channel")) return 64 + Number(f.name.slice(12));
   const n = Number(f.name.split("/").pop()) || 0;
   return f.name.startsWith("Gig") && !f.name.startsWith("GigabitEthernet0/0") ? 24 + n : n;
 }
@@ -289,12 +302,22 @@ const lessBid = (a, b, v) => bridgePriority(a, v) - bridgePriority(b, v) || a.ma
 // does: root path costs, a root port per switch (lowest cost, then lowest
 // neighbor bridge ID, then lowest neighbor port ID), and on each link the
 // side with the better root path is designated; what is left blocks
+// the far end of a link, where a port-channel is reached through a bundled
+// member and ends at the far switch's port-channel
+function channelFar(d, f) {
+  if (!f.name.startsWith("Port-channel")) return far(d, f.name);
+  const group = Number(f.name.slice(12));
+  const m = Object.values(d.interfaces).find((x) => x.channel?.group === group && bundled(d, x));
+  const end = m && far(d, m.name);
+  const po = end?.iface?.channel && end.device.interfaces[`Port-channel${end.iface.channel.group}`];
+  return po ? { device: end.device, iface: po } : null;
+}
 export function stpPorts(dev, vlan) {
   const root = stpRoot(dev, vlan);
   const isSwitch = (d) => d.type === "switch" || d.type === "l3switch";
   const ports = (d) => Object.values(d.interfaces).filter((f) => f.switchport && !f.channel && status(d, f)[0] === "up" && carries(d, f, vlan));
   const peerOf = (d, f) => {
-    const end = far(d, f.name);
+    const end = channelFar(d, f);
     return end?.device && isSwitch(end.device) && end.iface && end.iface.switchport && carries(end.device, end.iface, vlan) ? end : null;
   };
   // root path cost of every switch (Dijkstra over the ports' costs)

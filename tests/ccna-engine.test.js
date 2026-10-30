@@ -226,3 +226,14 @@ test("a private address gets no answer from the Internet without NAT", async () 
   for (const c of ["interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "access-list 1 permit 192.168.10.0 0.0.0.255", "ip nat inside source list 1 interface g0/1 overload"]) exec(r1, c);
   assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 4/);
 });
+
+test("a port-channel of two gig links costs 3 in spanning tree and is port 65", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { S, cfg } = await import("../ccna/labs/kit.js");
+  const po = ["interface range g0/1 - 2", "channel-group 1 mode active", "interface port-channel 1", "switchport mode trunk"];
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [S("SW1", 20, 20, cfg(...po, "exit", "spanning-tree vlan 1 root primary")), S("SW2", 70, 20, cfg(...po))], links: [["SW1", "g0/1", "SW2", "g0/1"], ["SW1", "g0/2", "SW2", "g0/2"]] });
+  const out = exec(l.devices.SW2, "show spanning-tree vlan 1");
+  assert.match(out, /Po1\s+Root FWD 3\s+128\.65/);
+  assert.match(out, /Cost\s+3\n\s+Port\s+65 \(Port-channel1\)/);
+  assert.match(exec(l.devices.SW2, "show spanning-tree interface g0/1"), /no spanning tree info available for GigabitEthernet0\/1/);
+});
