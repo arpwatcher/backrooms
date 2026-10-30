@@ -43,6 +43,7 @@ const triangle = (extra = {}) => [
   HOST("PC1", 8, 48, "linux", { ip: "10.1.1.10/24", gateway: "10.1.1.1", mac: "0050.7966.6821" }),
   HOST("PC2", 92, 48, "windows", { ip: "10.2.2.10/24", gateway: "10.2.2.1", mac: "0050.7966.6822" }),
 ];
+const vlans1020 = ["vlan 10", "name USERS", "vlan 20", "name VOICE", "exit"];
 const triangleLinks = [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/2", "R3", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R3", "g0/0", "ISP", "g0/0"], ["R1", "g0/0", "PC1", "fa0"], ["R2", "g0/0", "PC2", "fa0"]];
 
 export default [
@@ -289,5 +290,42 @@ export default [
     },
     answers: { 7: "show ip ospf interface", 8: "Duplicate router ID" },
     teach: "Neighbor checklist: interface up and not passive, same subnet and mask, same area, same hello and dead timers, unique router IDs (plus authentication and MTU). A wildcard of 0.0.0.0 in a network statement matches exactly one address, so it has to be the interface's own.",
+  }),
+  // --- two distribution switches joined by a FastEthernet bundle ---------------------------------
+  hard({
+    id: "ch-bundle-stp", title: "Challenge: a slow bundle between the distribution switches",
+    cmds: ["show etherchannel summary", "channel-group mode active", "interface port-channel", "spanning-tree cost", "spanning-tree vlan root", "show spanning-tree vlan"],
+    devices: [
+      S("DSW1", 22, 0, cfg(...vlans1020, "interface range fa0/23 - 24", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "channel-group 1 mode desirable", "interface range g0/1 - 2", "switchport mode trunk", "switchport trunk allowed vlan 10,20")),
+      S("DSW2", 78, 0, cfg(...vlans1020, "interface range fa0/23 - 24", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "channel-group 1 mode active", "interface fa0/24", "switchport trunk allowed vlan 10", "interface range g0/1 - 2", "switchport mode trunk", "switchport trunk allowed vlan 10,20")),
+      S("ASW1", 22, 40, cfg(...vlans1020, "interface range g0/1 - 2", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/2", "switchport mode access", "switchport access vlan 20")),
+      S("ASW2", 78, 40, cfg(...vlans1020, "interface range g0/1 - 2", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/2", "switchport mode access", "switchport access vlan 20")),
+      HOST("PC1", 0, 72, "windows", { ip: "10.30.10.11/24", gateway: "10.30.10.1", mac: "0050.7966.6871" }),
+      HOST("PC2", 34, 80, "linux", { ip: "10.30.20.12/24", gateway: "10.30.20.1", mac: "0050.7966.6872" }),
+      HOST("PC3", 66, 72, "mac", { ip: "10.30.10.13/24", gateway: "10.30.10.1", mac: "0050.7966.6873" }),
+      HOST("PC4", 100, 80, "windows", { ip: "10.30.20.14/24", gateway: "10.30.20.1", mac: "0050.7966.6874" }),
+    ],
+    links: [["DSW1", "fa0/23", "DSW2", "fa0/23"], ["DSW1", "fa0/24", "DSW2", "fa0/24"], ["ASW1", "g0/1", "DSW1", "g0/1"], ["ASW1", "g0/2", "DSW2", "g0/1"], ["ASW2", "g0/1", "DSW2", "g0/2"], ["ASW2", "g0/2", "DSW1", "g0/2"], ["ASW1", "fa0/1", "PC1", "fa0"], ["ASW1", "fa0/2", "PC2", "fa0"], ["ASW2", "fa0/1", "PC3", "fa0"], ["ASW2", "fa0/2", "PC4", "fa0"]],
+    intro: "DSW1 and DSW2 are meant to be joined by Po1, two FastEthernet links bundled with LACP and trunking VLANs 10 and 20. Each access switch has a gigabit uplink to both. DSW1 should be root for VLAN 10 and DSW2 for VLAN 20. Today the bundle is not up, and once it is, spanning tree still sends traffic between the distribution switches the long way round.",
+    tasks: [
+      { text: "Investigate the bundle on both distribution switches.", check: (t) => need(["DSW1", "DSW2"].every((d) => t.ran(d, /^show (etherchannel|interfaces)/)), "Start with show etherchannel summary on DSW1 and DSW2.") },
+      { text: "Po1 bundles Fa0/23 and Fa0/24 on both switches, negotiated with LACP.", check: (t) => need(["DSW1", "DSW2"].every((d) => ["fa0/23", "fa0/24"].every((p) => t.bundled(d, p) && ["active", "passive"].includes(t.f(d, p).channel.mode))), "Both ends must speak LACP (active, or active and passive), and every member must have the same trunk settings. PAgP desirable on one side and LACP on the other never bundle.") },
+      { text: "Po1 trunks VLANs 10 and 20 only.", check: (t) => need(["DSW1", "DSW2"].every((d) => t.oper(d, "po1") === "trunk" && t.carries(d, "po1", 10) && t.carries(d, "po1", 20) && JSON.stringify(t.f(d, "po1").allowed) === "[10,20]"), "Configure the trunk under interface port-channel 1 so the members follow it.") },
+      { text: "DSW1 is root primary for VLAN 10 and secondary for VLAN 20; DSW2 the other way round.", check: (t) => need(t.root("DSW1", 10) && t.root("DSW2", 20) && t.dev("DSW1").stp.vlans[20]?.priority === 28672 && t.dev("DSW2").stp.vlans[10]?.priority === 28672, "spanning-tree vlan 10 root primary and vlan 20 root secondary on DSW1, the reverse on DSW2.") },
+      { text: "What STP cost does Po1 have on DSW2 by default?", ask: "Cost", check: (t) => need(is.num(t.reply, 12), "show spanning-tree vlan 10 on DSW2 lists Po1 with its cost. Two FastEthernet links bundled cost 12, not 19.") },
+      { text: "With that default, which is DSW2's root port for VLAN 10?", choices: ["Po1", "G0/1 (to ASW1)", "G0/2 (to ASW2)"], check: (t) => need(t.reply === "G0/1 (to ASW1)", "Through an access switch the cost is 4 + 4 = 8, which beats Po1's 12; between two equal paths the lower neighbor bridge ID wins.") },
+      { text: "Make both distribution switches use Po1 between them for both VLANs: set its STP cost to 6 on DSW1 and DSW2.", check: (t) => need(["DSW1", "DSW2"].every((d) => t.f(d, "po1").stp.cost === 6), "spanning-tree cost 6 under interface port-channel 1 on both switches.") },
+      { text: "After the change, which switch blocks ports for VLAN 10, and how many?", choices: ["DSW2, two ports", "DSW2, one port", "ASW1 and ASW2, one each", "ASW2, one port"], check: (t) => need(t.reply === "DSW2, two ports", "Compare root path costs on each access link: the access switches reach DSW1 at cost 4, DSW2 at 6, so on both links to DSW2 the access switch's port is designated and DSW2's port is Altn BLK.") },
+      { text: "Edge ports: PortFast and BPDU Guard on Fa0/1 and Fa0/2 of both access switches.", check: (t) => need(["ASW1", "ASW2"].every((s) => ["fa0/1", "fa0/2"].every((p) => t.f(s, p).stp.portfast === "edge" && t.f(s, p).stp.bpduguard === true)), "spanning-tree portfast and spanning-tree bpduguard enable on each PC port.") },
+      { text: "PC1 reaches PC3, and PC2 reaches PC4.", check: (t) => need(t.reach("PC1", "10.30.10.13") && t.reach("PC2", "10.30.20.14"), "Test with ping from PC1 and PC2. Something on the path still does not carry the VLAN.") },
+    ],
+    solution: {
+      DSW1: ["enable", "show etherchannel summary", "configure terminal", "interface range fa0/23 - 24", "channel-group 1 mode active", "interface port-channel 1", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "spanning-tree cost 6", "exit", "spanning-tree vlan 10 root primary", "spanning-tree vlan 20 root secondary"],
+      DSW2: ["enable", "show etherchannel summary", "configure terminal", "interface range fa0/23 - 24", "switchport trunk allowed vlan 10,20", "interface port-channel 1", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "spanning-tree cost 6", "exit", "spanning-tree vlan 20 root primary", "spanning-tree vlan 10 root secondary"],
+      ASW1: [...EN, "interface range fa0/1 - 2", "spanning-tree portfast", "spanning-tree bpduguard enable"],
+      ASW2: [...EN, "interface range fa0/1 - 2", "spanning-tree portfast", "spanning-tree bpduguard enable"],
+    },
+    answers: { 4: "12", 5: "G0/1 (to ASW1)", 7: "DSW2, two ports" },
+    teach: "A bundle only forms when both ends use the same protocol (LACP active/passive, PAgP desirable/auto, or on with on) and every member has identical settings; a member that differs is suspended. Configure a bundle on the port-channel interface. Spanning tree sees Po1 as one port with a lower cost than one member (two FastEthernet links 12, two gigabit links 3), and that can still lose to a two-hop gigabit path; spanning-tree cost on Po1 fixes it.",
   }),
 ];
