@@ -4,7 +4,7 @@
 // It reads the lab around it, so a ping or a DHCP renew only works when the
 // network really allows it.
 
-import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch } from "./ip.js";
+import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network } from "./ip.js";
 import { status, operMode, carries, hsrpRanking, aclAllows } from "./net.js";
 import { routeTable } from "./show.js";
 
@@ -979,6 +979,57 @@ function macos(dev, line) {
     default:
       return `zsh: command not found: ${cmd}`;
   }
+}
+
+// --- ipv6 from a router ------------------------------------------------------------------------------
+
+// connected prefixes on interfaces that are up, and static routes whose next
+// hop is on one of them (or that name an exit interface that is up)
+const v6Up = (d, f) => f?.ipv6?.length && status(d, f)[1] === "up";
+const owns6 = (d, ip) => Object.values(d.interfaces).some((f) => v6Up(d, f) && f.ipv6.some((a) => a.addr === ip));
+function owner6(dev, ip) {
+  for (const d of dev.lab?.all ?? []) for (const f of Object.values(d.interfaces)) if (v6Up(d, f) && f.ipv6.some((a) => a.addr === ip)) return { device: d, iface: f };
+  return null;
+}
+function table6(d) {
+  const out = [];
+  for (const f of Object.values(d.interfaces)) if (v6Up(d, f)) for (const a of f.ipv6) out.push({ net: ipv6Network(a.addr, a.bits), bits: a.bits, code: "C", out: f.name, ad: 0 });
+  for (const r of d.ipv6Routes ?? []) {
+    const conn = r.via && out.find((c) => c.code === "C" && ipv6Network(r.via, c.bits) === c.net);
+    if (r.out ? v6Up(d, d.interfaces[r.out]) : conn) out.push({ net: ipv6Network(r.addr, r.bits), bits: r.bits, code: "S", via: r.via, out: r.out ?? conn.out, ad: r.ad ?? 1 });
+  }
+  return out;
+}
+const best6 = (d, ip) => table6(d).filter((r) => ipv6Network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits || a.ad - b.ad)[0];
+const ROUTER6 = (d) => d.type === "router" || d.type === "l3switch";
+// hop by hop; a router other than the sender forwards only with ipv6 unicast-routing
+function path6(router, ip, seen = new Set(), sender = true) {
+  if (owns6(router, ip)) return [];
+  if (seen.has(router) || seen.size > 15 || (!sender && !router.ipv6Routing)) return null;
+  seen.add(router);
+  const best = best6(router, ip);
+  if (!best) return null;
+  if (best.code === "C" && !best.via) return owner6(router, ip) ? [ip] : null;
+  const o = owner6(router, best.via);
+  if (!o || !ROUTER6(o.device)) return null;
+  const rest = path6(o.device, ip, seen, false);
+  if (rest === null) return null;
+  return owns6(o.device, ip) ? [ip] : [best.via, ...rest];
+}
+// a ping or traceroute to an IPv6 address from a router: the hops, and
+// whether the reply finds its way back to the exit interface's address
+export function fromRouter6(router, ip) {
+  if (!router.lab?.all) return null;
+  if (owns6(router, ip)) return { ok: true, hops: [ip] };
+  const best = best6(router, ip);
+  if (!best) return { ok: false, noRoute: true, hops: [] };
+  const src = router.interfaces[best.out]?.ipv6.find((a) => !a.addr.startsWith("fe80"))?.addr;
+  const path = path6(router, ip);
+  const t = owner6(router, ip)?.device;
+  const ok = path !== null && Boolean(t && src && path6(t, src) !== null);
+  // a traceroute gets answers up to the last router that can route back
+  const hops = ok ? path : (path ?? []).filter((h) => { const o = owner6(router, h); return o && src && path6(o.device, src) !== null; }).slice(0, -1);
+  return { ok, hops };
 }
 
 // --- ntp -------------------------------------------------------------------------------------------

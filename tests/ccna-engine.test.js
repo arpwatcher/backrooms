@@ -464,3 +464,25 @@ test("HSRP routers only pair up within the same group number", async () => {
   exec(split.devices.R2, "enable");
   assert.match(exec(split.devices.R2, "show standby brief"), /Gi0\/0\s+21\s+100\s+Active\s+local\s+unknown/);
 });
+
+test("IPv6 ping from a router needs routes both ways and ipv6 unicast-routing in the middle", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, cfg } = await import("../ccna/labs/kit.js");
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [
+    R("R1", 10, 0, cfg("ipv6 unicast-routing", "interface g0/1", "ipv6 address 2001:db8:12::1/64", "no shutdown", "exit", "ipv6 route ::/0 2001:db8:12::2")),
+    R("R2", 50, 0, cfg("interface g0/1", "ipv6 address 2001:db8:12::2/64", "no shutdown", "interface g0/2", "ipv6 address 2001:db8:23::2/64", "no shutdown")),
+    R("R3", 90, 0, cfg("ipv6 unicast-routing", "interface g0/2", "ipv6 address 2001:db8:23::3/64", "no shutdown"))],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"]] });
+  const { R1, R2, R3 } = l.devices;
+  exec(R1, "enable");
+  assert.match(exec(R1, "ping 2001:db8:12::2"), /!!!!!\nSuccess rate is 100 percent/);
+  // R2 does not route IPv6 yet
+  assert.match(exec(R1, "ping 2001:db8:23::3"), /\.\.\.\.\.\nSuccess rate is 0 percent/);
+  for (const c of ["enable", "configure terminal", "ipv6 unicast-routing", "end"]) exec(R2, c);
+  // R3 has no route back to 2001:db8:12::/64
+  assert.match(exec(R1, "ping ipv6 2001:db8:23::3"), /Success rate is 0 percent/);
+  for (const c of ["enable", "configure terminal", "ipv6 route 2001:db8:12::/64 2001:db8:23::2", "end"]) exec(R3, c);
+  assert.match(exec(R1, "ping 2001:db8:23::3"), /Success rate is 100 percent/);
+  assert.match(exec(R1, "traceroute 2001:db8:23::3"), /  1 2001:DB8:12::2 .*\n  2 2001:DB8:23::3 /);
+  assert.match(exec(R3, "ping 2001:db8:99::1"), /% No valid route for destination/);
+});

@@ -3,11 +3,11 @@
 
 import { compile } from "./parse.js";
 import { IosError, newInterface, iface, DEFAULT_NAME } from "./state.js";
-import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6Prefix, expandIpv6, eui64 } from "./ip.js";
+import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6Prefix, expandIpv6, compressIpv6, eui64 } from "./ip.js";
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
-import { fromRouter, vtySession } from "./host.js";
+import { fromRouter, fromRouter6, vtySession } from "./host.js";
 import { status, stpRoot, bridgePriority } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
@@ -162,7 +162,10 @@ def("priv", "clock set <time:word> (<day:num:1-31> <month:word> | <month:word> <
   if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test(c.args.time)) fail("% Invalid input detected at '^' marker.");
   c.dev.clock.set = `${c.args.time} ${c.args.day} ${c.args.month} ${c.args.year}`;
 });
+def(EXEC, "ping ipv6 <target:word> [repeat <n:num:1-2147483647>]", (c) => c.say(ping6(c.dev, c.args.target, c.args.n ?? 5)));
+def(EXEC, "traceroute ipv6 <target:word>", (c) => c.say(trace6(c.dev, c.args.target)));
 def(EXEC, "ping <target:word> [source (<src:ip> | <srci:iface>)] [repeat <n:num:1-2147483647>]", (c) => {
+  if (c.args.target.includes(":")) return c.say(ping6(c.dev, c.args.target, c.args.n ?? 5));
   // a source must be an address of this device, on an interface that is up
   let src = null;
   if (c.args.srci) {
@@ -174,7 +177,7 @@ def(EXEC, "ping <target:word> [source (<src:ip> | <srci:iface>)] [repeat <n:num:
   c.say(ping(c.dev, c.args.target, c.args.n ?? 5, src));
 });
 def("priv", "ping", (c) => c.say("% Extended ping is not simulated here; give a target: ping <address>"));
-def(EXEC, "traceroute <target:word>", (c) => c.say(trace(c.dev, c.args.target)));
+def(EXEC, "traceroute <target:word>", (c) => c.say(c.args.target.includes(":") ? trace6(c.dev, c.args.target) : trace(c.dev, c.args.target)));
 def(EXEC, "telnet <target:word>", (c) => c.say(telnet(c.dev, c.args.target)));
 def(EXEC, "ssh -l <user:word> <target:word>", (c) => c.say(sshFrom(c.dev, c.args.target)));
 def("priv", "debug <what:rest>", (c) => {
@@ -1109,6 +1112,26 @@ export function reachable(dev, ip) {
   }
   if (dev.type !== "router" && !dev.ipRouting) return Boolean(dev.defaultGateway) && reachable({ ...dev, defaultGateway: null, ipRouting: false }, dev.defaultGateway);
   return routeTable(dev).some((r) => network(ip, r.bits) === r.net);
+}
+
+// IPv6 from a router: no ARP, so no lost first packet
+function ping6(dev, text, count) {
+  const ip = expandIpv6(text);
+  const shown = ip ? compressIpv6(ip) : text;
+  const head = `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${shown}, timeout is 2 seconds:`;
+  const r = ip && fromRouter6(dev, ip);
+  if (!r) return `${head}\n${".".repeat(count)}\nSuccess rate is 0 percent (0/${count})`;
+  if (r.noRoute) return `${head}\n% No valid route for destination\nSuccess rate is 0 percent (0/1)`;
+  return `${head}\n${(r.ok ? "!" : ".").repeat(count)}\nSuccess rate is ${r.ok ? 100 : 0} percent (${r.ok ? count : 0}/${count})${r.ok ? ", round-trip min/avg/max = 0/1/4 ms" : ""}`;
+}
+function trace6(dev, text) {
+  const ip = expandIpv6(text);
+  const r = ip && fromRouter6(dev, ip);
+  const head = `Type escape sequence to abort.\nTracing the route to ${ip ? compressIpv6(ip) : text}\n`;
+  if (!r || r.noRoute) return `${head}\n% No valid route for destination`;
+  const rows = r.hops.map((h, i) => `${String(i + 1).padStart(3)} ${compressIpv6(h)} ${i} msec ${i + 1} msec ${i} msec`);
+  if (!r.ok) for (let n = rows.length, i = n; i < n + 3; i++) rows.push(`${String(i + 1).padStart(3)}  *  *  *`);
+  return `${head}\n${rows.join("\n")}`;
 }
 
 function ping(dev, target, count, src = null) {
