@@ -636,10 +636,12 @@ function daiInterfaces(dev) {
   for (const f of sortedInterfaces(dev).filter((f) => f.switchport && /Ethernet/.test(f.name))) rows.push(` ${pad(short(f.name), 17)}${pad(f.daiTrust ? "Trusted" : "Untrusted", 16)}${pad(f.daiTrust ? "None" : "15", 14)}${f.daiTrust ? "N/A" : "1"}`);
   return rows.join("\n");
 }
-function snoopingBindings(dev) {
+function snoopingBindings(dev, all = false) {
   const mac = (m) => m.replace(/\./g, "").replace(/(..)(?=.)/g, "$1:").toUpperCase();
-  const b = dev.snooping.bindings ?? [];
-  return ["MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface", "------------------  ---------------  ----------  -------------  ----  --------------------", ...b.map((x) => `${pad(mac(x.mac), 20)}${pad(x.ip, 17)}${pad(x.lease - 2, 12)}${pad("dhcp-snooping", 15)}${pad(x.vlan, 6)}${x.iface}`), `Total number of bindings: ${b.length}`, ""].join("\n");
+  // show ip dhcp snooping binding lists the learned ones; show ip source
+  // binding the static ones too
+  const b = (dev.snooping.bindings ?? []).filter((x) => all || !x.static);
+  return ["MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface", "------------------  ---------------  ----------  -------------  ----  --------------------", ...b.map((x) => `${pad(mac(x.mac), 20)}${pad(x.ip, 17)}${pad(x.static ? "infinite" : x.lease - 2, 12)}${pad(x.static ? "static" : "dhcp-snooping", 15)}${pad(x.vlan, 6)}${x.iface}`), `Total number of bindings: ${b.length}`, ""].join("\n");
 }
 
 export const SHOWS = {
@@ -711,6 +713,7 @@ export const SHOWS = {
     ["show vtp status", (d) => vtpStatus(d)],
     ["show (arp | ip arp)", (d) => arp(d)],
     ["show ip dhcp snooping binding", (d) => snoopingBindings(d)],
+    ["show ip source binding", (d) => snoopingBindings(d, true)],
     ["show ip dhcp snooping", (d) => snooping(d)],
     ["show ip arp inspection interfaces", (d) => daiInterfaces(d)],
     ["show ip arp inspection [vlan <v:vlist>]", (d, a) => dai(d, a.v)],

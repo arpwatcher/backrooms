@@ -704,6 +704,16 @@ def("dhcp", "domain-name <name:word>", (c) => (pool(c).domain = c.args.name));
 def("dhcp", "lease (<d:num:0-365> [<h:num:0-23> [<m:num:0-59>]] | infinite)", (c) => (pool(c).lease = c.has("infinite") ? "infinite" : [c.args.d, c.args.h ?? 0, c.args.m ?? 0]));
 def("dhcp", "option <code:num:0-254> ip <ip:ip>", (c) => ((pool(c).options ??= {})[c.args.code] = c.args.ip));
 def("config", "ip dhcp snooping", (c) => (c.dev.snooping.enabled = true), { only: SW });
+// a static entry in the binding table, for a host with a fixed address (DAI
+// and IP Source Guard accept it like a DHCP lease)
+def("config", "ip source binding <mac:mac> vlan <v:num:1-4094> <ip:ip> interface <name:iface>", (c) => {
+  const b = (c.dev.snooping.bindings ??= []).filter((x) => x.mac !== c.args.mac || x.vlan !== c.args.v);
+  b.push({ mac: c.args.mac, ip: c.args.ip, vlan: c.args.v, iface: c.args.name, static: true });
+  c.dev.snooping.bindings = b;
+}, { only: SW });
+def("config", "no ip source binding <mac:mac> vlan <v:num:1-4094> <ip:ip> interface <name:iface>", (c) => {
+  c.dev.snooping.bindings = (c.dev.snooping.bindings ?? []).filter((x) => !(x.static && x.mac === c.args.mac && x.vlan === c.args.v));
+}, { only: SW });
 def("config", "no ip dhcp snooping", (c) => (c.dev.snooping.enabled = false), { only: SW });
 def("config", "ip dhcp snooping vlan <v:vlist>", (c) => (c.dev.snooping.vlans = [...new Set([...c.dev.snooping.vlans, ...c.args.v])].sort((a, b) => a - b)), { only: SW });
 def("config", "no ip dhcp snooping information option", (c) => (c.dev.snooping.option82 = false), { only: SW });

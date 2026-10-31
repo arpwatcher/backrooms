@@ -171,6 +171,7 @@ export function runningConfig(dev, onlyIface) {
   }
   if (dev.snooping.enabled) L.push("ip dhcp snooping");
   if (dev.snooping.vlans.length) L.push(`ip dhcp snooping vlan ${rangeText(dev.snooping.vlans)}`);
+  for (const b of dev.snooping.bindings ?? []) if (b.static) L.push(`ip source binding ${b.mac} vlan ${b.vlan} ${b.ip} interface ${b.iface.replace("FastEthernet", "Fa").replace("GigabitEthernet", "Gi")}`);
   if (!dev.snooping.option82) L.push("no ip dhcp snooping information option");
   if (dev.dai.vlans.length) L.push(`ip arp inspection vlan ${rangeText(dev.dai.vlans)}`);
   if (dev.type === "l3switch" && dev.ipRouting) L.push("ip routing");
