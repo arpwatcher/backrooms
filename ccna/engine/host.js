@@ -135,7 +135,7 @@ function neighbors(dev) {
     out.push({ ip: iface.ip, device, iface, mac: device.mac, path });
     for (const [g, grp] of Object.entries(iface.hsrp?.groups ?? {})) {
       if (!grp.ip) continue;
-      const active = hsrpRanking(device, grp.ip, device.lab?.all ?? [device])[0];
+      const active = hsrpRanking(device, grp.ip, device.lab?.all ?? [device], Number(g))[0];
       if (active?.device === device && active.iface === iface) out.push({ ip: grp.ip, device, iface, path, mac: (iface.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")) });
     }
   }

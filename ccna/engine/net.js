@@ -398,12 +398,20 @@ export function stpPorts(dev, vlan) {
 // --- hsrp -----------------------------------------------------------------------------------------------
 
 // all routers in the lab with this group's virtual ip, best first
-export function hsrpRanking(dev, groupIp, all) {
+export function hsrpRanking(dev, groupIp, all, group) {
+  // routers only hear hellos of their own group number and HSRP version:
+  // the same virtual IP in another group is a separate, competing group
+  if (group === undefined) {
+    for (const f of Object.values(dev.interfaces)) for (const [g, grp] of Object.entries(f.hsrp.groups)) if (grp.ip === groupIp && group === undefined) group = Number(g);
+  }
+  const version = Object.values(dev.interfaces).find((f) => f.hsrp.groups[group]?.ip === groupIp)?.hsrp.version ?? 1;
   const members = [];
   for (const d of all) {
     for (const f of Object.values(d.interfaces)) {
       for (const [g, grp] of Object.entries(f.hsrp.groups)) {
-        if (grp.ip === groupIp && !f.shutdown) members.push({ device: d, iface: f, group: Number(g), priority: grp.priority, preempt: grp.preempt, ip: f.ip });
+        if (grp.ip !== groupIp || f.shutdown || status(d, f)[1] !== "up") continue;
+        if (group !== undefined && (Number(g) !== group || (f.hsrp.version ?? 1) !== version)) continue;
+        members.push({ device: d, iface: f, group: Number(g), priority: grp.priority, preempt: grp.preempt, ip: f.ip });
       }
     }
   }

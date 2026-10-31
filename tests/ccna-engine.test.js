@@ -449,3 +449,18 @@ test("port security learns sticky MACs, and a violation drops or err-disables", 
     assert.match(exec(SW1, "show logging"), /%PORT_SECURITY-2-PSECURE_VIOLATION: Security violation occurred, caused by MAC address 0050\.7966\.6872 on port FastEthernet0\/1\./);
   }
 });
+
+test("HSRP routers only pair up within the same group number", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, S, cfg } = await import("../ccna/labs/kit.js");
+  const def = (g2) => ({ id: "t", tasks: [], solution: {}, devices: [
+    R("R1", 20, 0, cfg("interface g0/0", "ip address 10.1.20.2 255.255.255.0", "standby 20 ip 10.1.20.1", "standby 20 priority 110", "no shutdown")),
+    R("R2", 80, 0, cfg("interface g0/0", "ip address 10.1.20.3 255.255.255.0", `standby ${g2} ip 10.1.20.1`, "no shutdown")),
+    S("SW1", 50, 30)], links: [["R1", "g0/0", "SW1", "fa0/1"], ["R2", "g0/0", "SW1", "fa0/2"]] });
+  const same = buildLab(def(20));
+  exec(same.devices.R2, "enable");
+  assert.match(exec(same.devices.R2, "show standby brief"), /Gi0\/0\s+20\s+100\s+Standby 10\.1\.20\.2\s+local/);
+  const split = buildLab(def(21));
+  exec(split.devices.R2, "enable");
+  assert.match(exec(split.devices.R2, "show standby brief"), /Gi0\/0\s+21\s+100\s+Active\s+local\s+unknown/);
+});
