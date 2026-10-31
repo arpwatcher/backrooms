@@ -546,7 +546,11 @@ function ipv6Route(dev) {
       out.push(`L   ${compressIpv6(a.addr)}/128 [0/0]`, `     via ${f.name}, receive`);
     }
   }
-  for (const r of dev.ipv6Routes) out.push(`S   ${compressIpv6(r.addr)}/${r.bits} [${r.ad}/0]`, `     via ${r.via ? compressIpv6(r.via) : ""}${r.out ? (r.via ? ", " : "") + r.out : ""}`);
+  // a static route is in the table only when its next hop is on a connected
+  // prefix (or its exit interface is up)
+  const connected = sortedInterfaces(dev).filter((f) => status(dev, f)[1] === "up").flatMap((f) => f.ipv6.map((a) => ({ net: ipv6Network(a.addr, a.bits), bits: a.bits })));
+  const usable = (r) => (r.out ? status(dev, dev.interfaces[r.out] ?? {})[1] === "up" : connected.some((c) => ipv6Network(r.via, c.bits) === c.net));
+  for (const r of dev.ipv6Routes.filter(usable)) out.push(`S   ${compressIpv6(r.addr)}/${r.bits} [${r.ad}/0]`, `     via ${r.via ? compressIpv6(r.via) : ""}${r.out ? (r.via ? ", " : "") + r.out : ""}`);
   out.push("L   FF00::/8 [0/0]", "     via Null0, receive");
   out[0] = `IPv6 Routing Table - default - ${out.filter((l) => /^[CLS] /.test(l)).length} entries`;
   return out.join("\n");
