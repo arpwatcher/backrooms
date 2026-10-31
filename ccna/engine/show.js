@@ -487,16 +487,16 @@ function portSecurity(dev, name) {
       "Aging Type                 : Absolute",
       "SecureStatic Address Aging : Disabled",
       `Maximum MAC Addresses      : ${f.ps.max}`,
-      `Total MAC Addresses        : ${f.ps.macs.length}`,
-      `Configured MAC Addresses   : ${f.ps.sticky ? 0 : f.ps.macs.length}`,
-      `Sticky MAC Addresses       : ${f.ps.sticky ? f.ps.macs.length : 0}`,
-      "Last Source Address:Vlan   : 0000.0000.0000:0",
+      `Total MAC Addresses        : ${f.ps.macs.length + (f.ps.learned ?? []).length}`,
+      `Configured MAC Addresses   : ${f.ps.macs.length}`,
+      `Sticky MAC Addresses       : ${(f.ps.learned ?? []).filter((l) => l.sticky).length}`,
+      `Last Source Address:Vlan   : ${f.lastViolator ?? ((f.ps.learned ?? []).length ? `${f.ps.learned[f.ps.learned.length - 1].mac}:${f.accessVlan}` : "0000.0000.0000:0")}`,
       `Security Violation Count   : ${f.violations ?? 0}`,
     ].join("\n");
   }
   const rows = ["Secure Port  MaxSecureAddr  CurrentAddr  SecurityViolation  Security Action", "                (Count)       (Count)          (Count)", "----------------------------------------------------------------------------"];
-  for (const f of sortedInterfaces(dev).filter((f) => f.ps.enabled)) rows.push(`${pad(short(f.name), 13)}${pad(f.ps.max, 15)}${pad(f.ps.macs.length, 13)}${pad(f.violations ?? 0, 19)}${f.ps.violation[0].toUpperCase() + f.ps.violation.slice(1)}`);
-  rows.push("----------------------------------------------------------------------------", `Total Addresses in System (excluding one mac per port)     : 0`, "Max Addresses limit in System (excluding one mac per port) : 1024");
+  for (const f of sortedInterfaces(dev).filter((f) => f.ps.enabled)) rows.push(`${pad(short(f.name), 13)}${pad(f.ps.max, 15)}${pad(f.ps.macs.length + (f.ps.learned ?? []).length, 13)}${pad(f.violations ?? 0, 19)}${f.ps.violation[0].toUpperCase() + f.ps.violation.slice(1)}`);
+  rows.push("----------------------------------------------------------------------------", `Total Addresses in System (excluding one mac per port)     : ${Object.values(dev.interfaces).reduce((n, f) => n + Math.max(0, f.ps.macs.length + (f.ps.learned ?? []).length - 1), 0)}`, "Max Addresses limit in System (excluding one mac per port) : 1024");
   return rows.join("\n");
 }
 
@@ -590,6 +590,8 @@ function logging(dev) {
     `    Logging Exception size (4096 bytes)`,
     `    Trap logging: level ${lv[dev.logging.trap ?? 6]}, 15 message lines logged`,
     ...dev.logging.hosts.map((h) => `        Logging to ${h}  (udp port 514, audit disabled,\n              link up),\n              0 message lines logged,`),
+    // what the switch logged while the lab ran (violations, DAI drops)
+    ...(dev.logBuffer?.length ? ["", "Log Buffer (4096 bytes):", "", ...dev.logBuffer] : []),
   ].join("\n");
 }
 
@@ -616,12 +618,28 @@ function snooping(dev) {
   return rows.join("\n");
 }
 
-function dai(dev) {
-  const rows = [" Vlan     Configuration    Operation   ACL Match          Static ACL", " ----     -------------    ---------   ---------          ----------"];
-  for (const v of dev.dai.vlans) rows.push(`${pad(" " + v, 10)}${pad("Enabled", 17)}${pad(dev.vlans[v] ? "Active" : "Inactive", 12)}`);
-  rows.push("", " Interface        Trust State     Rate (pps)    Burst Interval", " ---------------  -----------     ----------    --------------");
+function dai(dev, only) {
+  const vlans = only ?? dev.dai.vlans;
+  const rows = ["", "Source Mac Validation      : Disabled", "Destination Mac Validation : Disabled", "IP Address Validation      : Disabled", "", " Vlan     Configuration    Operation   ACL Match          Static ACL", " ----     -------------    ---------   ---------          ----------"];
+  for (const v of vlans) rows.push(`${String(v).padStart(5)}     ${pad(dev.dai.vlans.includes(v) ? "Enabled" : "Disabled", 17)}${dev.dai.vlans.includes(v) && dev.vlans[v] ? "Active" : "Inactive"}`);
+  rows.push("", " Vlan     ACL Logging      DHCP Logging      Probe Logging", " ----     -----------      ------------      -------------");
+  for (const v of vlans) rows.push(`${String(v).padStart(5)}     Deny             Deny              Off`);
+  rows.push("", " Vlan      Forwarded        Dropped     DHCP Drops      ACL Drops", " ----      ---------        -------     ----------      ---------");
+  for (const v of vlans) {
+    const drops = (dev.logBuffer ?? []).filter((l) => l.includes("SW_DAI") && l.includes(`vlan ${v}.`)).length;
+    rows.push(`${String(v).padStart(5)}${String(dev.daiForwarded?.[v] ?? 0).padStart(14)}${String(drops).padStart(15)}${String(drops).padStart(15)}${"0".padStart(15)}`);
+  }
+  return rows.join("\n");
+}
+function daiInterfaces(dev) {
+  const rows = ["", " Interface        Trust State     Rate (pps)    Burst Interval", " ---------------  -----------     ----------    --------------"];
   for (const f of sortedInterfaces(dev).filter((f) => f.switchport && /Ethernet/.test(f.name))) rows.push(` ${pad(short(f.name), 17)}${pad(f.daiTrust ? "Trusted" : "Untrusted", 16)}${pad(f.daiTrust ? "None" : "15", 14)}${f.daiTrust ? "N/A" : "1"}`);
   return rows.join("\n");
+}
+function snoopingBindings(dev) {
+  const mac = (m) => m.replace(/\./g, "").replace(/(..)(?=.)/g, "$1:").toUpperCase();
+  const b = dev.snooping.bindings ?? [];
+  return ["MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface", "------------------  ---------------  ----------  -------------  ----  --------------------", ...b.map((x) => `${pad(mac(x.mac), 20)}${pad(x.ip, 17)}${pad(x.lease - 2, 12)}${pad("dhcp-snooping", 15)}${pad(x.vlan, 6)}${x.iface}`), `Total number of bindings: ${b.length}`, ""].join("\n");
 }
 
 export const SHOWS = {
@@ -675,7 +693,7 @@ export const SHOWS = {
     ["show ip nat statistics", (d) => `Total active translations: ${natCounts(d).total} (${d.nat.statics.length} static, ${natCounts(d).dynamic} dynamic; ${natCounts(d).extended} extended)\nOutside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "outside").map((f) => f.name).join(", ")}\nInside interfaces:\n  ${Object.values(d.interfaces).filter((f) => f.nat === "inside").map((f) => f.name).join(", ")}\nHits: 0  Misses: 0\nDynamic mappings:\n${d.nat.dynamic.map((m) => `-- Inside Source\n[Id: 1] access-list ${m.acl} ${m.pool ? "pool " + m.pool : "interface " + m.out} refcount ${(d.nat.live ?? []).filter((t) => t.dynamic && t.pool === m.pool).length}`).join("\n")}`],
     ["show (access-lists | ip access-lists) [(<n:num:1-2699> | <name:word>)]", (d, a, c) => accessLists(d, a.n ?? a.name, c.has("ip"))],
     ["show port-security [interface <name:iface>]", (d, a) => portSecurity(d, a.name)],
-    ["show port-security address", (d) => ["          Secure Mac Address Table", "-----------------------------------------------------------------------------", "Vlan    Mac Address       Type                          Ports   Remaining Age", ...Object.values(d.interfaces).flatMap((f) => f.ps.macs.map((m) => `${pad(f.accessVlan, 8)}${pad(m, 18)}${pad(f.ps.sticky ? "SecureSticky" : "SecureConfigured", 30)}${pad(short(f.name), 8)}-`))].join("\n")],
+    ["show port-security address", (d) => ["          Secure Mac Address Table", "-----------------------------------------------------------------------------", "Vlan    Mac Address       Type                          Ports   Remaining Age", ...sortedInterfaces(d).flatMap((f) => [...f.ps.macs.map((m) => [m, "SecureConfigured"]), ...(f.ps.learned ?? []).map((l) => [l.mac, l.sticky ? "SecureSticky" : "SecureDynamic"])].map(([m, type]) => `${pad(f.accessVlan, 8)}${pad(m, 18)}${pad(type, 30)}${pad(short(f.name), 8)}-`)), "-----------------------------------------------------------------------------", `Total Addresses in System (excluding one mac per port)     : ${Math.max(0, Object.values(d.interfaces).reduce((n, f) => n + Math.max(0, f.ps.macs.length + (f.ps.learned ?? []).length - 1), 0))}`, "Max Addresses limit in System (excluding one mac per port) : 1024"].join("\n")],
     ["show standby [brief]", (d, a, c) => standby(d, c.has("brief"), d.lab?.all)],
     ["show ipv6 interface brief", (d) => ipv6Brief(d)],
     ["show ipv6 interface [<name:iface>]", (d, a) => ipv6Brief({ ...d, interfaces: a.name ? { [a.name]: d.interfaces[a.name] } : d.interfaces })],
@@ -692,8 +710,10 @@ export const SHOWS = {
     ["show crypto key mypubkey rsa", (d) => (d.rsa ? `% Key pair was generated at: 0:12:44 UTC Mar 1 1993\nKey name: ${d.hostname}.${d.domainName}\n Storage Device: not specified\n Usage: General Purpose Key\n Key is not exportable.\n Key Data:\n  ${d.rsa} bit key` : "")],
     ["show vtp status", (d) => vtpStatus(d)],
     ["show (arp | ip arp)", (d) => arp(d)],
-    ["show ip dhcp snooping [binding]", (d) => snooping(d)],
-    ["show ip arp inspection [vlan <v:vlist>]", (d) => dai(d)],
+    ["show ip dhcp snooping binding", (d) => snoopingBindings(d)],
+    ["show ip dhcp snooping", (d) => snooping(d)],
+    ["show ip arp inspection interfaces", (d) => daiInterfaces(d)],
+    ["show ip arp inspection [vlan <v:vlist>]", (d, a) => dai(d, a.v)],
     ["show errdisable recovery", (d) => ["ErrDisable Reason            Timer Status", "-----------------            --------------", ...["bpduguard", "psecure-violation", "udld", "link-flap"].map((r) => `${pad(r, 29)}${d.errdisable.causes.includes(r) || d.errdisable.causes.includes("all") ? "Enabled" : "Disabled"}`), "", `Timer interval: ${d.errdisable.interval ?? 300} seconds`].join("\n")],
     ["show debugging", (d) => (d.debugs.length ? d.debugs.map((x) => `  ${x} debugging is on`).join("\n") : "")],
     ["show snmp community", (d) => Object.entries(d.snmp.communities).map(([n, c]) => `Community name: ${n}\nCommunity Index: ${n}\nCommunity SecurityName: ${n}\nstorage-type: nonvolatile        active   access: ${c.access === "rw" ? "read-write" : "read-only"}`).join("\n\n")],

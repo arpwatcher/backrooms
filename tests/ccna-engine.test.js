@@ -418,3 +418,34 @@ test("NTP syncs only to a server that answers and has time itself", async () => 
   assert.match(exec(R2, "show ntp status"), /unsynchronized/);
   void R1;
 });
+
+test("port security learns sticky MACs, and a violation drops or err-disables", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, S, HOST, cfg } = await import("../ccna/labs/kit.js");
+  const def = (violation) => ({
+    id: "t", tasks: [], solution: {},
+    devices: [
+      R("R1", 50, 0, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown")),
+      S("SW1", 50, 30, cfg("interface fa0/1", "switchport mode access", "switchport port-security", "switchport port-security mac-address sticky", `switchport port-security violation ${violation}`)),
+      HOST("PC1", 20, 60, "windows", { ip: "10.1.1.11/24", gateway: "10.1.1.1", mac: "0050.7966.6871" }),
+      HOST("PC2", 80, 60, "windows", { ip: "10.1.1.12/24", gateway: "10.1.1.1", mac: "0050.7966.6872" }),
+    ],
+    links: [["SW1", "g0/1", "R1", "g0/0"], ["SW1", "fa0/1", "PC1", "fa0"]],
+  });
+  for (const violation of ["restrict", "shutdown"]) {
+    const l = buildLab(def(violation));
+    const { SW1, PC1, PC2 } = l.devices;
+    assert.match(exec(PC1, "ping 10.1.1.1"), /Received = 4/);
+    exec(SW1, "enable");
+    assert.match(exec(SW1, "show running-config interface fa0/1"), /switchport port-security mac-address sticky 0050\.7966\.6871/);
+    // another device on the same port (moved from PC1's cable)
+    PC2.links.FastEthernet0 = PC1.links.FastEthernet0;
+    delete PC1.links.FastEthernet0;
+    SW1.links["FastEthernet0/1"] = { device: PC2, iface: "FastEthernet0" };
+    assert.match(exec(PC2, "ping 10.1.1.1"), /Received = 0/);
+    const ps = exec(SW1, "show port-security interface fa0/1");
+    assert.match(ps, /Security Violation Count {3}: 1/);
+    assert.match(ps, violation === "shutdown" ? /Secure-shutdown/ : /Secure-up/);
+    assert.match(exec(SW1, "show logging"), /%PORT_SECURITY-2-PSECURE_VIOLATION: Security violation occurred, caused by MAC address 0050\.7966\.6872 on port FastEthernet0\/1\./);
+  }
+});

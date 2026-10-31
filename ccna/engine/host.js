@@ -80,36 +80,38 @@ export function segment(dev) {
   if (!start) return [];
   const found = [];
   const seen = new Set();
-  const flood = (sw, vlan) => {
+  // path: each switch the frame crossed, the port it came in by and the one
+  // it left by (port security, DAI and DHCP snooping look at these)
+  const flood = (sw, vlan, path, entry) => {
     const key = `${sw.name}:${vlan}`;
     if (seen.has(key)) return;
     seen.add(key);
     const svi = sw.interfaces[`Vlan${vlan}`];
-    if (svi?.ip && !svi.shutdown) found.push({ device: sw, iface: svi });
+    if (svi?.ip && !svi.shutdown) found.push({ device: sw, iface: svi, path: [...path, { sw, entry, exit: null, vlan }] });
     for (const q of Object.values(sw.interfaces)) {
       const link = sw.links[q.name];
       if (!link || !q.switchport || q.errdisabled || status(sw, q)[0] !== "up") continue;
       const eff = asSwitched(sw, q);
       if (!carries(sw, eff, vlan)) continue;
       const tagged = operMode(sw, eff) === "trunk" && vlan !== eff.nativeVlan;
-      arrive(link.device, link.device.interfaces[link.iface], vlan, tagged);
+      arrive(link.device, link.device.interfaces[link.iface], vlan, tagged, [...path, { sw, entry, exit: eff, vlan }]);
     }
   };
-  const arrive = (d, f, vlan, tagged) => {
+  const arrive = (d, f, vlan, tagged, path) => {
     if (!f || f.shutdown || f.errdisabled) return;
     if (isSwitch(d) && f.switchport) {
       const eff = asSwitched(d, f);
       const mode = operMode(d, eff);
       if (mode === "trunk") {
-        if (!tagged) return flood(d, eff.nativeVlan);
-        if (carries(d, eff, vlan)) flood(d, vlan);
+        if (!tagged) return flood(d, eff.nativeVlan, path, eff);
+        if (carries(d, eff, vlan)) flood(d, vlan, path, eff);
         return;
       }
-      if (!tagged) flood(d, eff.accessVlan);
+      if (!tagged) flood(d, eff.accessVlan, path, eff);
       return;
     }
     if (d.type === "pc" || d.type === "server" || d.type === "cloud") {
-      if (!tagged) found.push({ device: d, iface: f });
+      if (!tagged) found.push({ device: d, iface: f, path });
       return;
     }
     // a router or a routed port: the interface itself for untagged frames,
@@ -118,10 +120,10 @@ export function segment(dev) {
       const mine = s === f || s.name.startsWith(`${f.name}.`);
       if (!mine || s.shutdown || !s.ip) continue;
       const enc = s.encap;
-      if (tagged ? enc?.vlan === vlan && !enc.native : s === f ? !enc : enc?.native) found.push({ device: d, iface: s });
+      if (tagged ? enc?.vlan === vlan && !enc.native : s === f ? !enc : enc?.native) found.push({ device: d, iface: s, path });
     }
   };
-  arrive(start.device, start.device.interfaces[start.iface], null, false);
+  arrive(start.device, start.device.interfaces[start.iface], null, false, []);
   return found;
 }
 
@@ -129,17 +131,72 @@ export function segment(dev) {
 // the active router
 function neighbors(dev) {
   const out = [];
-  for (const { device, iface } of segment(dev)) {
-    out.push({ ip: iface.ip, device, iface, mac: device.mac });
+  for (const { device, iface, path } of segment(dev)) {
+    out.push({ ip: iface.ip, device, iface, mac: device.mac, path });
     for (const [g, grp] of Object.entries(iface.hsrp?.groups ?? {})) {
       if (!grp.ip) continue;
       const active = hsrpRanking(device, grp.ip, device.lab?.all ?? [device])[0];
-      if (active?.device === device && active.iface === iface) out.push({ ip: grp.ip, device, iface, mac: (iface.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")) });
+      if (active?.device === device && active.iface === iface) out.push({ ip: grp.ip, device, iface, path, mac: (iface.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")) });
     }
   }
   return out;
 }
 const onSegment = (dev, ip) => neighbors(dev).find((n) => n.ip === ip) ?? null;
+
+// --- layer 2 security on the way: port security, DAI, DHCP snooping -----------------------------
+
+// a message on a switch's console, kept for show logging
+function logOn(sw, msg) {
+  (sw.logBuffer ??= []).push(`*Mar  1 00:${String(10 + (sw.logBuffer.length % 50)).padStart(2, "0")}:17.${String(100 + sw.logBuffer.length * 37).slice(-3)}: ${msg}`);
+}
+
+// the PC's frames enter its access port: port security learns the MAC or
+// counts a violation (protect and restrict drop the frame, shutdown also
+// err-disables the port)
+function portAdmit(dev) {
+  const start = dev.links[own(dev).name];
+  const sw = start?.device;
+  const f = sw && isSwitch(sw) ? sw.interfaces[start.iface] : null;
+  if (!f?.ps?.enabled) return true;
+  if (f.errdisabled) return false;
+  const learned = (f.ps.learned ??= []);
+  if (f.ps.macs.includes(dev.mac) || learned.some((l) => l.mac === dev.mac)) return true;
+  if (f.ps.macs.length + learned.length < f.ps.max) {
+    learned.push({ mac: dev.mac, vlan: f.accessVlan, sticky: f.ps.sticky });
+    return true;
+  }
+  f.violations = (f.violations ?? 0) + 1;
+  f.lastViolator = `${dev.mac}:${f.accessVlan}`;
+  if (f.ps.violation === "protect") return false;
+  logOn(sw, `%PORT_SECURITY-2-PSECURE_VIOLATION: Security violation occurred, caused by MAC address ${dev.mac} on port ${f.name}.`);
+  if (f.ps.violation === "shutdown") {
+    f.errdisabled = true;
+    logOn(sw, `%PM-4-ERR_DISABLE: psecure-violation error detected on ${shortName(f.name)}, putting ${shortName(f.name)} in err-disable state`);
+    logOn(sw, `%LINK-3-UPDOWN: Interface ${f.name}, changed state to down`);
+  }
+  return false;
+}
+const shortName = (n) => n.replace("FastEthernet", "Fa").replace("GigabitEthernet", "Gi");
+
+// an ARP from dev (asking for target) crosses each switch on the path: where
+// DAI runs on the VLAN and the port it came in by is not trusted, the
+// sender's MAC and IP must be in that switch's DHCP snooping bindings
+function arpPasses(dev, n) {
+  const ip = own(dev).ip;
+  // the request goes in by each switch's entry port, the reply comes back
+  // in by its exit port, from the target
+  const legs = [[dev.mac, ip, "entry", "Req", n.ip], [n.mac, n.ip, "exit", "Res", ip]];
+  for (const [mac, from, side, kind, to] of legs) {
+    for (const hop of n?.path ?? []) {
+      const port = hop[side];
+      if (!port || !hop.sw.dai?.vlans.includes(hop.vlan) || port.daiTrust) continue;
+      if ((hop.sw.snooping.bindings ?? []).some((b) => b.mac === mac && b.ip === from && b.vlan === hop.vlan)) continue;
+      logOn(hop.sw, `%SW_DAI-4-DHCP_SNOOPING_DENY: 1 Invalid ARPs (${kind}) on ${shortName(port.name)}, vlan ${hop.vlan}.([${mac}/${from}/${kind === "Req" ? "0000.0000.0000" : dev.mac}/${to}/00:10:17 UTC Mon Mar 1 1993])`);
+      return false;
+    }
+  }
+  return true;
+}
 
 function learnArp(dev, ip) {
   const n = onSegment(dev, ip);
@@ -354,14 +411,18 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   const f = own(dev);
   if (ip === "127.0.0.1") return true;
   if (!f.ip || !linkUp(dev)) return false;
+  if (!portAdmit(dev)) return false;
   if (local(dev, ip)) {
-    if (!onSegment(dev, ip)) return false;
+    const n = onSegment(dev, ip);
+    if (!n || !arpPasses(dev, n)) return false;
+    if (n.device.host && !portAdmit(n.device)) return false;
     learnArp(dev, ip);
     return true;
   }
   if (dev.host.apipa) return false;
   const gw = dev.host.gw;
   if (!gw || !local(dev, gw) || !onSegment(dev, gw)) return false;
+  if (!arpPasses(dev, onSegment(dev, gw))) return false;
   learnArp(dev, gw);
   const gwIf = onSegment(dev, gw).iface;
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
@@ -503,11 +564,15 @@ export function dhcpOffer(dev) {
   // a Discover is a broadcast from 0.0.0.0, and an inbound ACL on the
   // router's interface sees it like any other packet
   const discover = { proto: "udp", src: "0.0.0.0", dst: "255.255.255.255", sport: 68, dport: 67 };
-  for (const { device, iface } of segment(dev)) {
+  // DHCP snooping drops server messages (the Offer) that come in on an
+  // untrusted port, on every switch that snoops the VLAN
+  const snooped = (path) => path.some((h) => h.exit && h.sw.snooping?.enabled && h.sw.snooping.vlans.includes(h.vlan) && !h.exit.snoopTrust);
+  for (const { device, iface, path } of segment(dev)) {
     if (["pc", "server", "cloud"].includes(device.type)) continue;
     if (iface.aclIn && !aclAllows(device, iface.aclIn, discover)) continue;
+    if (snooped(path ?? [])) continue;
     const local = poolFor(device, iface);
-    if (local) return { pool: local, server: iface.ip, gw: iface, from: device };
+    if (local) return { pool: local, server: iface.ip, gw: iface, from: device, path };
     // a relay: the server must have a pool for the relay's subnet (giaddr),
     // the relay a route to the server, and the server a route back to the
     // giaddr, where it sends the Offer
@@ -515,19 +580,22 @@ export function dhcpOffer(dev) {
       const o = owner(dev, helper);
       const p = o && poolFor(o.device, iface);
       if (!p) continue;
-      if (ownsIp(device, helper) || (pathFrom(device, helper) !== null && pathFrom(o.device, iface.ip) !== null)) return { pool: p, server: helper, gw: iface, from: o.device };
+      if (ownsIp(device, helper) || (pathFrom(device, helper) !== null && pathFrom(o.device, iface.ip) !== null)) return { pool: p, server: helper, gw: iface, from: o.device, path };
     }
   }
   return null;
 }
 
 const dropLease = (dev) => {
-  for (const d of dev.lab?.all ?? []) if (d.dhcp?.leases) d.dhcp.leases = d.dhcp.leases.filter((l) => l.mac !== dev.mac);
+  for (const d of dev.lab?.all ?? []) {
+    if (d.dhcp?.leases) d.dhcp.leases = d.dhcp.leases.filter((l) => l.mac !== dev.mac);
+    if (d.snooping?.bindings) d.snooping.bindings = d.snooping.bindings.filter((b) => b.mac !== dev.mac);
+  }
 };
 function renew(dev) {
   const h = dev.host, f = own(dev);
   if (!h.dhcp) return "\nWindows IP Configuration\n\nThe operation failed as no adapter is in the state permissible for\nthis operation.";
-  const offer = dhcpOffer(dev);
+  const offer = portAdmit(dev) ? dhcpOffer(dev) : null;
   if (!offer) {
     apipa(dev);
     return `\nWindows IP Configuration\n\nAn error occurred while renewing interface ${IFNAME.windows} : unable to contact your DHCP server. Request has timed out.`;
@@ -548,6 +616,14 @@ function renew(dev) {
   const srv = offer.from.dhcp;
   srv.leases ??= [];
   srv.leases.push({ ip, mac: dev.mac, clientId: h.os !== "linux", pool: Object.keys(srv.pools).find((k) => srv.pools[k] === offer.pool), days: offer.pool.lease ?? 1 });
+  // each snooping switch where the client came in on an untrusted port
+  // records the binding (DAI checks ARPs against it)
+  for (const hop of offer.path ?? []) {
+    const sn = hop.sw.snooping;
+    if (!sn?.enabled || !sn.vlans.includes(hop.vlan) || !hop.entry || hop.entry.snoopTrust) continue;
+    sn.bindings = (sn.bindings ?? []).filter((b) => b.mac !== dev.mac);
+    sn.bindings.push({ mac: dev.mac, ip, vlan: hop.vlan, iface: hop.entry.name, lease: (offer.pool.lease ?? 1) * 86400 });
+  }
   h.gw = offer.pool.router?.[0] ?? null;
   h.dns = offer.pool.dns?.length ? [...offer.pool.dns] : h.saveDns ?? [];
   h.domain = offer.pool.domain ?? h.domain;

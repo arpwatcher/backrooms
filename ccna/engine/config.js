@@ -65,6 +65,8 @@ function interfaceBlock(dev, f) {
       if (f.ps.violation !== "shutdown") add(`switchport port-security violation ${f.ps.violation}`);
       if (f.ps.sticky) add("switchport port-security mac-address sticky");
       for (const m of f.ps.macs) add(`switchport port-security mac-address ${m}`);
+      // sticky addresses are written into the running config as they are learned
+      for (const l of f.ps.learned ?? []) if (l.sticky) add(`switchport port-security mac-address sticky ${l.mac}`);
     }
   } else if (dev.type === "l3switch" && /^(Fast|Gigabit)Ethernet/.test(f.name)) add("no switchport");
   if (f.channel) {
