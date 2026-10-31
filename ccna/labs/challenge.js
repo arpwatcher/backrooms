@@ -1,5 +1,6 @@
 import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
 import { aclAllows } from "../engine/net.js";
+import { ntpSync } from "../engine/host.js";
 
 // harder sims: bigger topologies, several topics at once, more tasks, faults
 // to find and questions answered from the output
@@ -506,5 +507,37 @@ export default [
     },
     answers: { 1: "Active", 7: "0000.0c07.ac0a" },
     teach: "HSRP routers pair up only within the same group number (and version); the same virtual IP in two groups gives two Active routers and duplicate-address messages. A backup gateway is only a backup if everything it needs is there before the failure: the VLAN on its trunk, the group, and an ACL that does not drop what the primary lets through. The virtual MAC stays the same through a failover, so hosts never notice.",
+  }),
+  // --- one clock for every device ---------------------------------------------------------------------------
+  hard({
+    id: "ch-time-ticket", title: "Challenge: one clock for every device",
+    cmds: ["ntp server", "show ntp associations", "show ntp status", "service timestamps log datetime msec", "logging host", "ip access-list extended"],
+    devices: [
+      SRV("SRV", 6, 74, "10.50.50.10/24", "10.50.50.1"),
+      S("SW1", 22, 42, cfg("interface vlan 1", "ip address 10.50.50.2 255.255.255.0", "no shutdown", "exit", "ip default-gateway 10.50.50.1")),
+      R("R1", 40, 8, cfg("interface g0/0", "ip address 10.50.50.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "exit", "ip route 10.0.23.0 255.255.255.252 10.0.12.2")),
+      R("R2", 80, 8, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "ip access-group WAN-IN in", "no shutdown", "exit", "ip route 10.50.50.0 255.255.255.0 10.0.12.1", "ip access-list extended WAN-IN", "permit icmp any any", "permit tcp any any")),
+      R("R3", 96, 42, cfg("interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", "exit", "ip route 0.0.0.0 0.0.0.0 10.0.23.1", "ntp server 10.0.12.1")),
+    ],
+    links: [["SRV", "fa0", "SW1", "fa0/1"], ["SW1", "g0/1", "R1", "g0/0"], ["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"]],
+    intro: "SRV (10.50.50.10) is the company's time and syslog server. R1 takes its time from SRV, and every other device from R1 (10.50.50.1 on the LAN, 10.0.12.1 towards R2). Every router sends its logs to SRV with dates and milliseconds in the timestamps. R3 is already pointed at R1 but its clock never syncs. R2's WAN-IN ACL must stay in place.",
+    tasks: [
+      { text: "Before you change anything: what ref clock does show ntp associations on R3 give for 10.0.12.1?", choices: [".INIT.", "127.127.1.1", "10.50.50.10", ".GPS."], check: (t) => need(t.reply === ".INIT.", "A server that never answered stays at .INIT. and stratum 16.") },
+      { text: "R1 takes its time from SRV.", check: (t) => need(t.dev("R1").ntp.servers.some((s) => s.ip === "10.50.50.10"), "ntp server 10.50.50.10 on R1.") },
+      { text: "R2 and SW1 take their time from R1, at the address nearest to them.", check: (t) => need(t.dev("R2").ntp.servers.some((s) => s.ip === "10.0.12.1") && t.dev("SW1").ntp.servers.some((s) => s.ip === "10.50.50.1"), "ntp server 10.0.12.1 on R2, ntp server 10.50.50.1 on SW1.") },
+      { text: "WAN-IN stays inbound on R2 G0/2, and also lets R3's NTP through (UDP 123), nothing more.", check: (t) => { const R2 = t.dev("R2"); const ok = (p) => aclAllows(R2, "WAN-IN", p); return need(t.f("R2", "g0/2").aclIn === "WAN-IN" && ok({ proto: "udp", src: "10.0.23.2", dst: "10.0.12.1", sport: 123, dport: 123 }) && !ok({ proto: "udp", src: "10.0.23.2", dst: "10.0.12.1", sport: 49152, dport: 161 }), "Add permit udp any any eq ntp to WAN-IN; a permit udp any any would let SNMP and everything else in too."); } },
+      { text: "Every router and SW1 is synchronized.", check: (t) => need(["R1", "R2", "R3", "SW1"].every((d) => ntpSync(t.dev(d))), "show ntp status on each: an unsynchronized device cannot reach its server, or its server has no time itself.") },
+      { text: "What stratum does R3 run at once it is synchronized?", ask: "Stratum", check: (t) => need(is.num(t.reply, 3), "show ntp status on R3. SRV counts as stratum 1, R1 is one more, R3 one more again.") },
+      { text: "R1, R2 and R3 send their logs to SRV, with log timestamps showing the date and milliseconds.", check: (t) => need(["R1", "R2", "R3"].every((d) => t.dev(d).logging.hosts.includes("10.50.50.10") && t.ran(d, /^service timestamps log datetime msec/)), "logging host 10.50.50.10 and service timestamps log datetime msec on each router.") },
+      { text: "Which protocol and port does a router use to send its log messages to SRV?", choices: ["UDP 514", "TCP 514", "UDP 162", "UDP 123"], check: (t) => need(t.reply === "UDP 514", "show logging lists each host with its port.") },
+    ],
+    solution: {
+      R3: ["enable", "show ntp associations", "configure terminal", "service timestamps log datetime msec", "logging host 10.50.50.10"],
+      R1: [...EN, "ntp server 10.50.50.10", "service timestamps log datetime msec", "logging host 10.50.50.10"],
+      R2: [...EN, "ntp server 10.0.12.1", "service timestamps log datetime msec", "logging host 10.50.50.10", "ip access-list extended WAN-IN", "permit udp any any eq ntp"],
+      SW1: [...EN, "ntp server 10.50.50.1"],
+    },
+    answers: { 0: ".INIT.", 5: "3", 7: "UDP 514" },
+    teach: "NTP is UDP 123 in both directions, so an ACL that permits only ICMP and TCP silently stops it. A client syncs only to a server that has time itself, and runs at that server's stratum plus one; until then show ntp associations shows .INIT. and stratum 16. Syslog is UDP 514, and service timestamps log datetime msec makes the messages from different devices line up.",
   }),
 ];
