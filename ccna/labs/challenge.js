@@ -474,4 +474,37 @@ export default [
     answers: { 0: "R7", 1: "10.10.10.254", 7: "1" },
     teach: "A client takes the first Offer it hears, and a rogue server on the same switch usually wins. DHCP snooping drops server messages that arrive on untrusted ports, so only the uplink toward the real server is trusted. DAI then checks every ARP on untrusted ports against the snooping bindings; a device with a fixed address needs a static binding (ip source binding) or an ARP ACL, or it falls off the network.",
   }),
+  // --- two gateways that do not back each other up -----------------------------------------------------
+  hard({
+    id: "ch-gateway-ticket", title: "Challenge: the backup gateway that is not a backup",
+    cmds: ["show standby brief", "show interfaces trunk", "show access-lists", "standby ip", "switchport trunk allowed vlan add", "ip access-list extended"],
+    devices: [
+      R("R1", 22, 0, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.1.10.2 255.255.255.0", "standby 10 ip 10.1.10.1", "standby 10 priority 110", "standby 10 preempt", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.1.20.2 255.255.255.0", "standby 20 ip 10.1.20.1", "standby 20 priority 110", "standby 20 preempt")),
+      R("R2", 78, 0, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.1.10.3 255.255.255.0", "standby 10 ip 10.1.10.1", "ip access-group USERS-IN in", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.1.20.3 255.255.255.0", "standby 21 ip 10.1.20.1", "exit", "ip access-list extended USERS-IN", "deny icmp any any", "deny tcp any any eq telnet", "permit ip any any")),
+      S("SW1", 50, 30, cfg("vlan 10", "name USERS", "vlan 20", "name SERVERS", "exit", "interface g0/1", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "interface g0/2", "switchport mode trunk", "switchport trunk allowed vlan 10", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/2", "switchport mode access", "switchport access vlan 20")),
+      HOST("PC1", 16, 66, "windows", { ip: "10.1.10.10/24", gateway: "10.1.10.1", mac: "0050.7966.6981" }),
+      HOST("SRV", 84, 66, "linux", { ip: "10.1.20.20/24", gateway: "10.1.20.1", mac: "0050.7966.6982" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["R2", "g0/0", "SW1", "g0/2"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "SRV", "fa0"]],
+    intro: "R1 and R2 are meant to share the gateways 10.1.10.1 (VLAN 10, users) and 10.1.20.1 (VLAN 20, servers) with HSRP, R1 active and R2 standby for both. Everything works today, but a failover test is coming: if R1's G0/0 goes down, users must still reach the server. R2's ACL USERS-IN is meant only to keep users from opening Telnet sessions through it.",
+    tasks: [
+      { text: "Investigate on R1, R2 and SW1.", check: (t) => need(["R1", "R2", "SW1"].every((d) => t.ran(d, /^show /)), "show standby brief on both routers, show interfaces trunk on SW1, show access-lists on R2.") },
+      { text: "Before you change anything: what State does show standby brief give R2 for its VLAN 20 group?", choices: ["Active", "Standby", "Listen", "Init"], check: (t) => need(t.reply === "Active", "R2 is in group 21 and R1 in group 20: they never hear each other, so each is Active in its own group.") },
+      { text: "R2 is in the same HSRP group as R1 for VLAN 20, with the same virtual IP.", check: (t) => need(t.dev("R2").interfaces["GigabitEthernet0/0.20"]?.hsrp.groups[20]?.ip === "10.1.20.1" && !t.dev("R2").interfaces["GigabitEthernet0/0.20"]?.hsrp.groups[21]?.ip, "no standby 21, then standby 20 ip 10.1.20.1 under G0/0.20 on R2.") },
+      { text: "SW1's trunk to R2 carries both VLANs.", check: (t) => need(t.carries("SW1", "g0/2", 10) && t.carries("SW1", "g0/2", 20), "switchport trunk allowed vlan add 20 on SW1 G0/2.") },
+      { text: "R1 is Active and R2 Standby for both groups.", check: (t) => need(["10.1.10.1", "10.1.20.1"].every((vip) => t.hsrpActive("R1", vip) && t.hsrp("R1", vip)[1]?.device === t.dev("R2")), "show standby brief on R2 should show Standby for groups 10 and 20, with R1 as Active.") },
+      { text: "USERS-IN stays inbound on R2 G0/0.10 and still stops Telnet from the users, but nothing else.", check: (t) => { const R2 = t.dev("R2"); const ok = (p) => aclAllows(R2, "USERS-IN", p); return need(t.f("R2", "g0/0.10").aclIn === "USERS-IN" && !ok({ proto: "tcp", src: "10.1.10.10", dst: "10.1.20.20", sport: 49152, dport: 23 }) && ok({ proto: "icmp", icmp: "echo", src: "10.1.10.10", dst: "10.1.20.20" }) && ok({ proto: "tcp", src: "10.1.10.10", dst: "10.1.20.20", sport: 49152, dport: 443 }), "Remove the entry that drops ICMP (no deny icmp any any under ip access-list extended USERS-IN), keep the Telnet entry."); } },
+      { text: "Failover test: with R1's G0/0 down, PC1 still reaches the server (checked by shutting it for a moment).", check: (t) => { const f = t.f("R1", "g0/0"); const was = f.shutdown; f.shutdown = true; const ok = t.reach("PC1", "10.1.20.20"); f.shutdown = was; return need(ok, "With R1 gone, R2 must be the gateway in both VLANs, carry both on its trunk, and let the pings through its ACL."); } },
+      { text: "During that failover, which MAC address does PC1 have for its gateway 10.1.10.1?", ask: "MAC", check: (t) => need(is.mac(t.reply, "0000.0c07.ac0a"), "The virtual MAC moves with the active router: HSRP version 1, group 10.") },
+      { text: "PC1 reaches the server with R1 back up.", check: (t) => need(!t.f("R1", "g0/0").shutdown && t.reach("PC1", "10.1.20.20"), "Ping 10.1.20.20 from PC1, with R1's G0/0 up.") },
+    ],
+    solution: {
+      R1: ["enable", "show standby brief"],
+      R2: ["enable", "show standby brief", "show access-lists", "configure terminal", "interface g0/0.20", "no standby 21", "standby 20 ip 10.1.20.1", "exit", "ip access-list extended USERS-IN", "no deny icmp any any"],
+      SW1: ["enable", "show interfaces trunk", "configure terminal", "interface g0/2", "switchport trunk allowed vlan add 20"],
+      PC1: ["ping 10.1.20.20"],
+    },
+    answers: { 1: "Active", 7: "0000.0c07.ac0a" },
+    teach: "HSRP routers pair up only within the same group number (and version); the same virtual IP in two groups gives two Active routers and duplicate-address messages. A backup gateway is only a backup if everything it needs is there before the failure: the VLAN on its trunk, the group, and an ACL that does not drop what the primary lets through. The virtual MAC stays the same through a failover, so hosts never notice.",
+  }),
 ];
