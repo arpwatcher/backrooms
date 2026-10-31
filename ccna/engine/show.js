@@ -504,13 +504,14 @@ function standby(dev, brief, all) {
   const rows = brief ? ["                     P indicates configured to preempt.", "                     |", `${pad("Interface", 11)}${pad("Grp", 5)}${pad("Pri", 4)}${pad("P", 2)}${pad("State", 8)}${pad("Active", 16)}${pad("Standby", 16)}Virtual IP`] : [];
   for (const f of sortedInterfaces(dev)) {
     for (const [g, grp] of Object.entries(f.hsrp.groups)) {
-      const rank = hsrpRanking(dev, grp.ip, all ?? [dev], Number(g));
+      // a group without a virtual IP never starts
+      const rank = grp.ip ? hsrpRanking(dev, grp.ip, all ?? [dev], Number(g)) : [];
       const me = rank.findIndex((m) => m.device === dev && m.iface === f);
-      const state = me === 0 ? "Active" : me === 1 ? "Standby" : "Listen";
+      const state = !grp.ip || status(dev, f)[1] !== "up" ? "Init" : me === 0 ? "Active" : me === 1 ? "Standby" : "Listen";
       const active = rank[0]?.device === dev ? "local" : rank[0]?.ip ?? "unknown";
       const stand = rank[1]?.device === dev ? "local" : rank[1]?.ip ?? "unknown";
-      if (brief) rows.push(`${pad(short(f.name), 11)}${pad(g, 5)}${pad(grp.priority, 4)}${pad(grp.preempt ? "P" : "", 2)}${pad(state, 8)}${pad(active, 16)}${pad(stand, 16)}${grp.ip}`);
-      else rows.push(`${f.name} - Group ${g}${f.hsrp.version === 2 ? " (version 2)" : ""}`, `  State is ${state}`, `  Virtual IP address is ${grp.ip}`, `  Active virtual MAC address is ${f.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")}`, "  Hello time 3 sec, hold time 10 sec", `  Preemption ${grp.preempt ? "enabled" : "disabled"}`, `  Active router is ${active}`, `  Standby router is ${stand}`, `  Priority ${grp.priority} (${grp.priority === 100 ? "default 100" : "configured " + grp.priority})`, `  Group name is "hsrp-${short(f.name)}-${g}" (default)`);
+      if (brief) rows.push(`${pad(short(f.name), 11)}${pad(g, 5)}${pad(grp.priority, 4)}${pad(grp.preempt ? "P" : "", 2)}${pad(state, 8)}${pad(active, 16)}${pad(stand, 16)}${grp.ip ?? "unknown"}`);
+      else rows.push(`${f.name} - Group ${g}${f.hsrp.version === 2 ? " (version 2)" : ""}`, `  State is ${state}`, `  Virtual IP address is ${grp.ip ?? "unknown"}`, `  Active virtual MAC address is ${f.hsrp.version === 2 ? "0000.0c9f.f" + Number(g).toString(16).padStart(3, "0") : "0000.0c07.ac" + Number(g).toString(16).padStart(2, "0")}`, "  Hello time 3 sec, hold time 10 sec", `  Preemption ${grp.preempt ? "enabled" : "disabled"}`, `  Active router is ${active}`, `  Standby router is ${stand}`, `  Priority ${grp.priority} (${grp.priority === 100 ? "default 100" : "configured " + grp.priority})`, `  Group name is "hsrp-${short(f.name)}-${g}" (default)`);
     }
   }
   return rows.join("\n");
