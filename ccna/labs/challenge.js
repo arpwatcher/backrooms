@@ -1,6 +1,7 @@
 import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
 import { aclAllows } from "../engine/net.js";
-import { ntpSync } from "../engine/host.js";
+import { ntpSync, fromRouter6 } from "../engine/host.js";
+import { expandIpv6 } from "../engine/ip.js";
 
 // harder sims: bigger topologies, several topics at once, more tasks, faults
 // to find and questions answered from the output
@@ -539,5 +540,38 @@ export default [
     },
     answers: { 0: ".INIT.", 5: "3", 7: "UDP 514" },
     teach: "NTP is UDP 123 in both directions, so an ACL that permits only ICMP and TCP silently stops it. A client syncs only to a server that has time itself, and runs at that server's stratum plus one; until then show ntp associations shows .INIT. and stratum 16. Syslog is UDP 514, and service timestamps log datetime msec makes the messages from different devices line up.",
+  }),
+  // --- IPv6 next to a working IPv4 network ----------------------------------------------------------------
+  hard({
+    id: "ch-dual-stack", title: "Challenge: add IPv6 next to a working IPv4 network",
+    cmds: ["ipv6 unicast-routing", "ipv6 address", "ipv6 address eui-64", "ipv6 route", "show ipv6 interface brief", "show ipv6 route", "ping ipv6"],
+    devices: [
+      R("R1", 18, 10, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "router ospf 1", "network 10.0.0.0 0.255.255.255 area 0")),
+      R("R2", 50, 10, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "ipv6 address 2001:db8:12::2/64", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "ipv6 address 2001:db8:23::2/64", "no shutdown", "router ospf 1", "network 10.0.0.0 0.255.255.255 area 0", "exit", "ipv6 route 2001:db8:3::/64 2001:db8:23::3")),
+      R("R3", 82, 10, cfg("ipv6 unicast-routing", "interface g0/0", "ip address 10.3.3.1 255.255.255.0", "ipv6 address 2001:db8:3::/64 eui-64", "no shutdown", "interface g0/2", "ip address 10.0.23.2 255.255.255.252", "ipv6 address 2001:db8:23::3/64", "no shutdown", "router ospf 1", "network 10.0.0.0 0.255.255.255 area 0", "exit", "ipv6 route ::/0 2001:db8:32::2")),
+      HOST("PC1", 4, 60, "windows", { ip: "10.1.1.10/24", gateway: "10.1.1.1", mac: "0050.7966.6961" }),
+      HOST("PC3", 96, 60, "linux", { ip: "10.3.3.10/24", gateway: "10.3.3.1", mac: "0050.7966.6963" }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R1", "g0/0", "PC1", "fa0"], ["R3", "g0/0", "PC3", "fa0"]],
+    intro: "IPv4 runs over OSPF and works. IPv6 is being added next to it with static routes: HQ LAN 2001:db8:1::/64 on R1 G0/0 (::1), links 2001:db8:12::/64 (R1 ::1, R2 ::2) and 2001:db8:23::/64 (R2 ::2, R3 ::3), branch LAN 2001:db8:3::/64 on R3 G0/0 with an EUI-64 address. R2 and R3 were started by someone else; R1 has no IPv6 yet. Don't touch IPv4.",
+    tasks: [
+      { text: "Investigate IPv6 on R2 and R3.", check: (t) => need(["R2", "R3"].every((d) => t.ran(d, /^show ipv6 /)), "show ipv6 interface brief and show ipv6 route on R2 and R3.") },
+      { text: "R1 routes IPv6, with 2001:db8:1::1/64 on G0/0 and 2001:db8:12::1/64 on G0/1.", check: (t) => { const has = (f, a) => t.f("R1", f).ipv6.some((x) => x.addr === expandIpv6(a) && x.bits === 64); return need(t.dev("R1").ipv6Routing && has("g0/0", "2001:db8:1::1") && has("g0/1", "2001:db8:12::1"), "ipv6 unicast-routing, then ipv6 address on both interfaces."); } },
+      { text: "R1 sends all other IPv6 traffic to R2.", check: (t) => need(t.dev("R1").ipv6Routes.some((r) => r.bits === 0 && r.via === expandIpv6("2001:db8:12::2")), "ipv6 route ::/0 2001:db8:12::2 on R1.") },
+      { text: "R2 forwards IPv6 and knows both LANs.", check: (t) => { const R2 = t.dev("R2"); const to = (net, via) => R2.ipv6Routes.some((r) => r.addr === expandIpv6(net) && r.bits === 64 && r.via === expandIpv6(via)); return need(R2.ipv6Routing && to("2001:db8:1::", "2001:db8:12::1") && to("2001:db8:3::", "2001:db8:23::3"), "R2 needs ipv6 unicast-routing (without it, it does not forward IPv6 at all) and a route to 2001:db8:1::/64."); } },
+      { text: "R3's default route points at a next hop that exists.", check: (t) => need(t.dev("R3").ipv6Routes.some((r) => r.bits === 0 && r.via === expandIpv6("2001:db8:23::2")) && !t.dev("R3").ipv6Routes.some((r) => r.via === expandIpv6("2001:db8:32::2")), "The next hop 2001:db8:32::2 is a typo: remove that route and point ::/0 at 2001:db8:23::2.") },
+      { text: "What is R3's global IPv6 address on G0/0?", ask: "IPv6 address", check: (t) => need(expandIpv6(t.reply.trim()) === expandIpv6("2001:DB8:3:0:201:42FF:FEA3:2468"), "show ipv6 interface brief on R3: EUI-64 builds the host part from the MAC (FFFE in the middle, the 7th bit flipped).") },
+      { text: "From R1, ping R3's G0/0 global address: every reply comes back.", check: (t) => need(t.ran("R1", /^ping (ipv6 )?2001:db8:3:/i) && fromRouter6(t.dev("R1"), expandIpv6("2001:DB8:3:0:201:42FF:FEA3:2468"))?.ok, "ping that address from R1. A route missing anywhere, there or back, or a router that does not route IPv6, and it fails.") },
+      { text: "Before R2 routed IPv6, what did that ping from R1 print?", choices: [".....", "% No valid route for destination", "UUUUU", "!!!!!"], check: (t) => need(t.reply === ".....", "R1 had a default route, so its packets left; R2 dropped them without a word.") },
+      { text: "IPv4 still works: PC1 reaches PC3.", check: (t) => need(t.reach("PC1", "10.3.3.10"), "IPv6 and IPv4 run side by side; nothing you did should touch IPv4.") },
+    ],
+    solution: {
+      R2: ["enable", "show ipv6 route", "configure terminal", "ipv6 unicast-routing", "ipv6 route 2001:db8:1::/64 2001:db8:12::1"],
+      R3: ["enable", "show ipv6 interface brief", "configure terminal", "no ipv6 route ::/0 2001:db8:32::2", "ipv6 route ::/0 2001:db8:23::2"],
+      R1: [...EN, "ipv6 unicast-routing", "interface g0/0", "ipv6 address 2001:db8:1::1/64", "no shutdown", "interface g0/1", "ipv6 address 2001:db8:12::1/64", "exit", "ipv6 route ::/0 2001:db8:12::2", "end", "ping 2001:db8:3:0:201:42ff:fea3:2468"],
+      PC1: ["ping 10.3.3.10"],
+    },
+    answers: { 5: "2001:DB8:3:0:201:42FF:FEA3:2468", 7: "....." },
+    teach: "A router forwards IPv6 only after ipv6 unicast-routing; before that it answers for its own addresses and drops everything passing through, silently. EUI-64 makes the host part from the MAC: split it, insert FFFE, flip the seventh bit. Static IPv6 routes work like IPv4 ones, both ways; a mistyped next hop leaves the route out of the table.",
   }),
 ];
