@@ -523,3 +523,13 @@ test("BPDU Guard err-disables a port that hears a switch, with the reason", asyn
   for (const c of ["configure terminal", "interface fa0/1", "shutdown"]) exec(sw1, c);
   assert.match(exec(sw1, "no shutdown"), /bpduguard error detected/);
 });
+
+test("a Layer 3 switch needs ip routing before router ospf", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { L3 } = await import("../ccna/labs/kit.js");
+  const d = buildLab({ id: "t", tasks: [], solution: {}, devices: [L3("DSW1", 50, 30)] }).devices.DSW1;
+  for (const c of ["enable", "configure terminal"]) exec(d, c);
+  assert.match(exec(d, "router ospf 1"), /% IP routing not enabled/);
+  exec(d, "ip routing");
+  assert.doesNotMatch(exec(d, "router ospf 1"), /%/);
+});

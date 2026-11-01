@@ -757,6 +757,8 @@ def("config", "no ipv6 route <pfx:ipv6pfx> [(<via:ipv6> | <out:iface>)]", (c) =>
 
 const RT = ["router", "l3switch"];
 def("config", "router ospf <pid:num:1-65535>", (c) => {
+  // a Layer 3 switch runs a routing protocol only after ip routing
+  if (c.dev.type === "l3switch" && !c.dev.ipRouting) fail("% IP routing not enabled");
   c.dev.ospf[c.args.pid] ??= { routerId: null, networks: [], passive: [], passiveDefault: false, notPassive: [], defaultOriginate: null, refBw: null, ranges: [], maxPaths: null };
   c.mode("router", { proto: "ospf", pid: c.args.pid });
 }, { only: RT });
