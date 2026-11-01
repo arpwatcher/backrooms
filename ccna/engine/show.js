@@ -6,7 +6,7 @@ import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
 import { ntpSync } from "./host.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -251,18 +251,35 @@ function ipProtocols(dev) {
 
 function ospfNeighbor(dev) {
   const rows = [`${pad("Neighbor ID", 15)}${pad("Pri", 6)}${pad("State", 17)}${pad("Dead Time", 12)}${pad("Address", 16)}Interface`];
-  for (const n of ospfNeighbors(dev).filter((n) => n.up)) rows.push(`${pad(n.rid, 15)}${pad(n.priority, 6)}${pad(`FULL/${role(n) === "-" ? "  -" : role(n)}`, 17)}${pad("00:00:3" + (n.rid.length % 10), 12)}${pad(n.ip, 16)}${n.iface.name}`);
+  for (const n of ospfNeighbors(dev).filter((n) => n.up)) {
+    // two DROTHERs stay at 2WAY; everyone else forms a full adjacency
+    const el = ospfElection(dev, n.iface);
+    const theirs = el ? el.roleOf(n.rid) : "  -";
+    const state = el && el.mine === "DROTHER" && theirs === "DROTHER" ? "2WAY" : "FULL";
+    rows.push(`${pad(n.rid, 15)}${pad(n.priority, 6)}${pad(`${state}/${theirs}`, 17)}${pad("00:00:3" + (n.rid.length % 10), 12)}${pad(n.ip, 16)}${n.iface.name}`);
+  }
   return rows.length > 1 ? rows.join("\n") : "";
 }
 
+// the neighbors up on an interface, and how many of them are full
+// adjacencies (two DROTHERs only reach 2WAY)
+function adjacency(dev, f) {
+  const el = ospfElection(dev, f);
+  const list = ospfNeighbors(dev).filter((n) => n.iface === f && n.up).map((n) => {
+    const r = el ? el.roleOf(n.rid) : "-";
+    return { rid: n.rid, role: r, full: !el || !(el.mine === "DROTHER" && r === "DROTHER") };
+  });
+  return { el, list, nbrs: list.length, full: list.filter((x) => x.full).length };
+}
 function ospfInterface(dev, name, brief) {
   const list = sortedInterfaces(dev).filter((f) => ospfOf(dev, f) && (!name || f.name === name));
   if (brief) {
     const rows = [`${pad("Interface", 11)}${pad("PID", 6)}${pad("Area", 16)}${pad("IP Address/Mask", 20)}${pad("Cost", 6)}${pad("State", 6)}Nbrs F/C`];
     for (const f of list) {
       const o = ospfOf(dev, f);
-      const nbrs = ospfNeighbors(dev).filter((n) => n.iface === f && n.up).length;
-      rows.push(`${pad(short(f.name), 11)}${pad(o.pid, 6)}${pad(o.area, 16)}${pad(`${f.ip}/${maskBits(f.mask)}`, 20)}${pad(cost(dev, f), 6)}${pad(f.name.startsWith("Loopback") ? "LOOP" : passive(dev, o.pid, f.name) ? "DR" : nbrs ? "DR" : "DR", 6)}${nbrs}/${nbrs}`);
+      const { nbrs, full, el } = adjacency(dev, f);
+      const state = f.name.startsWith("Loopback") ? "LOOP" : !el ? "P2P" : el.mine === "DROTHER" ? "DROTH" : el.mine;
+      rows.push(`${pad(short(f.name), 11)}${pad(o.pid, 6)}${pad(o.area, 16)}${pad(`${f.ip}/${maskBits(f.mask)}`, 20)}${pad(cost(dev, f), 6)}${pad(state, 6)}${full}/${nbrs}`);
     }
     return rows.join("\n");
   }
@@ -272,14 +289,17 @@ function ospfInterface(dev, name, brief) {
       const hello = f.ospf.hello ?? 10;
       const dead = f.ospf.dead ?? hello * 4;
       const p2p = f.ospf.network === "point-to-point";
+      const adj = adjacency(dev, f);
       return [
         `${f.name} is ${status(dev, f).join(", line protocol is ")}`,
         `  Internet Address ${f.ip}/${maskBits(f.mask)}, Area ${o.area}`,
         `  Process ID ${o.pid}, Router ID ${routerId(dev, o.pid)}, Network Type ${p2p ? "POINT_TO_POINT" : f.name.startsWith("Loopback") ? "LOOPBACK" : "BROADCAST"}, Cost: ${cost(dev, f)}`,
-        `  Transmit Delay is 1 sec, State ${p2p ? "POINT_TO_POINT" : "DR"}, Priority ${f.ospf.priority ?? 1}`,
+        `  Transmit Delay is 1 sec, State ${!adj.el ? "POINT_TO_POINT" : adj.el.mine}, Priority ${f.ospf.priority ?? 1}`,
+        ...(adj.el ? [adj.el.dr ? `  Designated Router (ID) ${adj.el.dr.rid}, Interface address ${adj.el.dr.ip}` : "  No designated router on this network", ...(adj.el.bdr ? [`  Backup Designated router (ID) ${adj.el.bdr.rid}, Interface address ${adj.el.bdr.ip}`] : adj.el.dr ? ["  No backup designated router on this network"] : [])] : []),
         `  Timer intervals configured, Hello ${hello}, Dead ${dead}, Wait ${dead}, Retransmit 5`,
         passive(dev, o.pid, f.name) ? "    No Hellos (Passive interface)" : `    Hello due in 00:00:0${hello % 10}`,
-        `  Neighbor Count is ${ospfNeighbors(dev).filter((n) => n.iface === f && n.up).length}, Adjacent neighbor count is ${ospfNeighbors(dev).filter((n) => n.iface === f && n.up).length}`,
+        `  Neighbor Count is ${adj.nbrs}, Adjacent neighbor count is ${adj.full}`,
+        ...adj.list.filter((x) => x.full).map((x) => `    Adjacent with neighbor ${x.rid}${x.role === "DR" ? "  (Designated Router)" : x.role === "BDR" ? "  (Backup Designated Router)" : ""}`),
       ].join("\n");
     })
     .join("\n");

@@ -209,6 +209,20 @@ export function ospfNeighbors(dev) {
 }
 
 // DR/BDR on a two-router segment: highest priority, then highest router id
+// the DR and BDR on a broadcast segment, elected among this router and its
+// neighbors that are up there: highest priority, then highest router ID;
+// priority 0 never takes either role. null on a point-to-point link
+export function ospfElection(dev, f) {
+  const o = ospfOf(dev, f);
+  if (!o || f.ospf.network === "point-to-point" || f.name.startsWith("Loopback")) return null;
+  const nbrs = ospfNeighbors(dev).filter((n) => n.iface === f && n.up);
+  if (nbrs.some((n) => n.p2p)) return null;
+  const all = [{ rid: routerId(dev, o.pid), ip: f.ip, priority: f.ospf.priority ?? 1, me: true }, ...nbrs.map((n) => ({ rid: n.rid, ip: n.ip, priority: n.priority }))];
+  const ranked = all.filter((m) => m.priority > 0).sort((a, b) => b.priority - a.priority || parseIp(b.rid) - parseIp(a.rid));
+  const dr = ranked[0] ?? null, bdr = ranked[1] ?? null;
+  const roleOf = (rid) => (dr?.rid === rid ? "DR" : bdr?.rid === rid ? "BDR" : "DROTHER");
+  return { dr, bdr, roleOf, mine: roleOf(all[0].rid) };
+}
 export function role(n) {
   if (n.p2p) return "-";
   const them = { pri: n.priority, rid: parseIp(n.rid) };

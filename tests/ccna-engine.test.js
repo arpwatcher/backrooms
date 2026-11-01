@@ -486,3 +486,21 @@ test("IPv6 ping from a router needs routes both ways and ipv6 unicast-routing in
   assert.match(exec(R1, "traceroute 2001:db8:23::3"), /  1 2001:DB8:12::2 .*\n  2 2001:DB8:23::3 /);
   assert.match(exec(R3, "ping 2001:db8:99::1"), /% No valid route for destination/);
 });
+
+test("OSPF elects one DR and BDR per segment, and DROTHERs stay at 2WAY", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { R, S, cfg } = await import("../ccna/labs/kit.js");
+  const r = (n, i, extra = []) => R(n, i * 20, 0, cfg("interface g0/0", `ip address 10.0.0.${i} 255.255.255.0`, "no shutdown", ...extra, "router ospf 1", `router-id ${i}.${i}.${i}.${i}`, "network 10.0.0.0 0.0.0.255 area 0"));
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [r("R1", 1, ["ip ospf priority 0"]), r("R2", 2), r("R3", 3), r("R4", 4, ["ip ospf priority 50"]), S("SW1", 50, 40)], links: [1, 2, 3, 4].map((i) => [`R${i}`, "g0/0", "SW1", `fa0/${i}`]) });
+  const { R1, R2, R3 } = l.devices;
+  for (const d of [R1, R2, R3]) exec(d, "enable");
+  const n1 = exec(R1, "show ip ospf neighbor");
+  assert.match(n1, /2\.2\.2\.2\s+1\s+2WAY\/DROTHER/);
+  assert.match(n1, /3\.3\.3\.3\s+1\s+FULL\/BDR/);
+  assert.match(n1, /4\.4\.4\.4\s+50\s+FULL\/DR /);
+  assert.match(exec(R3, "show ip ospf neighbor"), /2\.2\.2\.2\s+1\s+FULL\/DROTHER/);
+  const i2 = exec(R2, "show ip ospf interface g0/0");
+  assert.match(i2, /State DROTHER, Priority 1\n  Designated Router \(ID\) 4\.4\.4\.4, Interface address 10\.0\.0\.4\n  Backup Designated router \(ID\) 3\.3\.3\.3/);
+  assert.match(i2, /Neighbor Count is 3, Adjacent neighbor count is 2/);
+  assert.match(exec(R1, "show ip ospf interface brief"), /Gi0\/0\s+1\s+0\s+10\.0\.0\.1\/24\s+1\s+DROTH 2\/3/);
+});

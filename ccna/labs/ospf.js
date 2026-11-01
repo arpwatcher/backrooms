@@ -180,7 +180,7 @@ export default [
     ],
     solution: { R1: ["enable", "show ip ospf neighbor"] },
     answers: { 1: "2.2.2.2", 2: "10.0.12.2" },
-    teach: "Neighbor ID is the neighbor's router ID; Address is the IP of its interface on the shared link. State FULL means the databases are synchronized; FULL/DR, FULL/BDR or FULL/DROTHER show its role, and FULL/ - is a point-to-point link.",
+    teach: "Neighbor ID is the neighbor's router ID; Address is the IP of its interface on the shared link. State FULL means the databases are synchronized; FULL/DR, FULL/BDR or FULL/DROTHER show its role, and FULL/ - is a point-to-point link. On a shared segment two DROTHERs stop at 2WAY/DROTHER: they only form full adjacencies with the DR and BDR.",
   }),
   lab({
     id: "sim-ospf-fix", module: M, title: "Sim: R1 and R2 are not OSPF neighbors", kind: "sim",
