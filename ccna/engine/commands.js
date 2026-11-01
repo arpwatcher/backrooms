@@ -8,7 +8,7 @@ import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
 import { fromRouter, fromRouter6, vtySession } from "./host.js";
-import { status, stpRoot, bridgePriority } from "./net.js";
+import { status, stpRoot, bridgePriority, routerId } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
 
@@ -188,7 +188,11 @@ def("priv", "(undebug all | no debug all)", (c) => {
   c.dev.debugs = [];
   c.say("All possible debugging has been turned off");
 });
-def("priv", "clear ip ospf process", (c) => c.ask({ prompt: "Reset ALL OSPF processes? [no]: ", answer: (a) => (/^\s*y/i.test(a) ? "" : "") }));
+def("priv", "clear ip ospf process", (c) => c.ask({ prompt: "Reset ALL OSPF processes? [no]: ", answer: (a) => {
+  // the restart takes the configured router ID
+  if (/^\s*y/i.test(a)) for (const p of Object.values(c.dev.ospf)) p.ridRunning = null;
+  return "";
+} }));
 def("priv", "clear mac address-table dynamic", () => {});
 def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
 def("priv", "clear (counters | arp-cache | ip dhcp binding *)", () => {});
@@ -774,7 +778,9 @@ def("router", "router-id <id:ip>", (c) => {
   onlyProto(c, "ospf");
   const p = proc(c);
   const had = p.routerId !== null || p.networks.length;
+  if (had && !p.ridRunning) p.ridRunning = routerId(c.dev, c.dev.ctx.pid);
   p.routerId = c.args.id;
+  if (p.ridRunning === p.routerId) p.ridRunning = null;
   if (had) c.say("% OSPF: Reload or use \"clear ip ospf process\" command, for this to take effect");
 });
 def("router", "eigrp router-id <id:ip>", (c) => (onlyProto(c, "eigrp"), (proc(c).routerId = c.args.id)));

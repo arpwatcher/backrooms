@@ -162,6 +162,8 @@ export function passive(dev, pid, name) {
 
 export function routerId(dev, pid) {
   const p = dev.ospf[pid];
+  // a router ID changed on a running process waits for clear ip ospf process
+  if (p?.ridRunning) return p.ridRunning;
   if (p?.routerId) return p.routerId;
   const ips = (filter) => Object.values(dev.interfaces).filter(filter).map((f) => f.ip).filter(Boolean);
   const pick = (list) => list.sort((a, b) => parseIp(b) - parseIp(a))[0];
