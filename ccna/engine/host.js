@@ -171,12 +171,38 @@ function portAdmit(dev) {
   logOn(sw, `%PORT_SECURITY-2-PSECURE_VIOLATION: Security violation occurred, caused by MAC address ${dev.mac} on port ${f.name}.`);
   if (f.ps.violation === "shutdown") {
     f.errdisabled = true;
+    f.errReason = "psecure-violation";
     logOn(sw, `%PM-4-ERR_DISABLE: psecure-violation error detected on ${shortName(f.name)}, putting ${shortName(f.name)} in err-disable state`);
     logOn(sw, `%LINK-3-UPDOWN: Interface ${f.name}, changed state to down`);
   }
   return false;
 }
 const shortName = (n) => n.replace("FastEthernet", "Fa").replace("GigabitEthernet", "Gi");
+
+// after every command: a port with BPDU Guard that hears a BPDU (a switch on
+// the other end of the cable) is err-disabled at once. Returns the console
+// messages per device
+export function settle(all) {
+  const said = new Map();
+  for (const d of all) {
+    if (!isSwitch(d)) continue;
+    for (const f of Object.values(d.interfaces)) {
+      if (!f.switchport || f.shutdown || f.errdisabled || f.channel) continue;
+      const edge = f.stp.portfast === "edge" || (d.stp.portfastDefault && f.mode === "access");
+      const guard = f.stp.bpduguard === true || (f.stp.bpduguard !== false && d.stp.bpduguardDefault && edge);
+      if (!guard || status(d, f)[0] !== "up") continue;
+      const end = d.links[f.name];
+      const g = end && end.device.interfaces[end.iface];
+      if (!g || !isSwitch(end.device) || !g.switchport || g.shutdown) continue;
+      f.errdisabled = true;
+      f.errReason = "bpduguard";
+      const msgs = [`%SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU on port ${shortName(f.name)} with BPDU Guard enabled. Disabling port.`, `%PM-4-ERR_DISABLE: bpduguard error detected on ${shortName(f.name)}, putting ${shortName(f.name)} in err-disable state`];
+      for (const m of msgs) logOn(d, m);
+      said.set(d, [...(said.get(d) ?? []), ...msgs]);
+    }
+  }
+  return said;
+}
 
 // an ARP from dev (asking for target) crosses each switch on the path: where
 // DAI runs on the VLAN and the port it came in by is not trusted, the

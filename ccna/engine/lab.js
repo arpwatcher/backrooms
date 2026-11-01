@@ -8,7 +8,7 @@ import { normalize } from "./iface.js";
 import { maskBits, network, parseIp } from "./ip.js";
 import { status, operMode, bundled, ospfNeighbors, stpRoot, hsrpRanking, ospfOf, passive, routerId, carries, far } from "./net.js";
 import { routeTable, cost } from "./show.js";
-import { makeHost, canReach, vtySession } from "./host.js";
+import { makeHost, canReach, vtySession, settle } from "./host.js";
 
 export function buildLab(def) {
   const devices = {};
@@ -45,7 +45,8 @@ export function buildLab(def) {
     if (pool) (srv.leases ??= []).push({ ip: f.ip, mac: dev.mac, clientId: h.os !== "linux", pool, days: srv.pools[pool].lease ?? 1 });
   }
   // ports that start err-disabled (a port-security or bpduguard story)
-  for (const [name, ports] of Object.entries(def.errdisabled ?? {})) for (const p of ports) devices[name].interfaces[normalize(p)].errdisabled = true;
+  for (const [name, ports] of Object.entries(def.errdisabled ?? {})) for (const p of ports) Object.assign(devices[name].interfaces[normalize(p)], { errdisabled: true, errReason: def.errReason ?? "psecure-violation" });
+  settle(all);
   return { def, devices, answers: {} };
 }
 

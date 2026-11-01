@@ -504,3 +504,22 @@ test("OSPF elects one DR and BDR per segment, and DROTHERs stay at 2WAY", async 
   assert.match(i2, /Neighbor Count is 3, Adjacent neighbor count is 2/);
   assert.match(exec(R1, "show ip ospf interface brief"), /Gi0\/0\s+1\s+0\s+10\.0\.0\.1\/24\s+1\s+DROTH 2\/3/);
 });
+
+test("BPDU Guard err-disables a port that hears a switch, with the reason", async () => {
+  const { buildLab } = await import("../ccna/engine/lab.js");
+  const { S } = await import("../ccna/labs/kit.js");
+  const l = buildLab({ id: "t", tasks: [], solution: {}, devices: [S("SW1", 20, 20), S("SW2", 70, 20)], links: [["SW1", "fa0/1", "SW2", "fa0/1"]] });
+  const sw1 = l.devices.SW1;
+  exec(sw1, "enable");
+  exec(sw1, "configure terminal");
+  exec(sw1, "interface fa0/1");
+  exec(sw1, "switchport mode access");
+  const out = exec(sw1, "spanning-tree bpduguard enable");
+  assert.match(out, /%SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU on port Fa0\/1 with BPDU Guard enabled\. Disabling port\./);
+  assert.match(out, /%PM-4-ERR_DISABLE: bpduguard error detected on Fa0\/1, putting Fa0\/1 in err-disable state/);
+  exec(sw1, "end");
+  assert.match(exec(sw1, "show interfaces status err-disabled"), /Fa0\/1\s+err-disabled bpduguard/);
+  // shut / no shut brings it back, and the BPDU takes it down again
+  for (const c of ["configure terminal", "interface fa0/1", "shutdown"]) exec(sw1, c);
+  assert.match(exec(sw1, "no shutdown"), /bpduguard error detected/);
+});

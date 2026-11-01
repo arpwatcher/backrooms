@@ -87,6 +87,11 @@ function trunks(dev) {
 }
 
 function intStatus(dev, errOnly) {
+  if (errOnly) {
+    const rows = [`${pad("Port", 10)}${pad("Name", 19)}${pad("Status", 13)}${pad("Reason", 21)}Err-disabled Vlans`];
+    for (const f of sortedInterfaces(dev).filter((f) => f.errdisabled && !f.shutdown)) rows.push(`${pad(short(f.name), 10)}${pad((f.description ?? "").slice(0, 18), 19)}${pad("err-disabled", 13)}${f.errReason ?? "psecure-violation"}`);
+    return rows.join("\n");
+  }
   const rows = [`${pad("Port", 10)}${pad("Name", 19)}${pad("Status", 13)}${pad("Vlan", 11)}${pad("Duplex", 7)}${pad("Speed", 7)}Type`];
   for (const f of sortedInterfaces(dev).filter((f) => /^(Fast|Gigabit)Ethernet|^Port-channel/.test(f.name) && (!errOnly || f.errdisabled))) {
     const [st] = status(dev, f);

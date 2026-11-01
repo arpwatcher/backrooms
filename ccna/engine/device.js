@@ -5,7 +5,7 @@
 import { match } from "./parse.js";
 import { COMMANDS, setFreshMaker } from "./commands.js";
 import { IosError, createDevice } from "./state.js";
-import { hostExec, hostPrompt, hostComplete } from "./host.js";
+import { hostExec, hostPrompt, hostComplete, settle } from "./host.js";
 
 export { createDevice } from "./state.js";
 
@@ -96,6 +96,14 @@ function attempt(dev, mode, line) {
 }
 
 export function exec(dev, raw) {
+  const out = execOnly(dev, raw);
+  if (!dev.lab?.all) return out;
+  // what the command set off elsewhere (a port err-disabled) is printed on
+  // the console of the device it happened on
+  const said = settle(dev.lab.all).get(dev);
+  return said ? [out, ...said].filter(Boolean).join("\n") : out;
+}
+function execOnly(dev, raw) {
   if (dev.host) return hostExec(dev, raw);
   const piped = PIPE.exec(raw);
   if (piped && !dev.pending && /^\s*(do\s+)?sh/i.test(piped[1])) {
