@@ -1,5 +1,5 @@
 import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
-import { aclAllows } from "../engine/net.js";
+import { aclAllows, ospfElection } from "../engine/net.js";
 import { ntpSync, fromRouter6 } from "../engine/host.js";
 import { expandIpv6 } from "../engine/ip.js";
 
@@ -573,5 +573,42 @@ export default [
     },
     answers: { 5: "2001:DB8:3:0:201:42FF:FEA3:2468", 7: "....." },
     teach: "A router forwards IPv6 only after ipv6 unicast-routing; before that it answers for its own addresses and drops everything passing through, silently. EUI-64 makes the host part from the MAC: split it, insert FFFE, flip the seventh bit. Static IPv6 routes work like IPv4 ones, both ways; a mistyped next hop leaves the route out of the table.",
+  }),
+  // --- four routers on one segment, and who becomes DR ---------------------------------------------------
+  hard({
+    id: "ch-ospf-election", title: "Challenge: four routers on one segment",
+    cmds: ["show ip ospf neighbor", "show ip ospf interface", "ip ospf priority", "router-id", "ip ospf hello-interval", "clear ip ospf process"],
+    devices: [
+      R("R1", 10, 6, cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "router ospf 1", "router-id 1.1.1.1", "network 10.0.0.0 0.0.0.255 area 0", "network 10.1.1.0 0.0.0.255 area 0", "passive-interface g0/1")),
+      R("R2", 37, 0, cfg("interface g0/0", "ip address 10.0.0.2 255.255.255.0", "ip ospf hello-interval 5", "no shutdown", "interface loopback 0", "ip address 2.2.2.2 255.255.255.255", "router ospf 1", "router-id 2.2.2.2", "network 10.0.0.0 0.0.0.255 area 0", "network 2.2.2.2 0.0.0.0 area 0")),
+      R("R3", 63, 0, cfg("interface g0/0", "ip address 10.0.0.3 255.255.255.0", "no shutdown", "interface loopback 0", "ip address 3.3.3.3 255.255.255.255", "router ospf 1", "router-id 1.1.1.1", "network 10.0.0.0 0.0.0.255 area 0", "network 3.3.3.3 0.0.0.0 area 0")),
+      R("R4", 90, 6, cfg("interface g0/0", "ip address 10.0.0.4 255.255.255.0", "ip ospf priority 255", "no shutdown", "interface g0/1", "ip address 10.4.4.1 255.255.255.0", "no shutdown", "router ospf 1", "router-id 4.4.4.4", "network 10.0.0.0 0.0.0.255 area 0", "network 10.4.4.0 0.0.0.255 area 0", "passive-interface g0/1")),
+      S("SW1", 50, 48),
+      HOST("PC1", 4, 80, "windows", { ip: "10.1.1.10/24", gateway: "10.1.1.1", mac: "0050.7966.6971" }),
+      HOST("PC4", 96, 80, "linux", { ip: "10.4.4.10/24", gateway: "10.4.4.1", mac: "0050.7966.6974" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "fa0/1"], ["R2", "g0/0", "SW1", "fa0/2"], ["R3", "g0/0", "SW1", "fa0/3"], ["R4", "g0/0", "SW1", "fa0/4"], ["R1", "g0/1", "PC1", "fa0"], ["R4", "g0/1", "PC4", "fa0"]],
+    intro: "R1-R4 share the segment 10.0.0.0/24 on SW1, all in OSPF area 0. The design: R1 is the DR, R2 the BDR, and R3 and R4 may never take either role. Router IDs are 1.1.1.1 to 4.4.4.4. Today the adjacencies are not what they should be, and the wrong router is DR.",
+    tasks: [
+      { text: "Investigate on all four routers.", check: (t) => need(["R1", "R2", "R3", "R4"].every((d) => t.ran(d, /^show ip ospf/)), "show ip ospf neighbor and show ip ospf interface g0/0 on each router.") },
+      { text: "Before you change anything: in show ip ospf neighbor on R1, which router is listed as DR?", choices: ["4.4.4.4 (R4)", "2.2.2.2 (R2)", "1.1.1.1 (R3)", "None: R1 has no neighbors"], check: (t) => need(t.reply === "4.4.4.4 (R4)", "Read the State column on R1: FULL/DR.") },
+      { text: "R2 hears the others again: its hello and dead timers match theirs.", check: (t) => need(t.ospfAdj("R2", "R1") && (t.f("R2", "g0/0").ospf.hello ?? 10) === 10, "show ip ospf interface g0/0 on R2 shows Hello 5; no ip ospf hello-interval (or 10) puts it back.") },
+      { text: "Every router has its own router ID.", check: (t) => need(t.routerId("R3", 1) === "3.3.3.3" && t.ospfAdj("R1", "R3"), "R3 uses 1.1.1.1 like R1, so they never become neighbors: router-id 3.3.3.3 under router ospf 1, then clear ip ospf process.") },
+      { text: "Priorities: R1 wins DR and R2 BDR, and R3 and R4 can never take either role.", check: (t) => need((t.f("R3", "g0/0").ospf.priority ?? 1) === 0 && (t.f("R4", "g0/0").ospf.priority ?? 1) === 0 && (t.f("R1", "g0/0").ospf.priority ?? 1) > (t.f("R2", "g0/0").ospf.priority ?? 1), "ip ospf priority 0 on R3 and R4 G0/0, and a higher priority on R1 than on R2.") },
+      { text: "The election is not preemptive: reset OSPF on all four routers so it runs again.", check: (t) => need(["R1", "R2", "R3", "R4"].every((d) => t.ran(d, /^clear ip ospf (1 )?process/)), "clear ip ospf process on each router (answer yes).") },
+      { text: "Now R1 is DR and R2 BDR, as every router sees it.", check: (t) => need(["R1", "R2", "R3", "R4"].every((d) => { const el = ospfElection(t.dev(d), t.f(d, "g0/0")); return el?.dr?.rid === "1.1.1.1" && el?.bdr?.rid === "2.2.2.2"; }), "show ip ospf interface g0/0 on each router: Designated Router (ID) 1.1.1.1, Backup 2.2.2.2.") },
+      { text: "How many full adjacencies does R3 have on G0/0 now?", ask: "Number", check: (t) => need(is.num(t.reply, 2), "show ip ospf interface g0/0 on R3: Adjacent neighbor count. A DROTHER is full only with the DR and the BDR.") },
+      { text: "What State does R3 show for R4 in show ip ospf neighbor?", choices: ["2WAY/DROTHER", "FULL/DROTHER", "FULL/BDR", "INIT/DROTHER"], check: (t) => need(t.reply === "2WAY/DROTHER", "Two DROTHERs never exchange databases: they stop at 2WAY.") },
+      { text: "PC1 reaches PC4.", check: (t) => need(t.reach("PC1", "10.4.4.10"), "Check the routes on R1 and R4 once the adjacencies are up.") },
+    ],
+    solution: {
+      R1: ["enable", "show ip ospf neighbor", "configure terminal", "interface g0/0", "ip ospf priority 200", "end", "clear ip ospf process", "yes"],
+      R2: ["enable", "show ip ospf interface g0/0", "configure terminal", "interface g0/0", "no ip ospf hello-interval", "ip ospf priority 100", "end", "clear ip ospf process", "yes"],
+      R3: ["enable", "show ip ospf neighbor", "configure terminal", "router ospf 1", "router-id 3.3.3.3", "interface g0/0", "ip ospf priority 0", "end", "clear ip ospf process", "yes"],
+      R4: ["enable", "show ip ospf interface g0/0", "configure terminal", "interface g0/0", "ip ospf priority 0", "end", "clear ip ospf process", "yes"],
+      PC1: ["ping 10.4.4.10"],
+    },
+    answers: { 1: "4.4.4.4 (R4)", 7: "2", 8: "2WAY/DROTHER" },
+    teach: "On a shared segment OSPF elects one DR and one BDR: highest interface priority, then highest router ID; priority 0 never takes a role. Everyone else is a DROTHER, full only with the DR and BDR and at 2WAY with each other. The election is not preemptive, so a new priority only counts after the process restarts. Hello and dead timers must match, and two routers with the same router ID never become neighbors.",
   }),
 ];
