@@ -649,4 +649,36 @@ export default [
     answers: { 1: "2", 2: "Every address in the pool is already taken", 3: "Access list 1 does not include its address", 7: "1" },
     teach: "Dynamic NAT without overload maps one inside host to one pool address for as long as the translation lives, so a pool of two serves two users. PAT (overload) lets them all share an address, told apart by port. The NAT access list decides who is translated at all: a host it misses goes out with its private address and never gets an answer.",
   }),
+  // --- a Layer 3 switch takes over from a router on a stick ----------------------------------------------
+  hard({
+    id: "ch-l3-core", title: "Challenge: a Layer 3 switch takes over the routing",
+    cmds: ["ip routing", "interface vlan", "no switchport", "switchport trunk encapsulation dot1q", "router ospf", "show ip interface brief"],
+    devices: [
+      R("R1", 50, 0, cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.252", "no shutdown", "interface loopback 0", "ip address 1.1.1.1 255.255.255.255", "router ospf 1", "router-id 1.1.1.1", "network 10.0.0.0 0.0.0.3 area 0", "network 1.1.1.1 0.0.0.0 area 0")),
+      L3("DSW1", 50, 28, cfg("vlan 10", "name STAFF", "exit", "interface vlan 10", "ip address 10.10.10.1 255.255.255.0", "no shutdown", "interface vlan 20", "ip address 10.10.20.1 255.255.255.0", "no shutdown", "interface g0/1", "description to R1")),
+      S("ASW1", 50, 54, cfg("vlan 10", "name STAFF", "vlan 20", "name LAB", "exit", "interface g0/1", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "interface fa0/1", "switchport mode access", "switchport access vlan 10", "interface fa0/2", "switchport mode access", "switchport access vlan 20")),
+      HOST("PC1", 18, 82, "windows", { ip: "10.10.10.10/24", gateway: "10.10.10.1", mac: "0050.7966.6941" }),
+      HOST("PC2", 82, 82, "linux", { ip: "10.10.20.10/24", gateway: "10.10.20.1", mac: "0050.7966.6942" }),
+    ],
+    links: [["R1", "g0/0", "DSW1", "g0/1"], ["DSW1", "g0/2", "ASW1", "g0/1"], ["ASW1", "fa0/1", "PC1", "fa0"], ["ASW1", "fa0/2", "PC2", "fa0"]],
+    intro: "DSW1, a Layer 3 switch, is replacing the router on a stick: it routes between VLAN 10 (STAFF, 10.10.10.0/24) and VLAN 20 (LAB, 10.10.20.0/24) with SVIs at .1, trunks both VLANs to ASW1 on G0/2, and reaches R1 over a routed port, 10.0.0.2/30 on G0/1, with OSPF area 0 (SVIs passive). Someone started it and gave up.",
+    tasks: [
+      { text: "Before you change anything: what Status and Protocol does show ip interface brief give Vlan20 on DSW1?", choices: ["down/down", "up/down", "up/up", "administratively down/down"], check: (t) => need(t.reply === "down/down", "An SVI comes up only when its VLAN exists and an active port carries it.") },
+      { text: "VLAN 20 exists on DSW1 with the name LAB.", check: (t) => need(t.dev("DSW1").vlans[20]?.name === "LAB", "vlan 20, name LAB on DSW1.") },
+      { text: "G0/2 is a static trunk to ASW1 (not one DTP happened to negotiate), carrying VLANs 10 and 20.", check: (t) => need(t.f("DSW1", "g0/2").mode === "trunk" && t.oper("DSW1", "g0/2") === "trunk" && t.carries("DSW1", "g0/2", 10) && t.carries("DSW1", "g0/2", 20), "switchport mode trunk on G0/2. On a switch that also speaks ISL it is refused until switchport trunk encapsulation dot1q.") },
+      { text: "DSW1 routes between its VLANs.", check: (t) => need(t.dev("DSW1").ipRouting && t.up("DSW1", "vlan10") && t.up("DSW1", "vlan20"), "ip routing, and both SVIs up/up.") },
+      { text: "G0/1 is a routed port, 10.0.0.2/30.", check: (t) => need(t.f("DSW1", "g0/1").switchport === false && t.ip("DSW1", "g0/1") === "10.0.0.2/30", "no switchport on G0/1, then the address.") },
+      { text: "OSPF area 0 on DSW1 with R1 as a neighbor, the SVIs passive, and router ID 10.0.0.2.", check: (t) => need(t.ospfAdj("DSW1", "R1") && t.routerId("DSW1", 1) === "10.0.0.2" && t.passive("DSW1", 1, "Vlan10") && t.passive("DSW1", 1, "Vlan20") && t.ospfOf("DSW1", "vlan10") && t.ospfOf("DSW1", "vlan20"), "router ospf 1 (it needs ip routing first), router-id 10.0.0.2, networks for the link and both VLANs, passive-interface for the SVIs.") },
+      { text: "Which next hop does R1 use for 10.10.20.0/24?", ask: "Address", check: (t) => need(is.ip(t.reply, "10.0.0.2"), "show ip route ospf on R1.") },
+      { text: "Without the router-id command, which router ID would DSW1 have taken?", choices: ["10.10.20.1", "10.0.0.2", "10.10.10.1", "0.0.0.0"], check: (t) => need(t.reply === "10.10.20.1", "With no loopback, OSPF takes the highest address on an interface that is up: here an SVI, not the link to R1.") },
+      { text: "PC1 reaches PC2 and R1's loopback 1.1.1.1.", check: (t) => need(t.reach("PC1", "10.10.20.10") && t.reach("PC1", "1.1.1.1"), "Ping from PC1. Check the trunk, the SVIs, ip routing and the OSPF routes on both sides.") },
+    ],
+    solution: {
+      DSW1: ["enable", "show ip interface brief", "configure terminal", "vlan 20", "name LAB", "exit", "interface g0/2", "switchport trunk encapsulation dot1q", "switchport mode trunk", "switchport trunk allowed vlan 10,20", "exit", "ip routing", "interface g0/1", "no switchport", "ip address 10.0.0.2 255.255.255.252", "no shutdown", "exit", "router ospf 1", "router-id 10.0.0.2", "network 10.0.0.0 0.0.0.3 area 0", "network 10.10.10.0 0.0.0.255 area 0", "network 10.10.20.0 0.0.0.255 area 0", "passive-interface vlan 10", "passive-interface vlan 20", "end"],
+      PC1: ["ping 10.10.20.10", "ping 1.1.1.1"],
+      R1: ["enable", "show ip route ospf"],
+    },
+    answers: { 0: "down/down", 6: "10.0.0.2", 7: "10.10.20.1" },
+    teach: "On a Layer 3 switch an SVI is up only when its VLAN exists and some port in it is up (a trunk counts); ip routing turns the switch into a router, and router ospf is refused without it. no switchport turns a port into a routed port that takes an IP address. Trunks on a switch that also supports ISL need switchport trunk encapsulation dot1q first. Without router-id or a loopback, OSPF picks the highest IP on an up interface, which on a Layer 3 switch is often an SVI.",
+  }),
 ];
