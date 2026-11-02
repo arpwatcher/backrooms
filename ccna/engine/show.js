@@ -97,7 +97,13 @@ function intStatus(dev, errOnly) {
     const [st] = status(dev, f);
     const s = f.shutdown ? "disabled" : f.errdisabled ? "err-disabled" : st === "up" ? "connected" : "notconnect";
     const vlan = !f.switchport ? "routed" : operMode(dev, f) === "trunk" ? "trunk" : String(f.accessVlan);
-    rows.push(`${pad(short(f.name), 10)}${pad((f.description ?? "").slice(0, 18), 19)}${pad(s, 13)}${pad(vlan, 11)}${pad(f.duplex === "auto" ? "a-full" : f.duplex, 7)}${pad(f.speed === "auto" ? (f.name.startsWith("Gig") ? "a-1000" : "a-100") : f.speed, 7)}10/100BaseTX`);
+    // auto settings show what was negotiated (a-full, a-100) only on a port
+    // that is connected; the type follows the port's speed
+    const gig = f.name.startsWith("Gig");
+    const duplex = f.duplex === "auto" ? (s === "connected" ? "a-full" : "auto") : f.duplex;
+    const speed = f.speed === "auto" ? (s === "connected" ? (gig ? "a-1000" : "a-100") : "auto") : f.speed;
+    const type = f.name.startsWith("Port-channel") ? "" : gig ? "10/100/1000BaseTX" : "10/100BaseTX";
+    rows.push(`${pad(short(f.name), 10)}${pad((f.description ?? "").slice(0, 18), 19)}${pad(s, 13)}${pad(vlan, 11)}${pad(duplex, 7)}${pad(speed, 7)}${type}`);
   }
   return rows.join("\n");
 }
