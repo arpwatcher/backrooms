@@ -245,6 +245,13 @@ export function ospfCost(dev, f) {
   return Math.max(1, Math.floor((ref * 1000) / bw));
 }
 
+// a static route is in use only while its exit is up: the interface it
+// names, or a connected subnet its next hop is on (as in routeTable)
+export function staticUsable(d, x) {
+  if (x.out) return Boolean(d.interfaces[x.out]) && status(d, d.interfaces[x.out])[1] === "up";
+  return Object.values(d.interfaces).some((f) => f.ip && f.mask && status(d, f)[1] === "up" && network(x.via, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)));
+}
+
 // the routes a router learns over ospf, worked out from the adjacencies that
 // are really up: shortest path by cost to every router, then every network
 // those routers have in ospf (loopbacks as /32), and a default from a router
@@ -286,7 +293,8 @@ export function ospfRoutes(dev) {
       offer({ code: myAreas.has(o.area) ? "O" : "O IA", net: network(f.ip, bits), bits, ad: 110, metric: d0 + ospfCost(r, f), via: hop.via, out: hop.out });
     }
     for (const p of Object.values(r.ospf)) {
-      const hasDefault = r.routes.some((x) => x.net === "0.0.0.0" && x.mask === "0.0.0.0");
+      // without always, only while the router's own default is usable
+      const hasDefault = r.routes.some((x) => x.net === "0.0.0.0" && x.mask === "0.0.0.0" && staticUsable(r, x));
       if (p.defaultOriginate && (p.defaultOriginate === "always" || hasDefault)) offer({ code: "O*E2", net: "0.0.0.0", bits: 0, ad: 110, metric: 1, via: hop.via, out: hop.out });
     }
   }
