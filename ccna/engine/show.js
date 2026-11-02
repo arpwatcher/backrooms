@@ -167,7 +167,7 @@ export function routeTable(dev) {
     if (routes.some((c) => (c.code === "C" || c.code === "L") && `${c.net}/${c.bits}` === key)) continue;
     const w = winner.get(key);
     if (!w || r.ad < w.ad) winner.set(key, { ad: r.ad, list: [r] });
-    else if (r.ad === w.ad && r.code === "S" && w.list[0].code === "S") w.list.push(r);
+    else if (r.ad === w.ad && r.code === w.list[0].code && (r.code === "S" || r.metric === w.list[0].metric)) w.list.push(r);
   }
   for (const w of winner.values()) routes.push(...w.list);
   return routes;

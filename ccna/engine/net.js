@@ -267,38 +267,49 @@ export function ospfRoutes(dev) {
     for (const n of ospfNeighbors(d)) {
       if (!n.up) continue;
       const c = dist.get(d) + ospfCost(d, n.iface);
+      // every first hop on an equal-cost shortest path is kept (up to 4, as
+      // maximum-paths 4 does)
+      const hops = d === dev ? [{ via: n.ip, out: n.iface.name }] : first.get(d);
       if (!dist.has(n.device) || c < dist.get(n.device)) {
         dist.set(n.device, c);
-        first.set(n.device, d === dev ? { via: n.ip, out: n.iface.name } : first.get(d));
+        first.set(n.device, hops);
         if (!todo.includes(n.device)) todo.push(n.device);
+      } else if (c === dist.get(n.device) && n.device !== dev) {
+        const had = first.get(n.device);
+        first.set(n.device, [...had, ...hops.filter((h) => !had.some((x) => x.via === h.via))].slice(0, 4));
       }
     }
   }
   const up = (d) => Object.values(d.interfaces).filter((f) => f.ip && status(d, f)[1] === "up");
   const connected = new Set(up(dev).map((f) => `${network(f.ip, maskBits(f.mask))}/${maskBits(f.mask)}`));
   const myAreas = new Set(up(dev).map((f) => ospfOf(dev, f)?.area).filter((a) => a !== undefined));
+  // per prefix: the lowest metric, with every first hop that reaches it at that metric
   const best = new Map();
-  const offer = (r) => {
+  // (an E2 route's metric stays the same across the area, so ties go to
+  // the nearer ASBR: fwd is the cost to reach it)
+  const offer = (r, hops, fwd = 0) => {
     const key = `${r.net}/${r.bits}`;
     if (connected.has(key)) return;
-    if (!best.has(key) || r.metric < best.get(key).metric) best.set(key, r);
+    const b = best.get(key);
+    if (!b || r.metric < b.r.metric || (r.metric === b.r.metric && fwd < b.fwd)) best.set(key, { r, hops: [...hops], fwd });
+    else if (r.metric === b.r.metric && fwd === b.fwd) for (const h of hops) if (b.hops.length < 4 && !b.hops.some((x) => x.via === h.via)) b.hops.push(h);
   };
   for (const [r, d0] of dist) {
     if (r === dev) continue;
-    const hop = first.get(r);
+    const hops = first.get(r);
     for (const f of up(r)) {
       const o = ospfOf(r, f);
       if (!o) continue;
       const bits = f.name.startsWith("Loopback") && f.ospf.network !== "point-to-point" ? 32 : maskBits(f.mask);
-      offer({ code: myAreas.has(o.area) ? "O" : "O IA", net: network(f.ip, bits), bits, ad: 110, metric: d0 + ospfCost(r, f), via: hop.via, out: hop.out });
+      offer({ code: myAreas.has(o.area) ? "O" : "O IA", net: network(f.ip, bits), bits, ad: 110, metric: d0 + ospfCost(r, f) }, hops);
     }
     for (const p of Object.values(r.ospf)) {
       // without always, only while the router's own default is usable
       const hasDefault = r.routes.some((x) => x.net === "0.0.0.0" && x.mask === "0.0.0.0" && staticUsable(r, x));
-      if (p.defaultOriginate && (p.defaultOriginate === "always" || hasDefault)) offer({ code: "O*E2", net: "0.0.0.0", bits: 0, ad: 110, metric: 1, via: hop.via, out: hop.out });
+      if (p.defaultOriginate && (p.defaultOriginate === "always" || hasDefault)) offer({ code: "O*E2", net: "0.0.0.0", bits: 0, ad: 110, metric: 1 }, hops, d0);
     }
   }
-  return [...best.values()];
+  return [...best.values()].flatMap(({ r, hops }) => hops.map((h) => ({ ...r, via: h.via, out: h.out })));
 }
 
 // --- spanning tree --------------------------------------------------------------------------------------
