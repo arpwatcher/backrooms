@@ -747,7 +747,13 @@ export const SHOWS = {
     ["show ip dhcp snooping", (d) => snooping(d)],
     ["show ip arp inspection interfaces", (d) => daiInterfaces(d)],
     ["show ip arp inspection [vlan <v:vlist>]", (d, a) => dai(d, a.v)],
-    ["show errdisable recovery", (d) => ["ErrDisable Reason            Timer Status", "-----------------            --------------", ...["bpduguard", "psecure-violation", "udld", "link-flap"].map((r) => `${pad(r, 29)}${d.errdisable.causes.includes(r) || d.errdisable.causes.includes("all") ? "Enabled" : "Disabled"}`), "", `Timer interval: ${d.errdisable.interval ?? 300} seconds`].join("\n")],
+    ["show errdisable recovery", (d) => {
+      const on = (r) => d.errdisable.causes.includes(r) || d.errdisable.causes.includes("all");
+      const every = d.errdisable.interval ?? 300;
+      // a port err-disabled for a cause with recovery on comes back at the next timeout
+      const due = sortedInterfaces(d).filter((f) => f.errdisabled && !f.shutdown && on(f.errReason ?? "psecure-violation"));
+      return ["ErrDisable Reason            Timer Status", "-----------------            --------------", ...["arp-inspection", "bpduguard", "dhcp-rate-limit", "link-flap", "psecure-violation", "udld"].map((r) => `${pad(r, 29)}${on(r) ? "Enabled" : "Disabled"}`), "", `Timer interval: ${every} seconds`, "", "Interfaces that will be enabled at the next timeout:", "", ...(due.length ? ["Interface       Errdisable reason       Time left(sec)", "---------       -----------------       --------------", ...due.map((f, i) => `${pad(short(f.name), 16)}${pad(f.errReason ?? "psecure-violation", 24)}${Math.max(1, every - 83 - 17 * i)}`)] : [])].join("\n");
+    }],
     ["show debugging", (d) => (d.debugs.length ? d.debugs.map((x) => `  ${x} debugging is on`).join("\n") : "")],
     ["show snmp community", (d) => Object.entries(d.snmp.communities).map(([n, c]) => `Community name: ${n}\nCommunity Index: ${n}\nCommunity SecurityName: ${n}\nstorage-type: nonvolatile        active   access: ${c.access === "rw" ? "read-write" : "read-only"}`).join("\n\n")],
     ["show line", () => "   Tty Typ     Tx/Rx    A Modem  Roty AccO AccI   Uses   Noise  Overruns   Int\n*    0 CTY              -    -      -    -    -      0       0     0/0       -"],

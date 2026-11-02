@@ -194,6 +194,16 @@ def("priv", "clear ip ospf process", (c) => c.ask({ prompt: "Reset ALL OSPF proc
   return "";
 } }));
 def("priv", "clear mac address-table dynamic", () => {});
+// secure addresses off every port, or one port, or one address
+def("priv", "clear port-security (all | configured | dynamic | sticky) [(interface <name:iface> | address <mac:mac>)]", (c) => {
+  const kind = c.words[2];
+  for (const f of Object.values(c.dev.interfaces)) {
+    if (!f.ps || (c.args.name && f.name !== c.args.name)) continue;
+    const hit = (mac) => !c.args.mac || mac === c.args.mac;
+    if (kind === "all" || kind === "configured") f.ps.macs = f.ps.macs.filter((m) => !hit(m));
+    if (kind !== "configured") f.ps.learned = (f.ps.learned ?? []).filter((l) => !(hit(l.mac) && (kind === "all" || (kind === "sticky") === Boolean(l.sticky))));
+  }
+}, { only: ["switch", "l3switch"] });
 def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
 def("priv", "clear (counters | arp-cache | ip dhcp binding *)", () => {});
 def("priv", "terminal (length <n:num:0-512> | monitor | no monitor)", () => {});
@@ -449,11 +459,40 @@ def(IF_MODES, "switchport port-security", (c) => each(c, (f) => (needAccess(c, f
 def(IF_MODES, "no switchport port-security", (c) => each(c, (f) => (f.ps.enabled = false)), { only: SW });
 def(IF_MODES, "switchport port-security maximum <n:num:1-132>", (c) => each(c, (f) => (needAccess(c, f), (f.ps.max = c.args.n))), { only: SW });
 def(IF_MODES, "switchport port-security violation (protect | restrict | shutdown)", (c) => each(c, (f) => (needAccess(c, f), (f.ps.violation = c.words[3]))), { only: SW });
+// a port takes no more secure addresses than its maximum
+const secureRoom = (f) => {
+  if (f.ps.macs.length + (f.ps.learned ?? []).length >= f.ps.max) fail(`Total secure mac-addresses on interface ${f.name} has reached maximum limit.`);
+};
+// the line running-config shows for a learned sticky address, so a saved
+// config can be pasted back
+def(IF_MODES, "switchport port-security mac-address sticky <mac:mac>", (c) =>
+  each(c, (f) => {
+    needAccess(c, f);
+    f.ps.sticky = true;
+    const l = (f.ps.learned ??= []);
+    if (l.some((x) => x.mac === c.args.mac)) return;
+    secureRoom(f);
+    l.push({ mac: c.args.mac, vlan: f.accessVlan, sticky: true });
+  }), { only: SW });
+// one sticky or static address off the port
+def(IF_MODES, "no switchport port-security mac-address sticky <mac:mac>", (c) => each(c, (f) => (f.ps.learned = (f.ps.learned ?? []).filter((l) => !(l.sticky && l.mac === c.args.mac)))), { only: SW });
+def(IF_MODES, "no switchport port-security mac-address <mac:mac>", (c) => each(c, (f) => (f.ps.macs = f.ps.macs.filter((m) => m !== c.args.mac))), { only: SW });
+// sticky learning off: the sticky addresses turn back into dynamic ones
+def(IF_MODES, "no switchport port-security mac-address sticky", (c) =>
+  each(c, (f) => {
+    f.ps.sticky = false;
+    for (const l of f.ps.learned ?? []) l.sticky = false;
+  }), { only: SW });
+def(IF_MODES, "no switchport port-security violation", (c) => each(c, (f) => (f.ps.violation = "shutdown")), { only: SW });
+def(IF_MODES, "no switchport port-security maximum", (c) => each(c, (f) => (f.ps.max = 1)), { only: SW });
 def(IF_MODES, "switchport port-security mac-address (sticky | <mac:mac>)", (c) =>
   each(c, (f) => {
     needAccess(c, f);
     if (c.has("sticky")) f.ps.sticky = true;
-    else if (!f.ps.macs.includes(c.args.mac)) f.ps.macs.push(c.args.mac);
+    else if (!f.ps.macs.includes(c.args.mac)) {
+      secureRoom(f);
+      f.ps.macs.push(c.args.mac);
+    }
   }), { only: SW });
 def(IF_MODES, "switchport port-security aging time <min:num:0-1440>", (c) => each(c, (f) => (f.ps.aging = c.args.min)), { only: SW });
 
@@ -687,8 +726,10 @@ def("config", "spanning-tree portfast [edge] bpduguard default", (c) => (c.dev.s
 def("config", "spanning-tree portfast [edge] bpdufilter default", (c) => (c.dev.stp.bpdufilterDefault = true), { only: SW });
 def("config", "spanning-tree loopguard default", (c) => (c.dev.stp.loopguardDefault = true), { only: SW });
 def("config", "spanning-tree pathcost method (long | short)", (c) => (c.dev.stp.pathcost = c.words[3]), { only: SW });
-def("config", "errdisable recovery cause (bpduguard | psecure-violation | all | udld | link-flap)", (c) => !c.dev.errdisable.causes.includes(c.words[3]) && c.dev.errdisable.causes.push(c.words[3]));
+def("config", "errdisable recovery cause (bpduguard | psecure-violation | arp-inspection | dhcp-rate-limit | all | udld | link-flap)", (c) => !c.dev.errdisable.causes.includes(c.words[3]) && c.dev.errdisable.causes.push(c.words[3]));
 def("config", "errdisable recovery interval <s:num:30-86400>", (c) => (c.dev.errdisable.interval = c.args.s));
+def("config", "no errdisable recovery cause (bpduguard | psecure-violation | arp-inspection | dhcp-rate-limit | all | udld | link-flap)", (c) => (c.dev.errdisable.causes = c.words[4] === "all" ? [] : c.dev.errdisable.causes.filter((x) => x !== c.words[4])));
+def("config", "no errdisable recovery interval", (c) => (c.dev.errdisable.interval = null));
 
 // --- dhcp ------------------------------------------------------------------------------------------------
 
