@@ -152,6 +152,10 @@ main { padding: 16px; min-width: 0; }
 .welcome .mod b { display: block; margin-bottom: 2px; }
 .welcome .mod span { color: var(--muted); font-size: 13px; }
 .welcome .bar { height: 4px; border-radius: 2px; background: #1c3042; margin-top: 8px; overflow: hidden; }
+.welcome .keep { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 12px; }
+.welcome .keep p { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.welcome .keep label.btn { display: inline-block; }
+.welcome .keep-msg { color: var(--muted); font-size: 13px; margin-left: 6px; }
 .welcome .bar i { display: block; height: 100%; background: var(--ok); }
 
 @media (max-width: 1000px) {

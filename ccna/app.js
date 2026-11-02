@@ -32,6 +32,25 @@ function saveProgress() {
     /* private mode: progress lasts for the visit */
   }
 }
+// the work in a lab: every line typed, in order, on every device, and the
+// answers, so coming back replays it instead of starting over
+const WORK = "ccna-labs.work.v1";
+let work = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(WORK)) ?? {};
+  } catch {
+    return {};
+  }
+})();
+function saveWork() {
+  try {
+    localStorage.setItem(WORK, JSON.stringify(work));
+  } catch {
+    /* full or private: the work lasts for the visit */
+  }
+}
+// ask the browser not to clear this site's storage when it runs short of space
+navigator.storage?.persist?.().catch(() => {});
 
 // --- menu ---------------------------------------------------------------------------------------
 
@@ -92,11 +111,30 @@ function openLab(def, { exam = null } = {}) {
   $(".crumbs").innerHTML = exam ? `<span>Exam · question ${exam.index + 1} of ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.hard ? '<span class="tag hard">challenge</span>' : def.kind === "sim" ? '<span class="tag sim">simulation</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
   $(".lab-title").textContent = def.title;
   $(".intro").innerHTML = rich(def.intro ?? "");
+  // replay what was typed here before (not in the exam)
+  const saved = !exam && work[def.id];
+  if (saved) {
+    for (const [name, line] of saved.log ?? []) {
+      const dev = current.lab.devices[name];
+      if (!dev) continue;
+      // ctrl-c: drop a half-typed password prompt
+      if (line === "\u0003") {
+        current.buffers[name] += prompt(dev) + "\n";
+        dev.pending = null;
+      } else runLine(name, line);
+    }
+    Object.assign(current.lab.answers, saved.answers ?? {});
+  }
   renderTasks();
   renderTabs();
   renderTopology();
   renderScreen();
   wireLab();
+  if (saved?.log?.length) {
+    const res = $(".result");
+    res.className = "result";
+    res.textContent = "Your earlier work in this lab is back. Reset starts it over.";
+  }
   if (exam) {
     $(".theory-btn").hidden = true;
     $(".solution-btn").hidden = true;
@@ -120,7 +158,13 @@ function renderTasks(results) {
     li.innerHTML = rich(task.text) + answerBox(task, i) + (r && !r.ok && r.why ? `<span class="why">${rich(r.why)}</span>` : "");
     ol.appendChild(li);
     const box = li.querySelector(".answer");
-    if (box) box.addEventListener(box.tagName === "SELECT" ? "change" : "input", () => (current.lab.answers[i] = box.value));
+    if (box)
+      box.addEventListener(box.tagName === "SELECT" ? "change" : "input", () => {
+        current.lab.answers[i] = box.value;
+        if (current.exam) return;
+        ((work[current.def.id] ??= { log: [], answers: {} }).answers ??= {})[i] = box.value;
+        saveWork();
+      });
   });
 }
 
@@ -209,12 +253,30 @@ function write(text) {
   current.buffers[current.selected] += text;
 }
 
+function record(name, line) {
+  if (current.exam) return;
+  const w = (work[current.def.id] ??= { log: [], answers: {} });
+  if (w.log.length < 3000) w.log.push([name, line]);
+  w.at = Date.now();
+  saveWork();
+}
+
 function submit(line) {
   const name = current.selected;
+  runLine(name, line);
+  record(name, line);
+  // a hostname change renames the tab and the icon
+  renderTabs();
+  renderTopology();
+  renderScreen();
+}
+
+// one line into one device's console, with its output in that buffer
+function runLine(name, line) {
   const dev = current.lab.devices[name];
   const secret = dev.pending?.secret;
   const shown = secret ? "" : line;
-  write(prompt(dev) + shown + "\n");
+  current.buffers[name] += prompt(dev) + shown + "\n";
   if (!secret && line.trim()) {
     current.histories[name].push(line);
     current.cursor[name] = current.histories[name].length;
@@ -222,11 +284,7 @@ function submit(line) {
   const out = exec(dev, line);
   // cls / clear
   if (out === "\f") current.buffers[name] = "";
-  else if (out) write(out.replace(/\n?$/, "\n"));
-  // a hostname change renames the tab and the icon
-  renderTabs();
-  renderTopology();
-  renderScreen();
+  else if (out) current.buffers[name] += out.replace(/\n?$/, "\n");
 }
 
 function wireLab() {
@@ -259,12 +317,14 @@ function wireLab() {
       input.value = "";
       const out = exec(dev, "^z");
       if (out) write(out + "\n");
+      record(name, "^z");
       renderScreen();
     } else if (e.ctrlKey && (e.key === "c" || e.key === "C") && !window.getSelection()?.toString()) {
       e.preventDefault();
       write(prompt(dev) + input.value + "\n");
       input.value = "";
       if (dev.pending) dev.pending = null;
+      record(name, "\u0003");
       renderScreen();
     }
   });
@@ -302,7 +362,13 @@ function wireLab() {
     box.hidden = false;
     box.innerHTML = "<h3>One correct answer</h3>" + Object.entries(current.def.solution).map(([dev, lines]) => `<div><b>${esc(dev.replace("#", " (then) "))}</b><pre>${esc(lines.filter((l) => l !== "").join("\n"))}</pre></div>`).join("") + Object.entries(current.def.answers ?? {}).map(([i, a]) => `<div><b>Task ${Number(i) + 1}</b><pre>${esc(a)}</pre></div>`).join("") + "<p>Try it yourself first. Other answers are correct too: the check looks at the resulting configuration, not the words you typed.</p>";
   });
-  $(".reset-btn").addEventListener("click", () => openLab(current.def, { exam: current.exam }));
+  $(".reset-btn").addEventListener("click", () => {
+    if (!current.exam) {
+      delete work[current.def.id];
+      saveWork();
+    }
+    openLab(current.def, { exam: current.exam });
+  });
 }
 
 function nextLab(def) {
@@ -394,7 +460,33 @@ function renderHome() {
     const labs = byModule(m.id);
     const done = labs.filter((l) => progress.done[l.id]).length;
     return `<a class="mod" href="#lab/${labs[0]?.id}"><b>${esc(m.title)}</b><span>${esc(m.blurb)} · ${labs.length} labs</span><div class="bar"><i style="width:${labs.length ? (done / labs.length) * 100 : 0}%"></i></div></a>`;
-  }).join("")}</div></section>`;
+  }).join("")}</div>
+  <div class="keep"><p>Your progress and the work inside each lab stay in this browser. To move them to another browser, or to keep a copy, save them to a file.</p>
+  <button class="btn export-btn">Export progress</button> <label class="btn">Import progress<input type="file" class="import-file" accept=".json,application/json" hidden></label> <span class="keep-msg"></span></div></section>`;
+  $(".export-btn").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify({ app: "ccna-labs", v: 1, progress, work }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ccna-labs-progress-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $(".import-file").addEventListener("change", async (e) => {
+    const msg = $(".keep-msg");
+    try {
+      const data = JSON.parse(await e.target.files[0].text());
+      if (data.app !== "ccna-labs" || typeof data.progress?.done !== "object") throw new Error();
+      // merge: a lab done in either copy stays done, and the newer work wins
+      for (const [id, t] of Object.entries(data.progress.done)) if (LABS.some((l) => l.id === id)) progress.done[id] = Math.max(progress.done[id] ?? 0, t);
+      for (const [id, w] of Object.entries(data.work ?? {})) if (LABS.some((l) => l.id === id) && Array.isArray(w?.log) && (w.at ?? 0) >= (work[id]?.at ?? 0)) work[id] = w;
+      saveProgress();
+      saveWork();
+      renderHome();
+      $(".keep-msg").textContent = `Imported. ${Object.keys(progress.done).length} ${Object.keys(progress.done).length === 1 ? "lab" : "labs"} done.`;
+    } catch {
+      msg.textContent = "That file is not a CCNA Labs progress export.";
+    }
+  });
   renderMenu($("#search").value);
 }
 
