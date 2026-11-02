@@ -261,7 +261,8 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
   }
   const o = next && owner(router, next);
   if (!o) {
-    if (isExternal(router, best)) return (seen.exit = router), [ip];
+    // out to the ISP: its router answers a traceroute as one more hop
+    if (isExternal(router, best)) return (seen.exit = router), next && next !== ip ? [next, ip] : [ip];
     return router.lab?.extern?.includes(ip) ? [ip] : null;
   }
   if (!ROUTER(o.device)) return null;
