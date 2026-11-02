@@ -152,13 +152,16 @@ English.
   is not a backup, one NTP clock for every device, IPv6 added next to a
   working IPv4 network, four OSPF routers on one segment, a NAT pool that
   runs out, a Layer 3 switch taking over the routing, two desks knocked
-  offline by port security and BPDU Guard, and a second ISP that should
-  only be a backup. Exam mode has a harder option made only of these. 212
-  labs, 49 of them sims.
+  offline by port security and BPDU Guard, a second ISP that should only
+  be a backup, and a square of OSPF routers that should share the load.
+  Exam mode has a harder option made only of these. 213 labs, 50 of them
+  sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
-  a ping needs a route back, HSRP answers ARP with its virtual MAC, and
+  a ping needs a route back (and a router with no route answers
+  Destination net unreachable, which Windows counts as received), HSRP
+  answers ARP with its virtual MAC, and
   nothing on the Internet answers a private address that was not NATed.
   ACLs filter the packets themselves (echo and echo-reply separately, a
   DHCP Discover from 0.0.0.0 too), a ping leaves its NAT translation and a
