@@ -680,5 +680,41 @@ export default [
     },
     answers: { 0: "down/down", 6: "10.0.0.2", 7: "10.10.20.1" },
     teach: "On a Layer 3 switch an SVI is up only when its VLAN exists and some port in it is up (a trunk counts); ip routing turns the switch into a router, and router ospf is refused without it. no switchport turns a port into a routed port that takes an IP address. Trunks on a switch that also supports ISL need switchport trunk encapsulation dot1q first. Without router-id or a loopback, OSPF picks the highest IP on an up interface, which on a Layer 3 switch is often an SVI.",
+  }),  // --- err-disabled ports on an access switch -------------------------------------------------------
+  hard({
+    id: "ch-errdisable", title: "Challenge: two desks offline after the weekend",
+    cmds: ["show interfaces status err-disabled", "show port-security interface", "show port-security address", "clear port-security sticky", "errdisable recovery cause", "show errdisable recovery"],
+    devices: [
+      R("R1", 50, 0, cfg("interface g0/0", "ip address 192.168.50.1 255.255.255.0", "no shutdown")),
+      S("SW1", 50, 30, cfg("vlan 50", "name USERS", "exit", "interface g0/1", "switchport mode access", "switchport access vlan 50", "interface range fa0/1 - 3", "switchport mode access", "switchport access vlan 50", "spanning-tree portfast", "spanning-tree bpduguard enable", "switchport port-security", "switchport port-security mac-address sticky", "interface fa0/1", "switchport port-security mac-address sticky 0050.7966.6a01", "interface fa0/2", "switchport port-security mac-address sticky 0050.7966.6a12")),
+      S("DESK", 88, 56),
+      HOST("PC1", 8, 70, "windows", { ip: "192.168.50.11/24", gateway: "192.168.50.1", mac: "0050.7966.6a11" }),
+      HOST("PC2", 46, 80, "linux", { ip: "192.168.50.12/24", gateway: "192.168.50.1", mac: "0050.7966.6a12" }),
+      HOST("PC3", 88, 88, "windows", { ip: "192.168.50.13/24", gateway: "192.168.50.1", mac: "0050.7966.6a13" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"], ["SW1", "fa0/3", "DESK", "fa0/24"], ["DESK", "fa0/1", "PC3", "fa0"]],
+    intro: "SW1's user ports (Fa0/1 to Fa0/3, VLAN 50) run PortFast, BPDU Guard and sticky port security with one address each. Over the weekend PC1's old desktop was replaced by a new laptop, and the user on Fa0/3 brought a small switch from home so PC3 and a printer could share the wall socket. On Monday both desks are offline, and the lobby kiosk on Fa0/2 must never be knocked offline the way they were.",
+    tasks: [
+      { text: "Ping the gateway 192.168.50.1 from PC1. Which MAC address does SW1 give as the last source address on Fa0/1?", ask: "MAC address", check: (t) => need(t.ran("PC1", /^ping 192\.168\.50\.1/) && is.mac(t.reply, "0050.7966.6a11"), "show port-security interface fa0/1 after the ping: Last Source Address:Vlan.") },
+      { text: "Which address does Fa0/1 still hold as its one sticky MAC?", ask: "MAC address", check: (t) => need(is.mac(t.reply, "0050.7966.6a01"), "show port-security address, or the switchport port-security mac-address sticky line in the running-config.") },
+      { text: "Fa0/1 trusts PC1 and nothing else: still sticky, still one address, and the old desktop's MAC is gone.", check: (t) => { const f = t.f("SW1", "fa0/1"); const held = [...f.ps.macs, ...(f.ps.learned ?? []).map((l) => l.mac)]; return need(f.ps.enabled && f.ps.sticky && f.ps.max === 1 && held.length === 1 && held[0] === "0050.7966.6a11" && f.ps.learned[0]?.sticky, "Remove the old sticky address (no switchport port-security mac-address sticky 0050.7966.6a01, or clear port-security sticky interface fa0/1), bring the port back, and let PC1 be learned."); } },
+      { text: "Fa0/1 is up again and PC1 reaches 192.168.50.1.", check: (t) => need(!t.f("SW1", "fa0/1").errdisabled && t.enabled("SW1", "fa0/1") && t.reach("PC1", "192.168.50.1"), "An err-disabled port needs shutdown and then no shutdown, then ping again from PC1.") },
+      { text: "Why is Fa0/3 err-disabled?", choices: ["It received a BPDU: there is a switch on the other end", "PC3's MAC is not the sticky address", "The cable is unplugged", "Its VLAN does not exist"], check: (t) => need(t.reply === "It received a BPDU: there is a switch on the other end", "show interfaces status err-disabled gives the reason: bpduguard.") },
+      { text: "If you bounce Fa0/3 (shutdown, then no shutdown) with the desk switch still there, what happens?", choices: ["It is err-disabled again at once", "It comes up and stays up", "It comes up but blocks in spanning tree", "It stays administratively down"], check: (t) => need(t.reply === "It is err-disabled again at once", "Try it: the first BPDU from DESK trips BPDU Guard again.") },
+      { text: "Fa0/3 keeps BPDU Guard and stays down until the desk switch is gone (turning the guard off is not the fix).", check: (t) => need(t.f("SW1", "fa0/3").stp.bpduguard === true && t.f("SW1", "fa0/3").stp.portfast && t.f("SW1", "fa0/3").errdisabled, "Leave spanning-tree portfast and spanning-tree bpduguard enable on Fa0/3.") },
+      { text: "From now on SW1 brings back ports err-disabled by port security or BPDU Guard on its own, every 10 minutes.", check: (t) => { const e = t.dev("SW1").errdisable; const on = (r) => e.causes.includes(r) || e.causes.includes("all"); return need(on("psecure-violation") && on("bpduguard") && e.interval === 600, "errdisable recovery cause psecure-violation, errdisable recovery cause bpduguard, errdisable recovery interval 600."); } },
+      { text: "Which interface does show errdisable recovery list as coming back at the next timeout?", ask: "Interface", check: (t) => need(/^(fa|fastethernet)\s*0\/3$/i.test(t.reply.trim()), "Only ports still err-disabled for a cause with recovery on are listed.") },
+      { text: "On the lobby port Fa0/2 a stranger's frames are dropped, counted and logged, but the port never goes down, and the kiosk PC2 still reaches the gateway.", check: (t) => need(t.f("SW1", "fa0/2").ps.violation === "restrict" && t.f("SW1", "fa0/2").ps.enabled && t.reach("PC2", "192.168.50.1"), "switchport port-security violation restrict: protect drops silently, shutdown err-disables.") },
+    ],
+    solution: {
+      PC1: ["ping 192.168.50.1"],
+      SW1: ["enable", "show interfaces status err-disabled", "show port-security interface fa0/1", "show port-security address", "clear port-security sticky interface fa0/1", "configure terminal", "interface fa0/1", "shutdown", "no shutdown", "interface fa0/2", "switchport port-security violation restrict", "exit", "errdisable recovery cause psecure-violation", "errdisable recovery cause bpduguard", "errdisable recovery interval 600", "end", "show errdisable recovery"],
+      "PC1#2": ["ping 192.168.50.1"],
+      PC2: ["ping -c 2 192.168.50.1"],
+    },
+    // PC1's first ping is the violation itself
+    failingPings: true,
+    answers: { 0: "0050.7966.6a11", 1: "0050.7966.6a01", 4: "It received a BPDU: there is a switch on the other end", 5: "It is err-disabled again at once", 8: "Fa0/3" },
+    teach: "An err-disabled port stays down until shutdown and no shutdown, or until errdisable recovery brings it back after the interval; either way, if the cause is still there it goes down again. A sticky address is saved like configuration, so a replaced PC needs the old entry removed (no switchport port-security mac-address sticky, or clear port-security sticky) before the new one can be learned. BPDU Guard is the right answer to a switch on a user port: the port should stay down until the switch is gone. Violation shutdown err-disables, restrict drops, counts and logs, protect only drops.",
   }),
 ];
