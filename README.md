@@ -151,8 +151,10 @@ English.
   admin PC, a rogue DHCP server on the access layer, a backup gateway that
   is not a backup, one NTP clock for every device, IPv6 added next to a
   working IPv4 network, four OSPF routers on one segment, a NAT pool that
-  runs out, and a Layer 3 switch taking over the routing. Exam mode has a
-  harder option made only of these. 210 labs, 47 of them sims.
+  runs out, a Layer 3 switch taking over the routing, two desks knocked
+  offline by port security and BPDU Guard, and a second ISP that should
+  only be a backup. Exam mode has a harder option made only of these. 212
+  labs, 49 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -170,11 +172,18 @@ English.
   one DR and BDR per segment (DROTHERs stay at 2WAY), HSRP routers pair up
   only within their group, routers ping and trace IPv6 (which needs ipv6
   unicast-routing on the way), and spanning tree runs over port-channels
-  with their real cost. `show ip route` prints the classful headings IOS
-  15 does. A test replays every model answer and fails if one of its
+  with their real cost. OSPF and static routes share the load over up to
+  four equal-cost paths, a floating static waits outside the table, and
+  `default-information originate` stops when the router's own default is
+  gone. `show ip route` prints the classful headings IOS 15 does, with
+  equal-cost paths under one entry. A test replays every model answer and fails if one of its
   pings gets no reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
+- **Your work stays.** Finished labs and every line typed in a lab are kept
+  in the browser, so a reload or a later visit picks up where you were
+  (Reset starts a lab over). The home page exports them to a file and
+  imports them in another browser.
 
 The engine is in `ccna/engine/` and the labs are in `ccna/labs/`, one file
 per module. Each lab is plain data: devices, links, tasks with a check
