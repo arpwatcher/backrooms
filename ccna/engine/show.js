@@ -179,7 +179,9 @@ function ipRoute(dev, args) {
   if (args?.net) {
     const best = routes.filter((r) => network(args.net, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
     if (!best) return "% Network not in table";
-    return `Routing entry for ${best.net}/${best.bits}\n  Known via "${{ C: "connected", L: "connected", S: "static", O: "ospf 1" }[best.code]}", distance ${best.ad ?? 0}, metric ${best.metric ?? 0}\n  Routing Descriptor Blocks:\n  * ${best.via ?? "directly connected"}${best.out ? ", via " + best.out : ""}`;
+    // every equal-cost path to that prefix is a descriptor block; the first is starred
+    const paths = routes.filter((r) => r.net === best.net && r.bits === best.bits);
+    return `Routing entry for ${best.net}/${best.bits}\n  Known via "${{ C: "connected", L: "connected", S: "static", O: "ospf 1" }[best.code[0]] ?? "ospf 1"}", distance ${best.ad ?? 0}, metric ${best.metric ?? 0}${best.bits === 0 ? ", candidate default path" : ""}\n  Routing Descriptor Blocks:\n${paths.map((r, i) => `  ${i ? " " : "*"} ${r.via ?? "directly connected"}${r.out ? ", via " + r.out : ""}`).join("\n")}`;
   }
   const def = routes.find((r) => r.net === "0.0.0.0" && r.bits === 0);
   const out = [CODES, "", def ? `Gateway of last resort is ${def.via ?? "0.0.0.0"} to network 0.0.0.0` : "Gateway of last resort is not set", ""];
@@ -195,21 +197,28 @@ function ipRoute(dev, args) {
     const key = r.bits < cb ? `${r.net}/${r.bits}` : `${network(r.net, cb)}/${cb}`;
     (groups.get(key) ?? groups.set(key, []).get(key)).push(r);
   }
+  const prefix = (r) => `${r.net}/${r.bits}`;
   for (const [key, all] of groups) {
     const show = all.filter((r) => shown.includes(r));
     if (!show.length) continue;
     const [net, bits] = key.split("/");
-    const plain = all.length === 1 && all[0].bits <= Number(bits);
+    // equal-cost paths share one entry, so the heading counts prefixes
+    const count = new Set(all.map(prefix)).size;
+    const plain = count === 1 && all[0].bits <= Number(bits);
     if (!plain) {
       const masks = new Set(all.map((r) => r.bits)).size;
-      out.push(masks > 1 ? `      ${net}/${bits} is variably subnetted, ${all.length} subnets, ${masks} masks` : `      ${net}/${bits} is subnetted, ${all.length} subnet${all.length > 1 ? "s" : ""}`);
+      out.push(masks > 1 ? `      ${net}/${bits} is variably subnetted, ${count} subnets, ${masks} masks` : `      ${net}/${bits} is subnetted, ${count} subnet${count > 1 ? "s" : ""}`);
     }
-    for (const r of show) {
-      const code = pad(r.code === "S" && r.bits === 0 ? "S*" : r.code, plain ? 6 : 9);
+    const width = plain ? 6 : 9;
+    show.forEach((r, i) => {
       const age = r.code.startsWith("O") ? ", 00:12:41" : "";
-      if (r.code === "C" || r.code === "L") out.push(`${code}${r.net}/${r.bits} is directly connected, ${r.out}`);
-      else out.push(`${code}${r.net}/${r.bits} [${r.ad}/${r.metric}]${r.via ? ` via ${r.via}${age}` : ""}${r.out ? `${r.via ? "," : " is directly connected,"} ${r.out}` : ""}`);
-    }
+      const path = `[${r.ad}/${r.metric}]${r.via ? ` via ${r.via}${age}` : ""}${r.out ? `${r.via ? "," : " is directly connected,"} ${r.out}` : ""}`;
+      // a second path to the same prefix goes on its own line under the first
+      if (i && prefix(show[i - 1]) === prefix(r) && r.code !== "C" && r.code !== "L") return out.push(`${" ".repeat(width + prefix(r).length + 1)}${path}`);
+      const code = pad(r.code === "S" && r.bits === 0 ? "S*" : r.code, width);
+      if (r.code === "C" || r.code === "L") out.push(`${code}${prefix(r)} is directly connected, ${r.out}`);
+      else out.push(`${code}${prefix(r)} ${path}`);
+    });
   }
   return out.join("\n");
 }
