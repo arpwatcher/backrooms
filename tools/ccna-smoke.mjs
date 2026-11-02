@@ -30,7 +30,7 @@ const base = `http://localhost:${server.address().port}/ccna/index.html`;
 
 // one of each kind: single device, two routers, a switch sim, a sim with
 // prompts, PCs with terminals and answer boxes, and four challenge labs
-const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts", "ch-floor-dhcp", "ch-l3-core", "ch-ospf-election", "ch-bundle-stp"];
+const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts", "ch-floor-dhcp", "ch-l3-core", "ch-ospf-election", "ch-errdisable", "ch-dual-isp", "ch-bundle-stp"];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -78,6 +78,22 @@ await page.waitForTimeout(200);
 await page.click("[data-hard]");
 await page.waitForFunction(() => window.__ccna.current?.def);
 ok(await page.evaluate(() => window.__ccna.current.def.hard === true), "the harder exam starts with a challenge lab");
+
+// what was typed in a lab comes back after a reload, and Reset starts over
+const open = async (id) => {
+  await page.goto(`${base}#lab/${id}`);
+  await page.reload();
+  await page.waitForFunction((want) => window.__ccna.current?.def.id === want, id);
+};
+await open("hostname");
+const last = await page.evaluate(() => Object.values(window.__ccna.current.def.solution)[0].at(-1));
+ok((await page.textContent(".result")).includes("earlier work") && (await page.textContent(".screen")).includes(last), "a reload replays the work in a lab");
+await page.click(".reset-btn");
+await open("hostname");
+ok(!(await page.textContent(".result")).includes("earlier work") && !(await page.textContent(".screen")).includes(last), "Reset forgets it");
+await page.goto(`${base}#`);
+await page.waitForTimeout(200);
+ok((await page.locator(".export-btn").count()) === 1 && (await page.locator(".import-file").count()) === 1, "the home page offers export and import");
 
 await page.goto(`${base}#commands`);
 await page.waitForTimeout(200);
