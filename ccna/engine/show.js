@@ -383,6 +383,51 @@ function stpSummary(dev) {
   ].join("\n");
 }
 
+// how the switch picks a member link for a frame (a 2960 hashes on source MAC by default)
+function loadBalance(dev) {
+  const how = dev.loadBalance ?? "src-mac";
+  const mac = { "src-mac": "Source MAC address", "dst-mac": "Destination MAC address", "src-dst-mac": "Source XOR Destination MAC address", "src-ip": "Source MAC address", "dst-ip": "Destination MAC address", "src-dst-ip": "Source XOR Destination MAC address" }[how];
+  const ip = { "src-ip": "Source IP address", "dst-ip": "Destination IP address", "src-dst-ip": "Source XOR Destination IP address" }[how] ?? mac;
+  return ["EtherChannel Load-Balancing Configuration:", `        ${how}`, "", "EtherChannel Load-Balancing Addresses Used Per-Protocol:", `Non-IP: ${mac}`, `  IPv4: ${ip}`, `  IPv6: ${ip}`].join("\n");
+}
+const channelGroups = (dev) => {
+  const groups = {};
+  for (const f of sortedInterfaces(dev)) if (f.channel) (groups[f.channel.group] ??= []).push(f);
+  return groups;
+};
+const ecState = (mode) => ({ active: "Active", passive: "Passive", desirable: "Desirable-Sl", auto: "Automatic-Sl", on: "On" })[mode] ?? "On";
+function etherPortChannel(dev) {
+  const out = ["                Channel-group listing:", "                ----------------------", ""];
+  for (const [g, members] of Object.entries(channelGroups(dev))) {
+    const inUse = members.filter((m) => bundled(dev, m));
+    const proto = protocolOf(members[0].channel.mode);
+    out.push(`Group: ${g}`, "----------", "                Port-channels in the group:", "                ---------------------------", "", `Port-channel: Po${g}${proto === "LACP" ? "    (Primary Aggregator)" : ""}`, "", "------------", "", "Age of the Port-channel   = 0d:01h:12m:03s", `Logical slot/port   = 2/${g}          Number of ports = ${inUse.length}`, "HotStandBy port = null", `Port state          = ${inUse.length ? "Port-channel Ag-Inuse" : "Port-channel Ag-Not-Inuse"}`, `Protocol            =   ${proto === "-" ? "" : proto}`, "Port security       = Disabled", "", "Ports in the Port-channel:", "", "Index   Load   Port     EC state        No of bits", "------+------+------+------------------+-----------");
+    inUse.forEach((m, i) => out.push(`  ${i}     ${inUse.length > 1 ? (i % 2 ? "AA" : "55") : "FF"}     ${pad(short(m.name), 9)}${pad(ecState(m.channel.mode), 19)}${inUse.length > 1 ? 4 : 8}`));
+    if (inUse.length) out.push("", `Time since last port bundled:    0d:01h:11m:58s    ${short(inUse[inUse.length - 1].name)}`);
+    out.push("");
+  }
+  return out.join("\n");
+}
+// what each member hears from the switch on the other end of its cable
+function channelNeighbors(dev, proto) {
+  const groups = Object.entries(channelGroups(dev)).filter(([, ms]) => protocolOf(ms[0].channel.mode) === proto.toUpperCase());
+  const out = proto === "lacp" ? ["Flags:  S - Device is requesting Slow LACPDUs", "        F - Device is requesting Fast LACPDUs", "        A - Device is in Active mode       P - Device is in Passive mode", ""] : ["Flags:  S - Device is sending Slow hello.  C - Device is in Consistent state.", "        A - Device is in Auto mode.        P - Device learns on physical port.", ""];
+  for (const [g, members] of groups) {
+    out.push(`Channel group ${g} neighbors`, "");
+    if (proto === "lacp") out.push("Partner's information:", "", "                  LACP port                        Admin  Oper   Port    Port", "Port      Flags   Priority  Dev ID          Age    key    Key    Number  State");
+    else out.push("          Partner              Partner          Partner         Partner Group", "Port      Name                 Device ID        Port       Age  Flags   Cap.");
+    for (const m of members) {
+      const end = dev.links[m.name];
+      const p = end?.device.interfaces[end.iface];
+      if (!p?.channel || p.shutdown || m.shutdown || protocolOf(p.channel.mode) !== proto.toUpperCase()) continue;
+      if (proto === "lacp") out.push(`${pad(short(m.name), 10)}${pad(p.channel.mode === "active" ? "SA" : "SP", 8)}${pad(32768, 10)}${pad(end.device.mac, 16)}${pad("25s", 7)}${pad("0x0", 7)}${pad("0x" + p.channel.group.toString(16), 7)}${pad("0x" + (stpPortNumber(p) ?? 1).toString(16), 8)}${bundled(dev, m) ? "0x3D" : "0x45"}`);
+      else out.push(`${pad(short(m.name), 10)}${pad(end.device.hostname, 21)}${pad(end.device.mac, 17)}${pad(short(p.name), 11)}${pad("10s", 5)}${pad(p.channel.mode === "auto" ? "SAC" : "SC", 8)}${10000 + p.channel.group}`);
+    }
+    out.push("");
+  }
+  return out.join("\n");
+}
+
 function etherchannel(dev) {
   const groups = {};
   for (const f of sortedInterfaces(dev)) if (f.channel) (groups[f.channel.group] ??= []).push(f);
@@ -805,6 +850,10 @@ export const SHOWS = {
     ["show spanning-tree summary", (d) => stpSummary(d)],
     ["show spanning-tree interface <name:iface> [detail]", (d, a) => stpInterface(d, a.name)],
     ["show etherchannel summary", (d) => etherchannel(d)],
+    ["show etherchannel load-balance", (d) => loadBalance(d)],
+    ["show etherchannel port-channel", (d) => etherPortChannel(d)],
+    ["show lacp neighbor", (d) => channelNeighbors(d, "lacp")],
+    ["show pagp neighbor", (d) => channelNeighbors(d, "pagp")],
     ["show etherchannel port-channel", (d) => etherchannel(d)],
     ["show cdp neighbors", (d) => cdpNeighbors(d, false)],
     ["show cdp neighbors detail", (d) => cdpDetail(d)],

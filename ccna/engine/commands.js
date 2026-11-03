@@ -522,7 +522,8 @@ def(IF_MODES, "channel-group <group:num:1-48> mode (active | passive | on | desi
 }, { only: SW });
 def(IF_MODES, "no channel-group", (c) => each(c, (f) => (f.channel = null)), { only: SW });
 def(IF_MODES, "channel-protocol (lacp | pagp)", (c) => each(c, (f) => (f.channelProtocol = c.words[1])), { only: SW });
-def("config", "port-channel load-balance <how:word>", (c) => (c.dev.loadBalance = c.args.how), { only: SW });
+def("config", "port-channel load-balance (dst-ip | dst-mac | src-dst-ip | src-dst-mac | src-ip | src-mac)", (c) => (c.dev.loadBalance = c.words[2]), { only: SW });
+def("config", "no port-channel load-balance", (c) => (c.dev.loadBalance = null), { only: SW });
 
 // spanning tree on a port
 const PORTFAST_WARNING =
