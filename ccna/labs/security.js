@@ -220,5 +220,27 @@ export default [
     solution: { R1: [...EN, "aaa new-model", "radius server RAD1", "address ipv4 10.0.99.20 auth-port 1812 acct-port 1813", "key R4diusKey", "exit", "aaa authentication login default group radius local", "end", "show aaa servers"], ADMIN: ["ssh netops@10.0.10.1"] },
     answers: { 2: "UP" },
     teach: "RADIUS (UDP 1812 authentication, 1813 accounting) combines authentication and authorization and encrypts only the password; it is the usual choice for network access (802.1X, VPN). TACACS+ (TCP 49) is the usual choice for device administration. After aaa new-model, login local on a line no longer applies: the default login list (or a named one with login authentication) does.",
+  }),  lab({
+    id: "dai-verify", module: M, title: "Watching DAI forward and drop ARPs",
+    cmds: ["show ip arp inspection", "show ip dhcp snooping binding", "show logging"],
+    devices: [
+      R("R1", 50, 6, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown")),
+      S("SW1", 50, 34, cfg("vlan 10", "exit", "interface g0/1", "switchport mode access", "switchport access vlan 10", "ip arp inspection trust", "interface range fa0/1 - 2", "switchport mode access", "switchport access vlan 10", "exit", "ip dhcp snooping", "ip dhcp snooping vlan 10", "ip arp inspection vlan 10", "ip source binding 0050.7966.7101 vlan 10 10.10.10.11 interface fa0/1")),
+      HOST("PC1", 18, 76, "windows", { ip: "10.10.10.11/24", gateway: "10.10.10.1", mac: "0050.7966.7101" }),
+      HOST("ROGUE", 82, 76, "linux", { ip: "10.10.10.66/24", gateway: "10.10.10.1", mac: "0050.7966.7166" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "ROGUE", "fa0"]],
+    intro: "DAI already runs on SW1 for VLAN 10, with the uplink trusted. PC1 has a fixed address, entered as a static binding. A laptop nobody knows about sits on Fa0/2.",
+    tasks: [
+      { text: "Ping the gateway from PC1, then from ROGUE.", check: (t) => need(t.ran("PC1", /^ping 10\.10\.10\.1$/) && t.ran("ROGUE", /^ping .*10\.10\.10\.1$/), "ping 10.10.10.1 on both.") },
+      { text: "Which counter in show ip arp inspection went up because of PC1?", choices: ["Forwarded", "Dropped", "ACL Drops", "None of them"], check: (t) => need(t.reply === "Forwarded", "PC1's ARP matches its binding (MAC, IP, VLAN, port), so DAI forwards it.") },
+      { text: "Which counters went up because of ROGUE?", choices: ["Dropped and DHCP Drops", "Forwarded", "ACL Drops", "None of them"], check: (t) => need(t.reply === "Dropped and DHCP Drops", "No binding for 10.10.10.66 on Fa0/2: dropped because the DHCP snooping table has nothing for it.") },
+      { text: "Which log message does SW1 write for ROGUE's ARP?", choices: ["%SW_DAI-4-DHCP_SNOOPING_DENY", "%PORT_SECURITY-2-PSECURE_VIOLATION", "%SPANTREE-2-BLOCK_BPDUGUARD", "%DHCP_SNOOPING-5-DHCP_SNOOPING_UNTRUSTED_PORT"], check: (t) => need(t.reply === "%SW_DAI-4-DHCP_SNOOPING_DENY", "show logging on SW1.") },
+      { text: "Why does R1's reply to PC1 get through without a binding for R1?", choices: ["G0/1 is trusted, so ARPs arriving on it are not inspected", "R1 has a static binding", "DAI does not inspect replies", "R1 is in another VLAN"], check: (t) => need(t.reply === "G0/1 is trusted, so ARPs arriving on it are not inspected", "ip arp inspection trust on the uplink: routers and other switches sit behind trusted ports.") },
+    ],
+    solution: { PC1: ["ping 10.10.10.1"], ROGUE: ["ping -c 2 10.10.10.1"], SW1: ["enable", "show ip arp inspection", "show logging"] },
+    answers: { 1: "Forwarded", 2: "Dropped and DHCP Drops", 3: "%SW_DAI-4-DHCP_SNOOPING_DENY", 4: "G0/1 is trusted, so ARPs arriving on it are not inspected" },
+    failingPings: true,
+    teach: "Dynamic ARP Inspection checks every ARP that arrives on an untrusted port against the DHCP snooping bindings (leases, or static ip source binding entries): a match is forwarded, anything else is dropped and logged as DHCP_SNOOPING_DENY. Trusted ports (uplinks to routers and switches) are not inspected. show ip arp inspection counts both per VLAN.",
   }),
 ];

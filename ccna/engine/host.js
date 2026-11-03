@@ -216,7 +216,7 @@ export function settle(all) {
 // an ARP from dev (asking for target) crosses each switch on the path: where
 // DAI runs on the VLAN and the port it came in by is not trusted, the
 // sender's MAC and IP must be in that switch's DHCP snooping bindings
-function arpPasses(dev, n) {
+function arpPasses(dev, n, count = false) {
   const ip = own(dev).ip;
   // the request goes in by each switch's entry port, the reply comes back
   // in by its exit port, from the target
@@ -225,7 +225,11 @@ function arpPasses(dev, n) {
     for (const hop of n?.path ?? []) {
       const port = hop[side];
       if (!port || !hop.sw.dai?.vlans.includes(hop.vlan) || port.daiTrust) continue;
-      if ((hop.sw.snooping.bindings ?? []).some((b) => b.mac === mac && b.ip === from && b.vlan === hop.vlan)) continue;
+      if ((hop.sw.snooping.bindings ?? []).some((b) => b.mac === mac && b.ip === from && b.vlan === hop.vlan)) {
+        // a real ARP that DAI let through shows in its Forwarded counter
+        if (count) (hop.sw.daiForwarded ??= {})[hop.vlan] = (hop.sw.daiForwarded[hop.vlan] ?? 0) + 1;
+        continue;
+      }
       logOn(hop.sw, `%SW_DAI-4-DHCP_SNOOPING_DENY: 1 Invalid ARPs (${kind}) on ${shortName(port.name)}, vlan ${hop.vlan}.([${mac}/${from}/${kind === "Req" ? "0000.0000.0000" : dev.mac}/${to}/00:10:17 UTC Mon Mar 1 1993])`);
       return false;
     }
@@ -489,7 +493,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   if (!portAdmit(dev)) return false;
   if (local(dev, ip)) {
     const n = onSegment(dev, ip);
-    if (!n || !arpPasses(dev, n)) return false;
+    if (!n || !arpPasses(dev, n, ping)) return false;
     if (n.device.host && !portAdmit(n.device)) return false;
     learnArp(dev, ip);
     if (ping) learnMacs(dev, n);
@@ -498,7 +502,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   if (dev.host.apipa) return false;
   const gw = dev.host.gw;
   if (!gw || !local(dev, gw) || !onSegment(dev, gw)) return false;
-  if (!arpPasses(dev, onSegment(dev, gw))) return false;
+  if (!arpPasses(dev, onSegment(dev, gw), ping)) return false;
   learnArp(dev, gw);
   // the gateway learns the PC's MAC from its ARP request, too
   const gwn = onSegment(dev, gw);
