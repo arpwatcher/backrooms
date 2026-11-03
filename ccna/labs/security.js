@@ -1,4 +1,5 @@
-import { lab, R, S, PC, SRV, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, PC, SRV, HOST, cfg, EN, need, is } from "./kit.js";
+import { aaaServerUp } from "../engine/host.js";
 
 const M = "security";
 const ps = (t, sw, p) => t.f(sw, p).ps;
@@ -178,5 +179,46 @@ export default [
     ],
     solution: { SW1: ["enable", "show port-security interface fa0/1", "configure terminal", "interface fa0/1", "switchport port-security maximum 2", "switchport port-security violation restrict", "shutdown", "no shutdown"] },
     teach: "The default port security (maximum 1, violation shutdown) err-disables a port the moment a second device appears, which is exactly what a phone with a PC behind it does.",
+  }),  lab({
+    id: "aaa-tacacs", module: M, kind: "sim", title: "AAA: logins checked by a TACACS+ server",
+    cmds: ["aaa new-model", "tacacs server", "aaa authentication login", "login authentication", "show tacacs"],
+    devices: [
+      R("R1", 50, 20, cfg("interface g0/0", "ip address 10.0.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.99.1 255.255.255.0", "no shutdown", "exit", "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2")),
+      HOST("ADMIN", 18, 74, "linux", { ip: "10.0.10.50/24", gateway: "10.0.10.1", mac: "0050.7966.6f01", user: "netops" }),
+      HOST("TACSRV", 82, 74, "linux", { ip: "10.0.99.10/24", gateway: "10.0.99.1", mac: "0050.7966.6f02", aaa: { tacacs: "T4cacsKey", users: ["netops"] } }),
+    ],
+    links: [["R1", "g0/0", "ADMIN", "fa0"], ["R1", "g0/1", "TACSRV", "fa0"]],
+    intro: "The admins' accounts live on the TACACS+ server 10.0.99.10 (key T4cacsKey). Make R1 check SSH logins against it, and keep a local user for when the server is unreachable.",
+    tasks: [
+      { text: "A local fallback user admin with the secret Adm1nLocal.", check: (t) => need(t.dev("R1").users.admin?.secret, "username admin secret Adm1nLocal") },
+      { text: "AAA is on, and the TACACS+ server TAC1 is 10.0.99.10 with the key T4cacsKey.", check: (t) => { const s = t.dev("R1").aaa.tacacs.TAC1; return need(t.dev("R1").aaa.newModel && s?.address === "10.0.99.10" && s.key === "T4cacsKey", "aaa new-model, then tacacs server TAC1 with address ipv4 10.0.99.10 and key T4cacsKey."); } },
+      { text: "The default login list asks TACACS+ first and the local users only if no server answers.", check: (t) => need((t.dev("R1").aaa.login.default ?? []).join(" ") === "group tacacs+ local", "aaa authentication login default group tacacs+ local") },
+      { text: "The vty lines take SSH only and use the default login list.", check: (t) => { const v = t.dev("R1").lines.vty; return need(v.transport.join() === "ssh" && (v.loginAuth ?? "default") === "default", "line vty 0 15, transport input ssh (login authentication default is what they use anyway)."); } },
+      { text: "R1 reaches the server, and netops logs in from ADMIN by SSH.", check: (t) => need(aaaServerUp(t.dev("R1"), "tacacs", t.dev("R1").aaa.tacacs.TAC1) && t.session("ADMIN", "10.0.10.1", "ssh", "netops") === "ok" && t.ran("ADMIN", /^ssh /), "ssh netops@10.0.10.1 on ADMIN; show tacacs on R1 shows whether the server answers.") },
+      { text: "Which port and transport does TACACS+ use?", choices: ["TCP 49", "UDP 1812", "UDP 49", "TCP 1812"], check: (t) => need(t.reply === "TCP 49", "TACACS+ is TCP 49; RADIUS is UDP 1812 (authentication) and 1813 (accounting).") },
+    ],
+    solution: { R1: [...EN, "username admin secret Adm1nLocal", "aaa new-model", "tacacs server TAC1", "address ipv4 10.0.99.10", "key T4cacsKey", "exit", "aaa authentication login default group tacacs+ local", "line vty 0 15", "transport input ssh", "login authentication default", "end", "show tacacs"], ADMIN: ["ssh netops@10.0.10.1"] },
+    answers: { 5: "TCP 49" },
+    teach: "aaa new-model replaces login and login local on the lines with method lists. aaa authentication login default group tacacs+ local asks the TACACS+ servers first and the local database only when none of them answers (a server that answers no is final). Each server needs the same shared key as the router. TACACS+ uses TCP 49 and encrypts the whole body; RADIUS uses UDP 1812/1813 and encrypts only the password.",
+  }),
+  lab({
+    id: "aaa-radius", module: M, title: "AAA: a RADIUS server for logins",
+    cmds: ["radius server", "aaa authentication login", "show aaa servers"],
+    devices: [
+      R("R1", 50, 20, cfg("interface g0/0", "ip address 10.0.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.99.1 255.255.255.0", "no shutdown", "exit", "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username admin secret Adm1nLocal", "line vty 0 15", "transport input ssh", "login local")),
+      HOST("ADMIN", 18, 74, "linux", { ip: "10.0.10.50/24", gateway: "10.0.10.1", mac: "0050.7966.6f03", user: "netops" }),
+      HOST("RADSRV", 82, 74, "linux", { ip: "10.0.99.20/24", gateway: "10.0.99.1", mac: "0050.7966.6f04", aaa: { radius: "R4diusKey", users: ["netops"] } }),
+    ],
+    links: [["R1", "g0/0", "ADMIN", "fa0"], ["R1", "g0/1", "RADSRV", "fa0"]],
+    intro: "R1 checks logins against its own users. Move it to the RADIUS server 10.0.99.20 (key R4diusKey, the standard ports), keeping the local user as the fallback.",
+    tasks: [
+      { text: "AAA is on, with RADIUS server RAD1 at 10.0.99.20, ports 1812 and 1813, key R4diusKey.", check: (t) => { const s = t.dev("R1").aaa.radius.RAD1; return need(t.dev("R1").aaa.newModel && s?.address === "10.0.99.20" && s.auth === 1812 && s.acct === 1813 && s.key === "R4diusKey", "aaa new-model; radius server RAD1; address ipv4 10.0.99.20 auth-port 1812 acct-port 1813; key R4diusKey"); } },
+      { text: "Logins ask RADIUS first, then the local users.", check: (t) => need((t.dev("R1").aaa.login.default ?? []).join(" ") === "group radius local", "aaa authentication login default group radius local") },
+      { text: "What State does show aaa servers give RAD1?", choices: ["UP", "DEAD", "INIT", "IDLE"], check: (t) => need(t.reply === "UP" && t.ran("R1", /^sh(ow?)? aaa ser/), "show aaa servers on R1, after the configuration.") },
+      { text: "netops logs in from ADMIN by SSH.", check: (t) => need(t.session("ADMIN", "10.0.10.1", "ssh", "netops") === "ok" && t.ran("ADMIN", /^ssh /), "ssh netops@10.0.10.1 on ADMIN.") },
+    ],
+    solution: { R1: [...EN, "aaa new-model", "radius server RAD1", "address ipv4 10.0.99.20 auth-port 1812 acct-port 1813", "key R4diusKey", "exit", "aaa authentication login default group radius local", "end", "show aaa servers"], ADMIN: ["ssh netops@10.0.10.1"] },
+    answers: { 2: "UP" },
+    teach: "RADIUS (UDP 1812 authentication, 1813 accounting) combines authentication and authorization and encrypts only the password; it is the usual choice for network access (802.1X, VPN). TACACS+ (TCP 49) is the usual choice for device administration. After aaa new-model, login local on a line no longer applies: the default login list (or a named one with login authentication) does.",
   }),
 ];

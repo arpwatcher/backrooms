@@ -1,6 +1,6 @@
 import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
 import { aclAllows, ospfElection } from "../engine/net.js";
-import { ntpSync, fromRouter6 } from "../engine/host.js";
+import { ntpSync, fromRouter6, aaaServerUp } from "../engine/host.js";
 import { expandIpv6 } from "../engine/ip.js";
 
 // harder sims: bigger topologies, several topics at once, more tasks, faults
@@ -833,5 +833,41 @@ export default [
     answers: { 0: "10.0.12.2", 1: "U.U.U", 2: "GUEST, inbound on R2 G0/1", 4: "4", 5: "Linux traceroute sends UDP probes, and TO-SRV permits only ICMP and SSH", 7: "ICMP echo requests" },
     failingPings: true,
     teach: "A router that drops a packet with an ACL answers with ICMP administratively prohibited (unless no ip unreachables): Linux prints Packet filtered, traceroute !X, and a router's own ping shows U, rate-limited to U.U.U. The address in that answer names the router. An entry added to a named ACL goes to the end unless you give it a sequence number, so a deny after permit ip any any never matches. Linux and IOS traceroute probe with UDP 33434 and up, Windows tracert with ICMP echoes, so an ACL that permits only ICMP lets ping through and stops traceroute.",
+  }),  // --- central logins: TACACS+ on R1, RADIUS on R2 ------------------------------------------------------
+  hard({
+    id: "ch-aaa", title: "Challenge: nobody can log in since AAA went live",
+    cmds: ["aaa new-model", "aaa authentication login", "tacacs server", "radius server", "show tacacs", "show aaa servers"],
+    devices: [
+      R("R1", 26, 16, cfg("interface g0/0", "ip address 10.0.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "exit", "ip route 10.0.99.0 255.255.255.0 10.0.12.2", "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username admin secret Adm1nLocal", "aaa new-model", "tacacs server TAC1", "address ipv4 10.0.99.10", "key Tac0ldKey", "exit", "aaa authentication login default group tacacs+", "line vty 0 15", "transport input ssh")),
+      R("R2", 74, 16, cfg("ip access-list extended TO-AAA", "permit udp any host 10.0.99.10 eq 1812", "permit udp any host 10.0.99.10 eq 1813", "exit", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/0", "ip address 10.0.99.1 255.255.255.0", "ip access-group TO-AAA out", "no shutdown", "exit", "ip route 10.0.10.0 255.255.255.0 10.0.12.1", "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username admin secret Adm1nLocal", "line vty 0 15", "login local", "transport input ssh")),
+      S("SW1", 26, 48),
+      HOST("ADMIN", 10, 82, "linux", { ip: "10.0.10.50/24", gateway: "10.0.10.1", mac: "0050.7966.6e01", user: "netops" }),
+      HOST("AAA", 74, 64, "linux", { ip: "10.0.99.10/24", gateway: "10.0.99.1", mac: "0050.7966.6e02", aaa: { tacacs: "S3cr3tKey", radius: "R4diusKey", users: ["netops"] } }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/0", "AAA", "fa0"], ["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "ADMIN", "fa0"]],
+    intro: "The AAA server 10.0.99.10 answers TACACS+ with the key S3cr3tKey and RADIUS with the key R4diusKey, and knows the admins' accounts (netops among them). R1 was moved to TACACS+ last night and since then nobody gets in, not even with the local user admin. Policy: both routers use the server first and fall back to their local user only when no server answers; R1 uses TACACS+, R2 uses RADIUS. Only the server's admins should be able to log in while it is up.",
+    tasks: [
+      { text: "From ADMIN, ssh netops@10.0.10.1. What happens?", choices: ["Permission denied, whatever the password", "Connection refused", "Connection timed out", "A shell on R1"], check: (t) => need(t.ran("ADMIN", /^ssh .*10\.0\.10\.1/) && t.reply === "Permission denied, whatever the password", "R1 answers on port 22, so the problem is the login itself.") },
+      { text: "Why does even the local user admin fail on R1?", choices: ["The method list is only group tacacs+, and no TACACS+ server answers", "admin has no privilege 15", "SSH version 2 needs a RADIUS server", "The vty lines need login local"], check: (t) => need(t.reply === "The method list is only group tacacs+, and no TACACS+ server answers", "show running-config | section aaa and show tacacs on R1: with no local in the list there is nothing to fall back to.") },
+      { text: "R1 keeps TACACS+ first but falls back to its local users when no TACACS+ server answers.", check: (t) => { const m = t.dev("R1").aaa.login.default ?? []; return need(m[0] === "group tacacs+" && m.indexOf("local") > 0, "aaa authentication login default group tacacs+ local"); } },
+      { text: "With the fallback in place and the server still not answering, which login works on R1?", choices: ["The local user admin", "netops, checked by the server", "None", "Only the enable secret"], check: (t) => need(t.reply === "The local user admin", "Try ssh admin@10.0.10.1 from ADMIN: TACACS+ errors, so local is tried.") },
+      { text: "R2 lets R1's TACACS+ (TCP 49) through to the server, and still nothing else new.", check: (t) => { const d = t.dev("R2"); const ok = (proto, dport, src = "10.0.12.1") => aclAllows(d, "TO-AAA", { proto, src, dst: "10.0.99.10", sport: 49152, dport }); return need(t.f("R2", "g0/0").aclOut === "TO-AAA" && ok("tcp", 49) && ok("udp", 1812) && !ok("tcp", 80) && !ok("tcp", 22, "10.0.10.50"), "permit tcp host 10.0.12.1 host 10.0.99.10 eq 49 in TO-AAA (the R1 address the request comes from is its exit interface)."); } },
+      { text: "R1 talks to TAC1 with the key the server expects, and the server answers it.", check: (t) => { const s = t.dev("R1").aaa.tacacs.TAC1; return need(s?.key === "S3cr3tKey" && aaaServerUp(t.dev("R1"), "tacacs", s), "key S3cr3tKey under tacacs server TAC1; show tacacs then counts packets both ways."); } },
+      { text: "Now that the server answers: does the local user admin still get in on R1?", choices: ["No: the server answers and rejects it, and local is only tried when no server answers", "Yes: local is always tried after the server", "Yes, but only from the console", "Only if admin also exists on R2"], check: (t) => need(t.reply === "No: the server answers and rejects it, and local is only tried when no server answers", "Try ssh admin@10.0.10.1 again: a reject is an answer, so the list stops there.") },
+      { text: "R2 uses RADIUS server RAD1 (10.0.99.10, ports 1812/1813, key R4diusKey) for its logins, falling back to local, and the server answers it.", check: (t) => { const d = t.dev("R2"); const s = Object.values(d.aaa.radius).find((x) => x.address === "10.0.99.10"); const m = d.aaa.login.default ?? []; return need(d.aaa.newModel && s?.key === "R4diusKey" && s.auth === 1812 && m[0] === "group radius" && m.indexOf("local") > 0 && aaaServerUp(d, "radius", s), "aaa new-model, radius server RAD1 with address ipv4 10.0.99.10 auth-port 1812 acct-port 1813 and key R4diusKey, then aaa authentication login default group radius local."); } },
+      { text: "Which UDP port does RADIUS use for authentication?", ask: "Port", check: (t) => need(is.num(t.reply, 1812), "1812 for authentication, 1813 for accounting (old servers used 1645/1646). TACACS+ uses TCP 49.") },
+      { text: "From ADMIN, netops logs in to both routers by SSH.", check: (t) => need(t.session("ADMIN", "10.0.10.1", "ssh", "netops") === "ok" && t.session("ADMIN", "10.0.12.2", "ssh", "netops") === "ok" && t.ran("ADMIN", /^ssh .*10\.0\.12\.2/), "ssh netops@10.0.10.1 and ssh netops@10.0.12.2 from ADMIN.") },
+    ],
+    solution: {
+      ADMIN: ["ssh netops@10.0.10.1"],
+      R1: ["enable", "show running-config | section aaa", "show tacacs", "configure terminal", "aaa authentication login default group tacacs+ local", "end"],
+      "ADMIN#2": ["ssh admin@10.0.10.1"],
+      R2: ["enable", "show access-lists", "configure terminal", "ip access-list extended TO-AAA", "permit tcp host 10.0.12.1 host 10.0.99.10 eq 49", "exit", "aaa new-model", "radius server RAD1", "address ipv4 10.0.99.10 auth-port 1812 acct-port 1813", "key R4diusKey", "exit", "aaa authentication login default group radius local", "end", "show aaa servers"],
+      "R1#2": ["configure terminal", "tacacs server TAC1", "key S3cr3tKey", "end", "show tacacs"],
+      "ADMIN#3": ["ssh admin@10.0.10.1", "ssh netops@10.0.10.1", "ssh netops@10.0.12.2"],
+    },
+    answers: { 0: "Permission denied, whatever the password", 1: "The method list is only group tacacs+, and no TACACS+ server answers", 3: "The local user admin", 6: "No: the server answers and rejects it, and local is only tried when no server answers", 8: "1812" },
+    failingPings: true,
+    teach: "aaa new-model turns on AAA; then the vty lines use a login method list (default, or a named list with login authentication) instead of login local. The list is tried in order, and the next method is used only when the one before it errors: no server answers (unreachable, blocked, or the key is wrong) or the local database is empty. A server that answers and rejects the user ends the login. So always end a server list with local, and keep a local user for when the server is down. TACACS+ runs over TCP 49 and encrypts the whole body; RADIUS runs over UDP 1812/1813 and encrypts only the password.",
   }),
 ];
