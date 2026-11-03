@@ -7,7 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
-import { fromRouter, fromRouter6, vtySession } from "./host.js";
+import { fromRouter, fromRouter6, vtySession, TRACE } from "./host.js";
 import { status, stpRoot, bridgePriority, routerId } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
@@ -1225,7 +1225,7 @@ function trace(dev, target) {
   const ip = resolve(dev, target);
   if (!ip) return "% Unrecognized host or address, or protocol not running.";
   const head = `Type escape sequence to abort.\nTracing the route to ${ip}\nVRF info: (vrf in name/id, vrf out name/id)`;
-  const r = fromRouter(dev, ip);
+  const r = fromRouter(dev, ip, TRACE);
   if (!r) return `${head}\n  1 ${reachable(dev, ip) ? ip + " 1 msec 0 msec 1 msec" : "*  *  *"}`;
   if (r.arp && (r.ok || r.hops.length)) (dev.arped ??= []).push(r.arp);
   const rows = r.hops.map((h, i) => `${String(i + 1).padStart(3)} ${h} ${i} msec ${i + 1} msec ${i} msec`);

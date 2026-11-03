@@ -381,6 +381,9 @@ function exitOf(router, route, ip) {
 // what goes out and what comes back: a ping, or a TCP session to a port
 const ICMP = { go: (src, dst, from) => ({ proto: "icmp", icmp: "echo", src, dst, from }), back: (src, dst, from) => ({ proto: "icmp", icmp: "echo-reply", src, dst, from }) };
 const udp = (port) => ({ go: (src, dst, from) => ({ proto: "udp", src, dst, sport: port, dport: port, from }), back: (src, dst, from) => ({ proto: "udp", src, dst, sport: port, dport: port, from }) });
+// IOS, Linux and macOS traceroute send UDP probes to 33434 and up; the
+// target answers ICMP port unreachable (Windows tracert uses echoes)
+export const TRACE = { go: (src, dst, from) => ({ proto: "udp", src, dst, sport: 49152, dport: 33434, from }), back: (src, dst, from) => ({ proto: "icmp", icmp: "unreachable", src, dst, from }) };
 const tcp = (port) => ({ go: (src, dst, from) => ({ proto: "tcp", src, dst, sport: 49152, dport: port, from }), back: (src, dst, from) => ({ proto: "tcp", src, dst, sport: port, dport: 49152, ack: true, from }) });
 
 // a route that leaves the drawn network: out an interface, or to a next hop
@@ -913,7 +916,7 @@ function traceUnix(dev, target, mac) {
   const r = lookup(dev, target);
   if (r.error) return mac ? `traceroute: unknown host ${target}` : `${target}: Name or service not known\nCannot handle "host" cmdline arg \`${target}' on position 1 (argc 1)`;
   if (noRoute(dev, r.ip)) return mac ? "traceroute: findsaddr: failed to connect to peer for src addr selection." : `traceroute to ${r.ip} (${r.ip}), 30 hops max, 60 byte packets\nconnect: Network is unreachable`;
-  const ok = reaches(dev, r.ip);
+  const ok = reaches(dev, r.ip, false, TRACE);
   const u = !ok && netUnreachable(dev, r.ip);
   const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, u);
   const rows = hops.map((h, i) => ` ${i + 1}  ${h} (${h})  ${i + 1}.${i}12 ms  ${i + 1}.${i}05 ms  ${i + 1}.${i}01 ms`);
