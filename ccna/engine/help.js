@@ -1,5 +1,9 @@
 // The one-line descriptions IOS prints next to keywords for "?".
 export const KEYWORD_HELP = {
+  aaa: "Authentication, Authorization and Accounting.", "new-model": "Enable NEW access control commands and functions.(Disables OLD commands.)",
+  authentication: "Authentication configurations parameters.", authorization: "Authorization configurations parameters.", accounting: "Accounting configurations parameters.",
+  tacacs: "TACACS+ server configuration", radius: "RADIUS server configuration", "tacacs-server": "Modify TACACS query parameters", "radius-server": "Modify RADIUS query parameters",
+  "session-id": "AAA Session ID", "start-stop": "Record start and stop without waiting", "stop-only": "Record stop when service terminates.",
   enable: "Turn on privileged commands", disable: "Turn off privileged commands", configure: "Enter configuration mode", terminal: "Set terminal line parameters",
   show: "Show running system information", ping: "Send echo messages", traceroute: "Trace route to destination", copy: "Copy from one file to another",
   write: "Write running configuration to memory, network, or terminal", reload: "Halt and perform a cold restart", erase: "Erase a filesystem", clock: "Manage the system clock",

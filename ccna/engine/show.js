@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { ntpSync } from "./host.js";
+import { ntpSync, aaaServerUp } from "./host.js";
 import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -515,6 +515,29 @@ function accessLists(dev, which, ipOnly) {
   return out.join("\n");
 }
 
+// AAA servers as IOS lists them: RADIUS with its state, TACACS+ with its socket counters
+function aaaServers(dev) {
+  if (!dev.aaa.newModel) return "";
+  const out = [];
+  let id = 1;
+  for (const s of Object.values(dev.aaa.radius)) {
+    const up = aaaServerUp(dev, "radius", s);
+    out.push(`RADIUS: id ${id++}, priority 1, host ${s.address}, auth-port ${s.auth}, acct-port ${s.acct}`, `     State: current ${up ? "UP" : "DEAD"}, duration ${up ? 3086 : 0}s, previous duration 0s`, `     Dead: total time ${up ? 0 : 3086}s, count ${up ? 0 : 1}`, `     Authen: request ${up ? 4 : 3}, timeouts ${up ? 0 : 9}, failover 0, retransmission ${up ? 0 : 6}`, `             Response: accept ${up ? 4 : 0}, reject 0, challenge 0`);
+  }
+  for (const s of Object.values(dev.aaa.tacacs)) {
+    const up = aaaServerUp(dev, "tacacs", s);
+    out.push(`TACACS+: id ${id++}, priority 1, host ${s.address}, port ${s.port}`, `     State: current ${up ? "UP" : "DEAD"}, duration ${up ? 3086 : 0}s, previous duration 0s`);
+  }
+  return out.join("\n");
+}
+function tacacsServers(dev) {
+  return Object.entries(dev.aaa.tacacs).map(([n, s]) => {
+    const up = aaaServerUp(dev, "tacacs", s);
+    const row = (k, v) => `${k.padStart(27)}: ${v}`;
+    return [`Tacacs+ Server -  public  :`, row("Server name", s.legacy ? "" : n), row("Server address", s.address ?? "0.0.0.0"), row("Server port", s.port), row("Socket opens", String(up ? 4 : 0).padStart(10)), row("Socket closes", String(up ? 4 : 0).padStart(10)), row("Socket aborts", String(0).padStart(10)), row("Socket errors", String(0).padStart(10)), row("Socket Timeouts", String(up ? 0 : 3).padStart(10)), row("Failed Connect Attempts", String(up ? 0 : 3).padStart(10)), row("Total Packets Sent", String(up ? 8 : 0).padStart(10)), row("Total Packets Recv", String(up ? 8 : 0).padStart(10))].join("\n");
+  }).join("\n\n");
+}
+
 function portSecurity(dev, name) {
   if (name) {
     const f = dev.interfaces[name];
@@ -753,6 +776,8 @@ export const SHOWS = {
     ["show flash: ", (d) => flash(d)],
     ["show users", (d) => "    Line       User       Host(s)              Idle       Location\n*  0 con 0                idle                 00:00:00"],
     ["show ip ssh", (d) => sshInfo(d)],
+    ["show aaa servers", (d) => aaaServers(d)],
+    ["show tacacs", (d) => tacacsServers(d)],
     ["show ssh", (d) => (d.rsa ? "%No SSHv2 server connections running." : "SSH Disabled")],
     ["show crypto key mypubkey rsa", (d) => (d.rsa ? `% Key pair was generated at: 0:12:44 UTC Mar 1 1993\nKey name: ${d.hostname}.${d.domainName}\n Storage Device: not specified\n Usage: General Purpose Key\n Key is not exportable.\n Key Data:\n  ${d.rsa} bit key` : "")],
     ["show vtp status", (d) => vtpStatus(d)],

@@ -1159,7 +1159,60 @@ export function ntpSync(dev, depth = 0) {
 // a telnet or SSH session from a PC or a router to ip: does it get there and
 // back as TCP, and do the target's vty lines take it (transport input, RSA
 // keys for SSH, access-class against the real source address, a login)
-export function vtySession(dev, ip, proto) {
+// one AAA server: does it answer this router (reachable on its port, the
+// right key, and it runs the service)? accept/reject if so, error if not
+function askServer(router, kind, srv, user) {
+  if (!srv?.address) return "error";
+  const svc = owner(router, srv.address)?.device?.aaaService;
+  const r = fromRouter(router, srv.address, kind === "tacacs" ? tcp(srv.port ?? 49) : udp(srv.auth ?? 1812));
+  if (!r?.ok || !svc?.[kind] || svc[kind] !== srv.key) return "error";
+  return !user || (svc.users ?? []).includes(user) ? "accept" : "reject";
+}
+export function aaaServerUp(router, kind, srv) {
+  return askServer(router, kind, srv) !== "error";
+}
+// a login method list, tried in order: a method that errors (no server
+// answers, an empty local database) passes to the next one; one that
+// answers decides, so a server's reject is final
+function aaaLogin(t, v, user) {
+  const list = v.loginAuth ?? "default";
+  const ms = t.aaa.login[list] ?? (list === "default" ? ["local"] : null);
+  if (!ms) return { result: "aaa-fail" };
+  const servers = (g) => {
+    if (g === "tacacs+") return Object.values(t.aaa.tacacs).map((s) => ["tacacs", s]);
+    if (g === "radius") return Object.values(t.aaa.radius).map((s) => ["radius", s]);
+    const grp = t.aaa.groups[g];
+    if (!grp) return [];
+    const kind = grp.type === "radius" ? "radius" : "tacacs";
+    return grp.servers.map((n) => [kind, t.aaa[kind][n]]);
+  };
+  for (const m of ms) {
+    if (m.startsWith("group ")) {
+      for (const [kind, srv] of servers(m.slice(6))) {
+        const r = askServer(t, kind, srv, user);
+        if (r === "accept") return { result: "ok", local: true, via: kind };
+        if (r === "reject") return { result: "aaa-reject", via: kind };
+      }
+      continue;
+    }
+    if (m === "local" || m === "local-case") {
+      if (!Object.keys(t.users).length) continue;
+      return !user || t.users[user] ? { result: "ok", local: true, via: "local" } : { result: "aaa-reject", via: "local" };
+    }
+    if (m === "enable") {
+      if (t.enableSecret || t.enablePassword) return { result: "ok", via: "enable" };
+      continue;
+    }
+    if (m === "line") {
+      if (v.password) return { result: "ok", via: "line" };
+      continue;
+    }
+    if (m === "none") return { result: "ok", via: "none" };
+  }
+  return { result: "aaa-fail" };
+}
+
+export function vtySession(dev, ip, proto, user) {
   const port = proto === "ssh" ? 22 : 23;
   let src;
   if (dev.host) {
@@ -1176,6 +1229,8 @@ export function vtySession(dev, ip, proto) {
   if (!v.transport.includes(proto)) return { result: "refused" };
   if (proto === "ssh" && !(t.rsa >= (t.sshVersion === 2 ? 768 : 360))) return { result: "refused" };
   if (v.accessClass && src && !aclAllows(t, v.accessClass, { proto: "tcp", src, dst: ip, sport: 49152, dport: port })) return { result: "refused" };
+  // with aaa new-model the method list decides, not login / login local
+  if (t.aaa?.newModel) return aaaLogin(t, v, user);
   if (!v.loginLocal && !v.password) return { result: "nopass" };
   // SSH needs a username: a line password alone is not enough
   if (proto === "ssh" && !v.loginLocal) return { result: "noauth" };
@@ -1193,9 +1248,10 @@ function sshClient(dev, words, os) {
   if (target.includes("@")) [user, target] = [target.slice(0, target.lastIndexOf("@")), target.slice(target.lastIndexOf("@") + 1)];
   const r = lookup(dev, target);
   if (r.error) return `ssh: Could not resolve hostname ${target.toLowerCase()}: ${os === "windows" ? "No such host is known." : os === "mac" ? "nodename nor servname provided, or not known" : "Name or service not known"}`;
-  const s = vtySession(dev, r.ip, "ssh");
+  const s = vtySession(dev, r.ip, "ssh", user);
   if (s.result === "timeout") return `ssh: connect to host ${r.ip} port 22: ${os === "mac" ? "Operation timed out" : "Connection timed out"}`;
   if (s.result === "refused") return `ssh: connect to host ${r.ip} port 22: Connection refused`;
+  if (s.result === "aaa-fail" || s.result === "aaa-reject") return `${user}@${r.ip}'s password:\nPermission denied, please try again.\n${user}@${r.ip}'s password:\nPermission denied, please try again.\n${user}@${r.ip}'s password:\n${user}@${r.ip}: Permission denied (password).`;
   if (s.result !== "ok") return `${user}@${r.ip}'s password:\nPermission denied, please try again.\n(the router has no username to check it against: login local)`;
   return `${user}@${r.ip}'s password:\n(the remote session itself is not simulated here)`;
 }

@@ -56,6 +56,8 @@ export function createDevice({ name, type = "router", hostname, ports, mac } = {
       vty: { first: 0, last: 15, password: null, login: false, loginLocal: false, transport: ["telnet", "ssh"], transportSet: false, execTimeout: null, accessClass: null, logSync: false },
     },
     rsa: null, sshVersion: null, sshTimeout: null, sshRetries: null,
+    // AAA: method lists by name, servers by name, server groups
+    aaa: { newModel: false, login: {}, exec: {}, accounting: {}, tacacs: {}, radius: {}, groups: {} },
     interfaces: {},
     vlans: type === "router" ? {} : { 1: { name: "default" } },
     routes: [], ipRouting: type === "router", ipv6Routing: false, ipv6Routes: [],

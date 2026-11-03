@@ -44,6 +44,7 @@ const SUFFIX = {
   user: ">", priv: "#", config: "(config)#", if: "(config-if)#", subif: "(config-subif)#", range: "(config-if-range)#",
   line: "(config-line)#", router: "(config-router)#", vlan: "(config-vlan)#", dhcp: "(dhcp-config)#",
   "acl-std": "(config-std-nacl)#", "acl-ext": "(config-ext-nacl)#",
+  tacacs: "(config-server-tacacs)#", radius: "(config-radius-server)#", "sg-tacacs": "(config-sg-tacacs+)#", "sg-radius": "(config-sg-radius)#",
 };
 
 export function prompt(dev) {
@@ -52,7 +53,7 @@ export function prompt(dev) {
   return dev.hostname + SUFFIX[dev.mode];
 }
 
-export const CONFIG_MODES = ["config", "if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext"];
+export const CONFIG_MODES = ["config", "if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext", "tacacs", "radius", "sg-tacacs", "sg-radius"];
 
 // --- running a line ----------------------------------------------------------------
 
@@ -197,7 +198,9 @@ export function apply(dev, lines) {
   for (const line of lines) {
     const before = dev.mode;
     const out = exec(dev, line);
-    if (/^% |\n% |Invalid input|Incomplete|Ambiguous|Bad mask|overlaps|rejected/.test(out)) throw new Error(`setup "${line}" on ${dev.name} (${before}): ${out}`);
+    // crypto key generate reports its key size with % lines that are not errors
+    const info = /^crypto key generate/.test(line.trim()) && !/Invalid input|Incomplete|Ambiguous/.test(out);
+    if (!info && /^% |\n% |Invalid input|Incomplete|Ambiguous|Bad mask|overlaps|rejected/.test(out)) throw new Error(`setup "${line}" on ${dev.name} (${before}): ${out}`);
   }
   dev.history = keep.history;
   dev.ran = keep.ran;

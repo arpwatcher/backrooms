@@ -14,6 +14,8 @@ export function buildLab(def) {
   const devices = {};
   for (const d of def.devices) {
     const dev = createDevice({ name: d.name, type: d.type, hostname: d.hostname ?? (d.keepDefaultName ? undefined : d.name), ports: d.ports, mac: d.mac });
+    // a server in the lab that answers TACACS+ or RADIUS: { tacacs: key, radius: key, users: [...] }
+    dev.aaaService = d.aaa ?? null;
     dev.lab = { learned: def.learned?.[d.name], macs: def.macs?.[d.name], bindings: def.bindings?.[d.name], arp: def.arp?.[d.name], natTranslations: def.natTranslations?.[d.name], lease: def.lease?.[d.name], extern: def.extern ?? [] };
     if (d.ip) {
       const [ip, bits] = d.ip.split("/");
@@ -99,7 +101,7 @@ export function tools(lab) {
     reach: (name, ip) => canReach(D(name), ip),
     // a telnet or ssh session from a device: "ok", "refused", "timeout",
     // "nopass" or "noauth"
-    session: (name, ip, proto = "ssh") => vtySession(D(name), ip, proto).result,
+    session: (name, ip, proto = "ssh", user) => vtySession(D(name), ip, proto, user ?? D(name).host?.user).result,
     network, maskBits, parseIp,
   };
   return t;

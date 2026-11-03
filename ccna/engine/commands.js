@@ -10,7 +10,7 @@ import { runningConfig, aceText } from "./config.js";
 import { fromRouter, fromRouter6, vtySession, TRACE, pings } from "./host.js";
 import { status, stpRoot, bridgePriority, routerId } from "./net.js";
 
-export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
+export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [], tacacs: [], radius: [], "sg-tacacs": [], "sg-radius": [] };
 
 const IF_MODES = ["if", "subif", "range"];
 const EXEC = ["user", "priv"];
@@ -644,6 +644,83 @@ def("line", "login local", (c) => {
   l.login = false;
 });
 def("line", "no login", (c) => Object.assign(line(c), { login: false, loginLocal: false }));
+// with AAA the line uses a named login method list instead of login / login local
+def("line", "login authentication (default | <list:word>)", (c) => {
+  if (!c.dev.aaa.newModel) fail("% Invalid input detected at '^' marker.");
+  line(c).loginAuth = c.args.list ?? "default";
+});
+def("line", "no login authentication", (c) => (line(c).loginAuth = null));
+
+// --- AAA -------------------------------------------------------------------------------------------
+
+def("config", "aaa new-model", (c) => (c.dev.aaa.newModel = true));
+def("config", "no aaa new-model", (c) => (c.dev.aaa.newModel = false));
+// every aaa command other than new-model exists only once AAA is on
+const aaaOn = (c) => {
+  if (!c.dev.aaa.newModel) fail("% Invalid input detected at '^' marker.");
+};
+// group tacacs+ | group radius | group <name> | local | local-case | enable | line | none
+function methods(c, text) {
+  const w = text.trim().split(/\s+/);
+  const out = [];
+  for (let i = 0; i < w.length; i++) {
+    const m = w[i].toLowerCase();
+    if (m === "group") {
+      const g = w[++i];
+      if (!g) fail("% Incomplete command.");
+      out.push(`group ${g}`);
+    } else if (["local", "local-case", "enable", "line", "none", "if-authenticated"].includes(m)) out.push(m);
+    else fail("% Invalid input detected at '^' marker.");
+  }
+  if (!out.length) fail("% Incomplete command.");
+  if (out.length > 4) fail("% Invalid input detected at '^' marker.");
+  return out;
+}
+def("config", "aaa authentication login (default | <list:word>) <m:rest>", (c) => {
+  aaaOn(c);
+  c.dev.aaa.login[c.args.list ?? "default"] = methods(c, c.args.m);
+});
+def("config", "no aaa authentication login (default | <list:word>)", (c) => delete c.dev.aaa.login[c.args.list ?? "default"]);
+def("config", "aaa authorization exec (default | <list:word>) <m:rest>", (c) => {
+  aaaOn(c);
+  c.dev.aaa.exec[c.args.list ?? "default"] = methods(c, c.args.m);
+});
+def("config", "aaa accounting exec (default | <list:word>) (start-stop | stop-only) <m:rest>", (c) => {
+  aaaOn(c);
+  c.dev.aaa.accounting[c.args.list ?? "default"] = { when: c.words.find((x) => x === "start-stop" || x === "stop-only"), methods: methods(c, c.args.m) };
+});
+// named servers (IOS 15.x), and the older single-line forms
+def("config", "tacacs server <name:word>", (c) => {
+  aaaOn(c);
+  c.dev.aaa.tacacs[c.args.name] ??= { address: null, key: null, port: 49 };
+  c.mode("tacacs", { server: c.args.name });
+});
+def("config", "no tacacs server <name:word>", (c) => delete c.dev.aaa.tacacs[c.args.name]);
+def("tacacs", "address ipv4 <ip:ip>", (c) => (c.dev.aaa.tacacs[c.dev.ctx.server].address = c.args.ip));
+def("tacacs", "key [(0 | 7)] <k:word>", (c) => (c.dev.aaa.tacacs[c.dev.ctx.server].key = c.args.k));
+def("tacacs", "port <p:num:1-65535>", (c) => (c.dev.aaa.tacacs[c.dev.ctx.server].port = c.args.p));
+def("tacacs", "(single-connection | timeout <t:num:1-1000>)", () => {});
+def("config", "radius server <name:word>", (c) => {
+  aaaOn(c);
+  c.dev.aaa.radius[c.args.name] ??= { address: null, key: null, auth: 1812, acct: 1813 };
+  c.mode("radius", { server: c.args.name });
+});
+def("config", "no radius server <name:word>", (c) => delete c.dev.aaa.radius[c.args.name]);
+def("radius", "address ipv4 <ip:ip> [auth-port <a:num:0-65535>] [acct-port <b:num:0-65535>]", (c) => Object.assign(c.dev.aaa.radius[c.dev.ctx.server], { address: c.args.ip, auth: c.args.a ?? 1812, acct: c.args.b ?? 1813 }));
+def("radius", "key [(0 | 7)] <k:word>", (c) => (c.dev.aaa.radius[c.dev.ctx.server].key = c.args.k));
+def("radius", "(timeout <t:num:1-1000> | retransmit <r:num:0-100>)", () => {});
+def("config", "tacacs-server host <ip:ip> [key <k:word>]", (c) => (c.dev.aaa.tacacs[c.args.ip] = { address: c.args.ip, key: c.args.k ?? null, port: 49, legacy: true }));
+def("config", "radius-server host <ip:ip> [auth-port <a:num:0-65535>] [acct-port <b:num:0-65535>] [key <k:word>]", (c) => (c.dev.aaa.radius[c.args.ip] = { address: c.args.ip, key: c.args.k ?? null, auth: c.args.a ?? 1812, acct: c.args.b ?? 1813, legacy: true }));
+def("config", "aaa group server (tacacs+ | radius) <name:word>", (c) => {
+  aaaOn(c);
+  const type = c.words[3] === "radius" ? "radius" : "tacacs+";
+  c.dev.aaa.groups[c.args.name] ??= { type, servers: [] };
+  c.mode(type === "radius" ? "sg-radius" : "sg-tacacs", { group: c.args.name });
+});
+def(["sg-tacacs", "sg-radius"], "server name <n:word>", (c) => {
+  const g = c.dev.aaa.groups[c.dev.ctx.group];
+  if (!g.servers.includes(c.args.n)) g.servers.push(c.args.n);
+});
 def("line", "transport input (ssh | telnet | all | none | ssh telnet | telnet ssh)", (c) => {
   if (c.dev.ctx.line !== "vty") fail("% Invalid input detected at '^' marker.");
   const v = c.dev.lines.vty;
@@ -1098,8 +1175,8 @@ def("config", "no ip http server", (c) => (c.dev.http = false));
 // --- leaving modes ---------------------------------------------------------------------------------------------------------
 
 def("config", "exit", (c) => c.mode("priv"));
-def(["if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext"], "exit", (c) => c.mode("config"));
-def(["config", "if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext"], "end", (c) => {
+def(["if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext", "tacacs", "radius", "sg-tacacs", "sg-radius"], "exit", (c) => c.mode("config"));
+def(["config", "if", "subif", "range", "line", "router", "vlan", "dhcp", "acl-std", "acl-ext", "tacacs", "radius", "sg-tacacs", "sg-radius"], "end", (c) => {
   c.mode("priv");
   c.say("%SYS-5-CONFIG_I: Configured from console by console");
 });
@@ -1212,6 +1289,7 @@ function telnet(dev, target) {
   if (s.result === "timeout") return `Trying ${ip} ...\n% Connection timed out; remote host not responding`;
   if (s.result === "refused") return `Trying ${ip} ...\n% Connection refused by remote host`;
   if (s.result === "nopass") return `Trying ${ip} ... Open\n\nPassword required, but none set\n\n[Connection to ${ip} closed by foreign host]`;
+  if (s.result === "aaa-fail" || s.result === "aaa-reject") return `Trying ${ip} ... Open\n\n\nUser Access Verification\n\nUsername:\nPassword:\n% Authentication failed\n\nUsername:\n(the remote session itself is not simulated here)`;
   return `Trying ${ip} ... Open\n\n\nUser Access Verification\n\n${s.local ? "Username:" : "Password:"}\n(the remote session itself is not simulated here)`;
 }
 function sshFrom(dev, target) {

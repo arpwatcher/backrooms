@@ -158,6 +158,25 @@ export function runningConfig(dev, onlyIface) {
   if (dev.enableSecret) L.push(`enable secret 5 ${type5(dev.enableSecret)}`);
   if (dev.enablePassword) L.push(`enable password ${dev.passwordEncryption ? "7 " + type7(dev.enablePassword) : dev.enablePassword}`);
   if (dev.enableSecret || dev.enablePassword) bang();
+  // AAA, where IOS prints it: after the enable passwords
+  const a = dev.aaa;
+  if (dev.type !== "pc") {
+    L.push(a.newModel ? "aaa new-model" : "no aaa new-model");
+    if (a.newModel) {
+      for (const [n, g] of Object.entries(a.groups)) {
+        bang();
+        L.push(`aaa group server ${g.type} ${n}`);
+        for (const sv of g.servers) L.push(` server name ${sv}`);
+      }
+      bang();
+      for (const [n, m] of Object.entries(a.login)) L.push(`aaa authentication login ${n} ${m.join(" ")}`);
+      for (const [n, m] of Object.entries(a.exec)) L.push(`aaa authorization exec ${n} ${m.join(" ")}`);
+      for (const [n, x] of Object.entries(a.accounting)) L.push(`aaa accounting exec ${n} ${x.when} ${x.methods.join(" ")}`);
+      bang();
+      L.push("aaa session-id common");
+    }
+    bang();
+  }
   for (const e of dev.dhcp.excluded) L.push(`ip dhcp excluded-address ${e.from}${e.to !== e.from ? " " + e.to : ""}`);
   if (dev.dhcp.excluded.length) bang();
   for (const [name, p] of Object.entries(dev.dhcp.pools)) {
@@ -278,10 +297,31 @@ export function runningConfig(dev, onlyIface) {
     if (l.execTimeout) L.push(` exec-timeout ${l.execTimeout.min} ${l.execTimeout.sec}`);
     if (l.password) L.push(` password ${dev.passwordEncryption ? "7 " + type7(l.password) : l.password}`);
     if (l.logSync) L.push(" logging synchronous");
+    if (l.loginAuth && l.loginAuth !== "default") L.push(` login authentication ${l.loginAuth}`);
     if (l.loginLocal) L.push(" login local");
     else if (l.login) L.push(" login");
     for (const e of extra) L.push(e);
   };
+  // AAA servers come just before the lines
+  for (const [n, s] of Object.entries(dev.aaa.tacacs)) {
+    if (s.legacy) L.push(`tacacs-server host ${s.address}${s.key ? ` key ${s.key}` : ""}`);
+    else {
+      L.push(`tacacs server ${n}`);
+      if (s.address) L.push(` address ipv4 ${s.address}`);
+      if (s.key) L.push(` key ${s.key}`);
+      if (s.port !== 49) L.push(` port ${s.port}`);
+      bang();
+    }
+  }
+  for (const [n, s] of Object.entries(dev.aaa.radius)) {
+    if (s.legacy) L.push(`radius-server host ${s.address} auth-port ${s.auth} acct-port ${s.acct}${s.key ? ` key ${s.key}` : ""}`);
+    else {
+      L.push(`radius server ${n}`);
+      if (s.address) L.push(` address ipv4 ${s.address} auth-port ${s.auth} acct-port ${s.acct}`);
+      if (s.key) L.push(` key ${s.key}`);
+      bang();
+    }
+  }
   line("line con 0", dev.lines.con);
   if (dev.type === "router") line("line aux 0", dev.lines.aux ?? {});
   const v = dev.lines.vty;
