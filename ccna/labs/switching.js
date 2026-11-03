@@ -1,4 +1,4 @@
-import { lab, R, S, L3, PC, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, L3, PC, HOST, cfg, EN, need, is } from "./kit.js";
 
 const M = "switching";
 const vlanName = (t, sw, id) => t.dev(sw).vlans[id]?.name;
@@ -231,5 +231,27 @@ export default [
     ],
     solution: { SW1: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk allowed vlan add 20"], SW2: ["enable", "show interfaces trunk", "configure terminal", "interface g0/1", "switchport trunk native vlan 99"] },
     teach: "A native VLAN mismatch does not stop the trunk, but untagged traffic lands in the wrong VLAN and CDP complains. The allowed list is per end: a VLAN must be allowed on both sides to cross.",
+  }),  lab({
+    id: "mac-learning", module: M, title: "How a switch learns MAC addresses",
+    cmds: ["show mac address-table", "mac address-table static", "mac address-table aging-time", "clear mac address-table dynamic"],
+    devices: [
+      S("SW1", 30, 22, cfg("vlan 10", "name USERS", "exit", "interface g0/1", "switchport mode trunk", "interface range fa0/1 - 2", "switchport mode access", "switchport access vlan 10")),
+      S("SW2", 70, 22, cfg("vlan 10", "name USERS", "exit", "interface g0/1", "switchport mode trunk", "interface fa0/1", "switchport mode access", "switchport access vlan 10")),
+      HOST("PC1", 15, 58, "linux", { ip: "10.10.10.11/24", mac: "0050.7966.7001" }),
+      HOST("PC2", 85, 58, "windows", { ip: "10.10.10.12/24", mac: "0050.7966.7002" }),
+    ],
+    links: [["SW1", "g0/1", "SW2", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW2", "fa0/1", "PC2", "fa0"]],
+    intro: "Two switches, one VLAN. Watch SW1's MAC address table fill up, then pin a printer's MAC to its port.",
+    tasks: [
+      { text: "Before any traffic: how many dynamic addresses does SW1 hold?", ask: "Number", check: (t) => need(is.num(t.reply, 0), "show mac address-table dynamic on SW1 before anyone sends a frame.") },
+      { text: "Ping PC2 (10.10.10.12) from PC1. On which SW1 port does it learn PC2's MAC?", choices: ["Gi0/1", "Fa0/1", "Fa0/2", "It does not learn it"], check: (t) => need(t.ran("PC1", /^ping .*10\.10\.10\.12/) && t.reply === "Gi0/1", "PC2's reply comes in on the trunk, so SW1 maps PC2's MAC to Gi0/1.") },
+      { text: "What does SW1 do with a frame whose destination MAC is not in its table?", choices: ["Floods it out every port in the VLAN except the one it came in on", "Drops it", "Sends it to the root bridge", "Sends it out the trunk only"], check: (t) => need(t.reply === "Floods it out every port in the VLAN except the one it came in on", "Unknown unicast is flooded within the VLAN, like a broadcast.") },
+      { text: "The printer 0050.7966.7777 is pinned to Fa0/2 in VLAN 10 with a static entry.", check: (t) => need((t.dev("SW1").macStatic ?? []).some((e) => e.mac === "0050.7966.7777" && e.vlan === 10 && e.port === "FastEthernet0/2"), "mac address-table static 0050.7966.7777 vlan 10 interface fa0/2") },
+      { text: "Dynamic entries on SW1 age out after 10 minutes instead of the default.", check: (t) => need(t.dev("SW1").macAging === 600, "mac address-table aging-time 600 (seconds).") },
+      { text: "What is the default aging time, in seconds?", ask: "Seconds", check: (t) => need(is.num(t.reply, 300), "300 seconds, five minutes (show mac address-table aging-time before the change).") },
+    ],
+    solution: { SW1: ["enable", "show mac address-table dynamic", "show mac address-table aging-time"], PC1: ["ping -c 2 10.10.10.12"], "SW1#2": ["show mac address-table", "configure terminal", "mac address-table static 0050.7966.7777 vlan 10 interface fa0/2", "mac address-table aging-time 600", "end", "show mac address-table count"] },
+    answers: { 0: "0", 1: "Gi0/1", 2: "Floods it out every port in the VLAN except the one it came in on", 5: "300" },
+    teach: "A switch learns a frame's source MAC on the port it arrived on (per VLAN), forwards a known destination out that one port, and floods unknown unicast, broadcast and multicast to every other port in the VLAN. Dynamic entries age out (300 s by default, mac address-table aging-time); static entries never do. clear mac address-table dynamic empties the learned part.",
   }),
 ];
