@@ -7,7 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
-import { fromRouter, fromRouter6, vtySession, TRACE } from "./host.js";
+import { fromRouter, fromRouter6, vtySession, TRACE, pings } from "./host.js";
 import { status, stpRoot, bridgePriority, routerId } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [] };
@@ -205,6 +205,9 @@ def("priv", "clear port-security (all | configured | dynamic | sticky) [(interfa
   }
 }, { only: ["switch", "l3switch"] });
 def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
+def("priv", "clear access-list counters [<name:word>]", (c) => {
+  for (const [n, acl] of Object.entries(c.dev.acls)) if (!c.args.name || n === c.args.name) for (const e of acl.entries) e.matches = 0;
+});
 def("priv", "clear (counters | arp-cache | ip dhcp binding *)", () => {});
 def("priv", "terminal (length <n:num:0-512> | monitor | no monitor)", () => {});
 def(EXEC, "dir [flash:]", (c) => c.say(SHOWS.flash(c.dev)));
@@ -1189,7 +1192,7 @@ function ping(dev, target, count, src = null) {
     if (!dev.domainLookup) return `% Unrecognized host or address, or protocol not running.\n`;
     return `Translating "${target}"...domain server (${dev.nameServers[0] ?? "255.255.255.255"})\n% Unrecognized host or address, or protocol not running.\n`;
   }
-  const r = fromRouter(dev, ip, undefined, src);
+  const r = fromRouter(dev, ip, pings(count), src);
   const ok = r ? r.ok : reachable(dev, ip);
   // the first packet to a next hop the router has not ARPed for yet is lost
   dev.arped ??= [];

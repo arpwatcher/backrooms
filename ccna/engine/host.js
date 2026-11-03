@@ -5,7 +5,7 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network } from "./ip.js";
-import { status, operMode, carries, hsrpRanking, aclAllows } from "./net.js";
+import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry } from "./net.js";
 import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
@@ -240,6 +240,19 @@ const ownsIp = (d, ip) => Object.values(d.interfaces).some((f) => f.ip === ip &&
 // the last subnet has no such host. With a packet, the ACLs on the way are
 // checked too: inbound where it arrives (inIf), outbound where it leaves,
 // except on the router that sent it (pkt.from)
+// an ACL on the way: a real ping (pkt.count set) adds its packets to the
+// matching entry's counter, as show access-lists reports them
+function passes(router, name, pkt) {
+  if (!router.acls[String(name)]) return true;
+  const e = aclEntry(router, name, pkt);
+  if (e && pkt.count) e.matches = (e.matches ?? 0) + pkt.count;
+  return e?.action === "permit";
+}
+// a packet kind whose packets count n times in the ACLs they cross
+export const counted = (kind, n) => ({ go: (...a) => ({ ...kind.go(...a), count: n }), back: (...a) => ({ ...kind.back(...a), count: n }) });
+// n echo requests from a router's own ping
+export const pings = (n) => counted(ICMP, n);
+
 // Where a packet is dropped, seen.drop records the router, the address it
 // came in by and why (route, acl-in, acl-out): that router may answer the
 // sender with ICMP unreachable.
@@ -248,14 +261,14 @@ const dropped = (seen, router, inIf, why) => {
   return null;
 };
 function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
-  if (pkt && inIf?.aclIn && !aclAllows(router, inIf.aclIn, pkt)) return dropped(seen, router, inIf, "acl-in");
+  if (pkt && inIf?.aclIn && !passes(router, inIf.aclIn, pkt)) return dropped(seen, router, inIf, "acl-in");
   if (ownsIp(router, ip)) return [];
   if (seen.has(router) || seen.size > 15) return null;
   seen.add(router);
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
   if (!best) return dropped(seen, router, inIf, "route");
   const exit = exitOf(router, best, ip);
-  if (pkt && pkt.from !== router && exit?.aclOut && !aclAllows(router, exit.aclOut, pkt)) return dropped(seen, router, inIf, "acl-out");
+  if (pkt && pkt.from !== router && exit?.aclOut && !passes(router, exit.aclOut, pkt)) return dropped(seen, router, inIf, "acl-out");
   if (best.code === "C") {
     const o = owner(router, ip);
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
@@ -491,7 +504,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     // the reply comes in on the outside interface, still to the global
     // address, and is routed back in once translated
     const outside = exitOf(seen.exit, routeTable(seen.exit).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0] ?? {}, ip);
-    if (outside?.aclIn && !aclAllows(seen.exit, outside.aclIn, kind.back(ip, global))) return false;
+    if (outside?.aclIn && !passes(seen.exit, outside.aclIn, kind.back(ip, global))) return false;
     if (pathFrom(seen.exit, f.ip, new Set(), kind.back(ip, f.ip)) === null) return false;
     if (ping && global !== f.ip) translate(seen.exit, f.ip, ip);
     return true;
@@ -719,7 +732,7 @@ function pingWin(dev, target, count) {
   if (r.error) return `Ping request could not find host ${target}. Please check the name and try again.`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return `\nPinging ${r.ip} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
-  const ok = reaches(dev, r.ip, true);
+  const ok = reaches(dev, r.ip, true, counted(ICMP, count));
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
   // Windows counts an unreachable answer as received (an ACL's
   // administratively prohibited is left as a timeout here)
@@ -900,7 +913,7 @@ function pingUnix(dev, target, count, mac) {
   if (r.error) return mac ? `ping: cannot resolve ${target}: Unknown host` : `ping: ${target}: ${r.error === "noserver" ? "Temporary failure in name resolution" : "Name or service not known"}`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return mac ? `PING ${r.ip} (${r.ip}): 56 data bytes\nping: sendto: No route to host\n\n--- ${r.ip} ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss` : "ping: connect: Network is unreachable";
-  const ok = reaches(dev, r.ip, true);
+  const ok = reaches(dev, r.ip, true, counted(ICMP, count));
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
   const u = !ok && netUnreachable(dev, r.ip);
   // an ACL's administratively prohibited: Linux "Packet filtered", macOS "Communication prohibited by filter"

@@ -123,8 +123,13 @@ export function suspended(dev, f) {
 // The first entry that matches decides, and nothing matching is the
 // implicit deny; an ACL applied but never written permits everything.
 export function aclAllows(dev, name, pkt) {
+  if (!dev.acls[String(name)]) return true;
+  return aclEntry(dev, name, pkt)?.action === "permit";
+}
+// the entry a packet matches, or null for the implicit deny at the end
+export function aclEntry(dev, name, pkt) {
   const acl = dev.acls[String(name)];
-  if (!acl) return true;
+  if (!acl) return null;
   const addr = (a, ip) => a.any || (a.host ? a.host === ip : wildcardMatch(ip, a.net, a.wild));
   const port = (p, n) => !p || (n !== undefined && (p.op === "eq" ? n === p.port : p.op === "neq" ? n !== p.port : p.op === "lt" ? n < p.port : p.op === "gt" ? n > p.port : n >= p.port && n <= p.to));
   for (const e of acl.entries) {
@@ -137,9 +142,9 @@ export function aclAllows(dev, name, pkt) {
       if (e.icmp && e.icmp !== pkt.icmp) continue;
       if (e.established && !pkt.ack) continue;
     }
-    return e.action === "permit";
+    return e;
   }
-  return false;
+  return null;
 }
 
 // --- ospf -----------------------------------------------------------------------------------------------

@@ -510,7 +510,7 @@ function accessLists(dev, which, ipOnly) {
     if (which && name !== String(which)) continue;
     const label = acl.named ? `${acl.type === "standard" ? "Standard" : "Extended"} IP access list ${name}` : `${acl.type === "standard" ? "Standard" : "Extended"} IP access list ${name}`;
     out.push(label);
-    for (const e of acl.entries) out.push(`    ${e.seq} ${aceText(e, acl.type === "standard")}`);
+    for (const e of acl.entries) out.push(`    ${e.seq} ${aceText(e, acl.type === "standard")}${e.matches ? ` (${e.matches} match${e.matches === 1 ? "" : "es"})` : ""}`);
   }
   return out.join("\n");
 }
