@@ -30,7 +30,7 @@ const base = `http://localhost:${server.address().port}/ccna/index.html`;
 
 // one of each kind: single device, two routers, a switch sim, a sim with
 // prompts, PCs with terminals and answer boxes, and four challenge labs
-const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts", "ch-floor-dhcp", "ch-l3-core", "ch-ospf-election", "ch-errdisable", "ch-dual-isp", "ch-bundle-stp"];
+const LABS = ["hostname", "sim-dhcp", "sim-access-security", "ssh", "sim-ospf", "win-apipa", "sim-three-hosts", "ch-floor-dhcp", "ch-l3-core", "ch-ospf-election", "ch-errdisable", "ch-dual-isp", "ch-acl-hunt", "ex-qos", "ch-bundle-stp"];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -73,6 +73,10 @@ for (const id of LABS) {
 // it built (ch-bundle-stp, the last lab above) is circled
 ok(await page.locator(".work.wide").count() === 1, "a challenge lab gets the wide layout");
 ok(await page.locator(".topo ellipse.bundle").count() === 1, "the EtherChannel is drawn as a bundle");
+// an exhibit question lab shows its exhibit and no topology or console
+await page.goto(`${base}#lab/ex-json`);
+await page.waitForFunction(() => window.__ccna.current?.def.id === "ex-json");
+ok((await page.locator(".exhibit").isVisible()) && (await page.locator(".topo-panel").isHidden()) && (await page.locator(".term-panel").isHidden()), "an exhibit lab shows the exhibit and hides the topology and console");
 await page.goto(`${base}#exam`);
 await page.waitForTimeout(200);
 await page.click("[data-hard]");
