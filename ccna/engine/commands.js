@@ -1196,7 +1196,8 @@ function ping(dev, target, count, src = null) {
   const miss = ok && r?.arp && !dev.arped.includes(r.arp) ? 1 : 0;
   if (r?.arp && (ok || r.hops.length)) dev.arped.push(r.arp);
   const got = ok ? count - miss : 0;
-  const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : ".".repeat(count);
+  // ICMP unreachables come back rate-limited, one every other probe: U.U.U
+  const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : r?.unreach ? Array.from({ length: count }, (_, i) => (i % 2 ? "." : "U")).join("") : ".".repeat(count);
   return `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${src ? `Packet sent with a source address of ${src} \n` : ""}${marks}\nSuccess rate is ${Math.floor((got * 100) / count)} percent (${got}/${count})${got ? ", round-trip min/avg/max = 1/2/4 ms" : ""}`;
 }
 
@@ -1228,6 +1229,12 @@ function trace(dev, target) {
   if (!r) return `${head}\n  1 ${reachable(dev, ip) ? ip + " 1 msec 0 msec 1 msec" : "*  *  *"}`;
   if (r.arp && (r.ok || r.hops.length)) (dev.arped ??= []).push(r.arp);
   const rows = r.hops.map((h, i) => `${String(i + 1).padStart(3)} ${h} ${i} msec ${i + 1} msec ${i} msec`);
+  // the router that drops it reports !N (no route) or !A (an ACL), rate-limited
+  if (r.unreach) {
+    const m = r.unreach.why === "route" ? "!N" : "!A";
+    rows.push(`${String(rows.length + 1).padStart(3)} ${r.unreach.at} ${m}  *  ${m}`);
+    return `${head}\n${rows.join("\n")}`;
+  }
   // past the last router that answers, every probe times out
   if (!r.ok) for (let n = rows.length, i = n; i < n + 3; i++) rows.push(`${String(i + 1).padStart(3)}  *  *  *`);
   return `${head}\n${rows.join("\n")}`;

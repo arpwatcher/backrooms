@@ -240,15 +240,22 @@ const ownsIp = (d, ip) => Object.values(d.interfaces).some((f) => f.ip === ip &&
 // the last subnet has no such host. With a packet, the ACLs on the way are
 // checked too: inbound where it arrives (inIf), outbound where it leaves,
 // except on the router that sent it (pkt.from)
+// Where a packet is dropped, seen.drop records the router, the address it
+// came in by and why (route, acl-in, acl-out): that router may answer the
+// sender with ICMP unreachable.
+const dropped = (seen, router, inIf, why) => {
+  seen.drop ??= { router, at: inIf?.ip ?? null, why };
+  return null;
+};
 function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
-  if (pkt && inIf?.aclIn && !aclAllows(router, inIf.aclIn, pkt)) return null;
+  if (pkt && inIf?.aclIn && !aclAllows(router, inIf.aclIn, pkt)) return dropped(seen, router, inIf, "acl-in");
   if (ownsIp(router, ip)) return [];
   if (seen.has(router) || seen.size > 15) return null;
   seen.add(router);
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
-  if (!best) return null;
+  if (!best) return dropped(seen, router, inIf, "route");
   const exit = exitOf(router, best, ip);
-  if (pkt && pkt.from !== router && exit?.aclOut && !aclAllows(router, exit.aclOut, pkt)) return null;
+  if (pkt && pkt.from !== router && exit?.aclOut && !aclAllows(router, exit.aclOut, pkt)) return dropped(seen, router, inIf, "acl-out");
   if (best.code === "C") {
     const o = owner(router, ip);
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
@@ -285,7 +292,11 @@ export function fromRouter(router, ip, kind = ICMP, from = null) {
   const src = from ?? router.interfaces[exit]?.ip;
   const seen = new Set();
   const path = pathFrom(router, ip, seen, kind.go(src, ip, router));
-  if (path === null) return { ok: false, hops: partial(router, ip, src), arp: first, src };
+  if (path === null) {
+    const d = seen.drop;
+    const unreach = d && d.router !== router && d.at && pathFrom(d.router, src) !== null ? { at: d.at, why: d.why } : null;
+    return { ok: false, hops: upTo(partial(router, ip, src), unreach), arp: first, src, unreach };
+  }
   if (seen.exit) return { ok: true, hops: path, arp: first, src };
   const o = owner(router, ip);
   const target = o?.device;
@@ -333,6 +344,14 @@ function fromSwitch(sw, ip, kind) {
     }
   }
   return { ok, hops: ok ? [gw, ...path].filter((x, i, a) => a.indexOf(x) === i) : [gw], arp: gw, src };
+}
+
+// the hops a traceroute gets before the router that reports unreachable: that
+// router answers its own hop too unless an inbound ACL drops the probe first
+export function upTo(hops, unreach) {
+  if (!unreach) return hops;
+  const i = hops.indexOf(unreach.at);
+  return i < 0 ? hops : hops.slice(0, unreach.why === "acl-in" ? i : i + 1);
 }
 
 // the hops a traceroute still gets answers from before the path breaks: each
@@ -439,6 +458,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   // set once the packet is through to the gateway (a router past it may
   // still answer unreachable)
   dev.host.atGateway = false;
+  dev.host.drop = null;
   if (ip === "127.0.0.1") return true;
   if (!f.ip || !linkUp(dev)) return false;
   if (!portAdmit(dev)) return false;
@@ -459,7 +479,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
     const r = gatewayRouter(dev);
     const seen = new Set();
-    if (!r || pathFrom(r, ip, seen, kind.go(f.ip, ip), gwIf) === null) return false;
+    if (!r || pathFrom(r, ip, seen, kind.go(f.ip, ip), gwIf) === null) return (dev.host.drop = seen.drop ?? null), false;
     if (!seen.exit) return true;
     // out to the Internet, a private source needs NAT on the way out (a
     // private address beyond the cloud is a company WAN, reached as it is)
@@ -474,7 +494,8 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     return true;
   }
   const r = gatewayRouter(dev);
-  if (!r || pathFrom(r, ip, new Set(), kind.go(f.ip, ip), gwIf) === null) return false;
+  const fwd = new Set();
+  if (!r || pathFrom(r, ip, fwd, kind.go(f.ip, ip), gwIf) === null) return (dev.host.drop = fwd.drop ?? null), false;
   // and back: from the router that answers, or from the target's own gateway
   const o = owner(dev, ip);
   const target = o?.device;
@@ -674,28 +695,20 @@ function arpWin(dev) {
   return [`\nInterface: ${f.ip} --- 0xc`, "  Internet Address      Physical Address      Type", ...rows, `  ${bcast.padEnd(22)}ff-ff-ff-ff-ff-ff     static`, "  224.0.0.22            01-00-5e-00-00-16     static", "  255.255.255.255       ff-ff-ff-ff-ff-ff     static"].join("\n");
 }
 
-// a router on the way with no route to ip answers the PC with ICMP net
-// unreachable, if the answer can get back: the address it answers from
-// (where the packet came in), or null when the packet just gets lost.
-// Called right after the reaches() that failed, which says whether the
-// packet got through to the gateway at all
+// the router that dropped the PC's packet answers with ICMP unreachable if
+// it can route the answer back: { at, why } (why: route, acl-in, acl-out),
+// or null when the packet is just lost. Read right after the reaches()
+// that failed, which records the drop
 function netUnreachable(dev, ip) {
-  const src = own(dev).ip;
-  let r = gatewayRouter(dev);
-  let at = dev.host.gw;
-  if (!r || !dev.host.atGateway) return null;
-  const seen = new Set();
-  while (r && !seen.has(r)) {
-    seen.add(r);
-    const best = routeTable(r).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0];
-    if (!best) return at === dev.host.gw || pathFrom(r, src) !== null ? at : null;
-    if (best.code === "C" || !best.via) return null;
-    const o = owner(r, best.via);
-    if (!o || !ROUTER(o.device)) return null;
-    r = o.device;
-    at = best.via;
-  }
-  return null;
+  const d = dev.host.atGateway && dev.host.drop;
+  if (!d || !d.at || pathFrom(d.router, own(dev).ip) === null) return null;
+  return { at: d.at, why: d.why };
+}
+// the routers a PC's trace gets answers from before the break
+function hopsBefore(dev, ip, u) {
+  const r = gatewayRouter(dev);
+  if (!dev.host.gw || !reaches(dev, dev.host.gw)) return [];
+  return upTo([dev.host.gw, ...(r ? partial(r, ip, own(dev).ip) : [])], u);
 }
 
 function pingWin(dev, target, count) {
@@ -705,9 +718,10 @@ function pingWin(dev, target, count) {
   if (noRoute(dev, r.ip)) return `\nPinging ${r.ip} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
   const ok = reaches(dev, r.ip, true);
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
-  // Windows counts an unreachable answer as received
+  // Windows counts an unreachable answer as received (an ACL's
+  // administratively prohibited is left as a timeout here)
   const u = !ok && netUnreachable(dev, r.ip);
-  if (u) return [head, ...Array(count).fill(`Reply from ${u}: Destination net unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
+  if (u?.why === "route") return [head, ...Array(count).fill(`Reply from ${u.at}: Destination net unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
   const lines = Array.from({ length: count }, (_, i) => (ok ? `Reply from ${r.ip}: bytes=32 time${i === 0 ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
   const stats = `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${ok ? count : 0}, Lost = ${ok ? 0 : count} (${ok ? 0 : 100}% loss),`;
   return [head, ...lines, stats + (ok ? "\nApproximate round trip times in milli-seconds:\n    Minimum = 0ms, Maximum = 2ms, Average = 0ms" : "")].join("\n");
@@ -742,13 +756,14 @@ function tracertWin(dev, target) {
   if (r.error) return `Unable to resolve target system name ${target}.`;
   if (noRoute(dev, r.ip)) return "Unable to contact IP driver. General failure.";
   const ok = reaches(dev, r.ip);
-  const u = !ok && netUnreachable(dev, r.ip);
-  const hops = ok ? hopsTo(dev, r.ip) : [dev.host.gw].filter((g) => g && reaches(dev, g));
+  const found = !ok && netUnreachable(dev, r.ip);
+  const u = found?.why === "route" ? found : null;
+  // the routers before the break answer their hops; the one that reports
+  // net unreachable answers its own hop first, then reports on the next
+  const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, u);
   const ms = (i) => (i === 0 ? "<1 ms" : `${i} ms`).padStart(9);
   const rows = hops.map((h, i) => `${String(i + 1).padStart(3)}${ms(i)}${ms(i)}${ms(i)}  ${h}`);
-  // the router that reports it is that hop's line
-  if (u && hops.at(-1) === u) rows.pop();
-  if (u) return [`\nTracing route to ${r.name ? `${r.name} [${r.ip}]` : r.ip}`, "over a maximum of 30 hops:", "", ...rows, `${String(rows.length + 1).padStart(3)}  ${u}  reports: Destination net unreachable.`, "", "Trace complete."].join("\n");
+  if (u) return [`\nTracing route to ${r.name ? `${r.name} [${r.ip}]` : r.ip}`, "over a maximum of 30 hops:", "", ...rows, `${String(rows.length + 1).padStart(3)}  ${u.at}  reports: Destination net unreachable.`, "", "Trace complete."].join("\n");
   if (!ok) rows.push(`${String(rows.length + 1).padStart(3)}${"*".padStart(9)}${"*".padStart(9)}${"*".padStart(9)}     Request timed out.`);
   return [`\nTracing route to ${r.name ? `${r.name} [${r.ip}]` : r.ip}`, "over a maximum of 30 hops:", "", ...rows, "", ok ? "Trace complete." : ""].join("\n");
 }
@@ -885,8 +900,10 @@ function pingUnix(dev, target, count, mac) {
   const ok = reaches(dev, r.ip, true);
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
   const u = !ok && netUnreachable(dev, r.ip);
-  if (u && mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...Array.from({ length: count }, (_, i) => `92 bytes from ${u}: Destination Net Unreachable\nVr HL TOS  Len   ID Flg  off TTL Pro  cks      Src      Dst\n 4  5  00 5400 ${(0x6a1c + i).toString(16)}   0 0000  3f  01 ${(0xb12f - i).toString(16)} ${f.ip}  ${r.ip}\n`), `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 packets received, 100.0% packet loss`].join("\n");
-  if (u) return [`PING ${shown} 56(84) bytes of data.`, ...Array.from({ length: count }, (_, i) => `From ${u} icmp_seq=${i + 1} Destination Net Unreachable`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 received, +${count} errors, 100% packet loss, time ${count * 1000 - 997}ms`].join("\n");
+  // an ACL's administratively prohibited: Linux "Packet filtered", macOS "Communication prohibited by filter"
+  const why = u && (u.why === "route" ? "Destination Net Unreachable" : mac ? "Communication prohibited by filter" : "Packet filtered");
+  if (u && mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...Array.from({ length: count }, (_, i) => `92 bytes from ${u.at}: ${why}\nVr HL TOS  Len   ID Flg  off TTL Pro  cks      Src      Dst\n 4  5  00 5400 ${(0x6a1c + i).toString(16)}   0 0000  3f  01 ${(0xb12f - i).toString(16)} ${f.ip}  ${r.ip}\n`), `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 packets received, 100.0% packet loss`].join("\n");
+  if (u) return [`PING ${shown} 56(84) bytes of data.`, ...Array.from({ length: count }, (_, i) => `From ${u.at} icmp_seq=${i + 1} ${why}`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 received, +${count} errors, 100% packet loss, time ${count * 1000 - 997}ms`].join("\n");
   const replies = ok ? Array.from({ length: count }, (_, i) => (mac ? `64 bytes from ${r.ip}: icmp_seq=${i} ttl=${ttl(dev, r.ip)} time=1.${2 + i}04 ms` : `64 bytes from ${r.name ? shown : r.ip}: icmp_seq=${i + 1} ttl=${ttl(dev, r.ip)} time=1.${2 + i}4 ms`)) : mac ? Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}`) : [];
   if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${ok ? count : 0} packets received, ${ok ? "0.0" : "100.0"}% packet loss`, ...(ok ? ["round-trip min/avg/max/stddev = 1.204/1.354/1.504/0.112 ms"] : [])].join("\n");
   return [`PING ${shown} 56(84) bytes of data.`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${ok ? count : 0} received, ${ok ? 0 : 100}% packet loss, time ${count * 1000 - 997}ms`, ...(ok ? [`rtt min/avg/max/mdev = 1.214/1.364/1.514/0.112 ms`] : [])].join("\n");
@@ -898,11 +915,11 @@ function traceUnix(dev, target, mac) {
   if (noRoute(dev, r.ip)) return mac ? "traceroute: findsaddr: failed to connect to peer for src addr selection." : `traceroute to ${r.ip} (${r.ip}), 30 hops max, 60 byte packets\nconnect: Network is unreachable`;
   const ok = reaches(dev, r.ip);
   const u = !ok && netUnreachable(dev, r.ip);
-  const hops = ok ? hopsTo(dev, r.ip) : [dev.host.gw].filter((g) => g && reaches(dev, g));
+  const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, u);
   const rows = hops.map((h, i) => ` ${i + 1}  ${h} (${h})  ${i + 1}.${i}12 ms  ${i + 1}.${i}05 ms  ${i + 1}.${i}01 ms`);
-  // traceroute marks a hop that answers net unreachable with !N
-  if (u && hops.at(-1) === u) rows.pop();
-  if (u) rows.push(` ${rows.length + 1}  ${u} (${u})  ${rows.length + 1}.204 ms !N  ${rows.length + 1}.188 ms !N  ${rows.length + 1}.173 ms !N`);
+  // traceroute marks the hop that answers unreachable: !N no route, !X administratively prohibited
+  const mark = u?.why === "route" ? "!N" : "!X";
+  if (u) rows.push(` ${rows.length + 1}  ${u.at} (${u.at})  ${rows.length + 1}.204 ms ${mark}  ${rows.length + 1}.188 ms ${mark}  ${rows.length + 1}.173 ms ${mark}`);
   else if (!ok) rows.push(` ${rows.length + 1}  * * *`);
   return [`traceroute to ${r.name ?? r.ip} (${r.ip}), ${mac ? "64 hops max, 52 byte packets" : "30 hops max, 60 byte packets"}`, ...rows].join("\n");
 }
