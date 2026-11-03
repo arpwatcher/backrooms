@@ -198,5 +198,26 @@ export default [
       R2: ["enable", "show ip protocols", "configure terminal", "router ospf 1", "no network 10.0.12.0 0.0.0.3 area 1", "network 10.0.12.0 0.0.0.3 area 0"],
     },
     teach: "show ip protocols lists the networks, areas and passive interfaces; show ip ospf interface shows each interface's area and timers. A passive interface sends no hellos, and both ends of a link must be in the same area.",
+  }),  lab({
+    id: "ospf-database", module: M, title: "Reading show ip ospf database",
+    cmds: ["show ip ospf database"],
+    devices: [
+      R("R1", 18, 28, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "router ospf 1", "router-id 1.1.1.1", "network 10.1.1.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0", "passive-interface g0/0")),
+      R("R2", 50, 28, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "no shutdown", "router ospf 1", "router-id 2.2.2.2", "network 10.0.12.0 0.0.0.3 area 0", "network 10.0.23.0 0.0.0.3 area 0")),
+      R("R3", 82, 28, cfg("interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", "interface loopback 0", "ip address 3.3.3.3 255.255.255.255", "router ospf 1", "router-id 3.3.3.3", "network 10.0.23.0 0.0.0.3 area 0", "network 3.3.3.3 0.0.0.0 area 0", "passive-interface g0/2")),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"]],
+    intro: "Three routers in area 0, but R1 does not learn R3's loopback. Read the link-state database on R1.",
+    tasks: [
+      { text: "How many router LSAs does R1's database hold?", ask: "Number", check: (t) => need(t.ran("R1", /^sh(ow?)? ip ospf data/) && is.num(t.reply, 2), "show ip ospf database on R1: one router LSA per router reachable over full adjacencies.") },
+      { text: "Why is R3 not in R1's database?", choices: ["R3's G0/2 is passive, so R2 and R3 never become neighbors", "R3 is in another area", "R3 has no router ID", "R1 is passive towards R2"], check: (t) => need(t.reply === "R3's G0/2 is passive, so R2 and R3 never become neighbors", "show ip ospf neighbor on R2 (only R1), show ip protocols on R3 (Passive Interface(s)).") },
+      { text: "R2 and R3 are full neighbors, and R3's loopback stays advertised.", check: (t) => need(t.ospfAdj("R2", "R3") && t.ospfAdj("R3", "R2") && t.ospfOf("R3", "loopback0"), "no passive-interface g0/2 under router ospf 1 on R3.") },
+      { text: "Which router originates the network LSA for 10.0.12.0/30?", ask: "Router ID", check: (t) => need(is.ip(t.reply, "2.2.2.2"), "The Net Link States entry is advertised by the DR of that segment: the higher router ID, R2.") },
+      { text: "How many links does R3's router LSA list now?", ask: "Number", check: (t) => need(is.num(t.reply, 2), "Link count: one for the transit link to R2 (it has a DR) and one stub for the loopback.") },
+      { text: "How many network LSAs does R1's database hold now?", ask: "Number", check: (t) => need(is.num(t.reply, 2), "One per Ethernet segment with a DR and a neighbor: R1-R2 and R2-R3.") },
+    ],
+    solution: { R1: ["enable", "show ip ospf database"], R2: ["enable", "show ip ospf neighbor"], R3: [...EN, "router ospf 1", "no passive-interface g0/2", "end"], "R1#2": ["show ip ospf database"] },
+    answers: { 0: "2", 1: "R3's G0/2 is passive, so R2 and R3 never become neighbors", 3: "2.2.2.2", 4: "2", 5: "2" },
+    teach: "Every router in an area has the same database: a router LSA (type 1) per router, listing its links; a network LSA (type 2) per multi-access segment, sent by its DR; type 5 for external routes such as a default from default-information originate. A router whose adjacency is not full is not in the others' database at all.",
   }),
 ];

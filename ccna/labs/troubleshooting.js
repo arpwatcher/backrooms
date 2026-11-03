@@ -1,4 +1,4 @@
-import { lab, R, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, cfg, EN, need, is } from "./kit.js";
 
 const M = "troubleshooting";
 const r1 = cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 10.3.3.0 255.255.255.0 10.0.12.2");
@@ -74,5 +74,19 @@ export default [
     ],
     solution: { R1: ["enable", "ping 10.3.3.10 source g0/0"], R3: [...EN, "interface g0/2", "no shutdown"], R2: [...EN, "ip route 10.1.1.0 255.255.255.0 10.0.12.1"] },
     teach: "Work layer by layer: interface status (show ip interface brief), then addressing, then routing in both directions (show ip route on every hop).",
+  }),  lab({
+    id: "show-arp", module: M, title: "The ARP cache: show ip arp",
+    cmds: ["show ip arp", "show arp", "ping"],
+    devices: line(), links,
+    intro: "Find out what R1 has learned at layer 2 when it sends traffic towards PC3.",
+    tasks: [
+      { text: "Ping 10.3.3.10 from R1, then run show ip arp on R1.", check: (t) => need(t.ran("R1", /^ping 10\.3\.3\.10/) && t.ran("R1", /^sh(ow?)? (ip )?arp/), "ping first: R1 resolves its next hop on the way.") },
+      { text: "Which MAC address does R1 list for 10.0.12.2?", ask: "MAC", check: (t) => need(is.mac(t.reply, t.dev("R2").mac), "The Hardware Addr column of the 10.0.12.2 line: R2's MAC.") },
+      { text: "What does a dash in the Age column mean?", choices: ["The address is R1's own", "The entry has expired", "The entry was configured statically on the PC", "The neighbor is down"], check: (t) => need(t.reply === "The address is R1's own", "R1's own interface addresses show age -.") },
+      { text: "Which address does R1 have to resolve to send PC1's packet towards 10.3.3.10?", ask: "Address", check: (t) => need(is.ip(t.reply, "10.0.12.2"), "A router ARPs for the next hop, not for the final destination: R2's 10.0.12.2.") },
+    ],
+    solution: { R1: ["enable", "ping 10.3.3.10", "show ip arp"] },
+    answers: { 1: "0001.42a3.2467", 2: "The address is R1's own", 3: "10.0.12.2" },
+    teach: "A router keeps an ARP entry for each neighbor it talks to on Ethernet: hosts that ARPed for it, and the next hops it forwards to (never a remote destination). Its own addresses are listed with age -. show ip arp and show arp print the same table; clear arp-cache empties it.",
   }),
 ];

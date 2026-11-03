@@ -78,5 +78,19 @@ export default [
     ],
     solution: { SW1: ["enable", "show etherchannel summary", "configure terminal", "interface range g0/1 - 2", "channel-group 1 mode active", "interface port-channel 1", "switchport mode trunk"], SW2: [...EN, "interface port-channel 1", "switchport mode trunk"] },
     teach: "Troubleshooting sims on the exam start with show commands. In show etherchannel summary, (I) means stand-alone (not bundled) and (P) means bundled.",
+  }),  lab({
+    id: "ec-verify", module: M, title: "Verifying LACP and load balancing",
+    cmds: ["show lacp neighbor", "show etherchannel port-channel", "port-channel load-balance", "show etherchannel load-balance"],
+    devices: pair(cfg("interface range g0/1 - 2", "channel-group 1 mode active"), cfg("interface range g0/1 - 2", "channel-group 1 mode passive")), links,
+    intro: "Po1 between SW1 and SW2 is up with LACP. Read how it is running, then make it spread traffic per IP conversation instead of per source MAC.",
+    tasks: [
+      { text: "In show lacp neighbor on SW1, which flags does SW2 show?", choices: ["SP", "SA", "FA", "FP"], check: (t) => need(t.reply === "SP", "S: slow LACPDUs; P: passive mode (SW2 is channel-group 1 mode passive).") },
+      { text: "Which EC state does show etherchannel port-channel give SW1's member ports?", choices: ["Active", "Passive", "On", "Desirable-Sl"], check: (t) => need(t.reply === "Active", "SW1's members are mode active.") },
+      { text: "What does SW1 hash on before you change anything?", choices: ["src-mac", "src-dst-ip", "dst-mac", "src-dst-mac"], check: (t) => need(t.reply === "src-mac", "show etherchannel load-balance: a 2960 uses src-mac by default.") },
+      { text: "SW1 balances on source and destination IP address.", check: (t) => need(t.dev("SW1").loadBalance === "src-dst-ip", "port-channel load-balance src-dst-ip in global configuration.") },
+    ],
+    solution: { SW1: ["enable", "show lacp neighbor", "show etherchannel port-channel", "show etherchannel load-balance", "configure terminal", "port-channel load-balance src-dst-ip", "end", "show etherchannel load-balance"] },
+    answers: { 0: "SP", 1: "Active", 2: "src-mac" },
+    teach: "show lacp neighbor shows what the partner sends (flags S/F for slow or fast LACPDUs, A/P for active or passive, its port numbers and key); show etherchannel port-channel lists the bundled ports and their state. Load balancing is global on the switch (port-channel load-balance) and per flow: one conversation always uses one link, so pick a hash that varies with your traffic.",
   }),
 ];

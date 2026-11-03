@@ -1,4 +1,4 @@
-import { lab, R, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, cfg, EN, need, is } from "./kit.js";
 import { expandIpv6 } from "../engine/ip.js";
 
 const M = "ipv6";
@@ -106,5 +106,18 @@ export default [
       R2: [...EN, "ipv6 unicast-routing", "interface g0/0", "ipv6 address 2001:db8:2::1/64", "interface g0/1", "ipv6 address 2001:db8:12::2/64", "exit", "ipv6 route ::/0 2001:db8:12::1"],
     },
     teach: "Address types: global unicast 2000::/3, unique local FC00::/7, link-local FE80::/10, multicast FF00::/8 (FF02::1 all nodes, FF02::2 all routers).",
+  }),  lab({
+    id: "ipv6-neighbors", module: M, title: "show ipv6 neighbors",
+    cmds: ["show ipv6 neighbors"],
+    devices: pair(...addressed), links: pairLinks,
+    intro: "IPv6 has no ARP: neighbor discovery (NDP) fills the neighbor cache. Read it on R1.",
+    tasks: [
+      { text: "Which link-local address does R1 list for R2?", ask: "IPv6 address", check: (t) => need(t.ran("R1", /^sh(ow?)? ipv6 nei/) && expandIpv6(t.reply.trim()) === expandIpv6("fe80::201:42ff:fea3:2467"), "show ipv6 neighbors on R1: the FE80:: entry on Gi0/1.") },
+      { text: "Which ICMPv6 messages fill this table?", choices: ["Neighbor Solicitation and Neighbor Advertisement", "Router Solicitation and Router Advertisement", "Echo Request and Echo Reply", "ARP request and reply"], check: (t) => need(t.reply === "Neighbor Solicitation and Neighbor Advertisement", "NS/NA (ICMPv6 types 135 and 136) replace ARP; RS/RA (133/134) are for SLAAC.") },
+      { text: "Which MAC address does R1 list for 2001:DB8:12::2?", ask: "MAC", check: (t) => need(is.mac(t.reply, "0001.42a3.2467"), "The Link-layer Addr column.") },
+    ],
+    solution: { R1: ["enable", "show ipv6 neighbors"] },
+    answers: { 0: "FE80::201:42FF:FEA3:2467", 1: "Neighbor Solicitation and Neighbor Advertisement", 2: "0001.42a3.2467" },
+    teach: "show ipv6 neighbors is the IPv6 counterpart of show ip arp: each neighbor's global and link-local addresses with the MAC learned by Neighbor Solicitation/Advertisement (sent to the solicited-node multicast address FF02::1:FFxx:xxxx). States: REACH (confirmed recently), STALE, DELAY, PROBE, INCMP.",
   }),
 ];
