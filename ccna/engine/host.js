@@ -763,7 +763,7 @@ function tracertWin(dev, target) {
   const u = found?.why === "route" ? found : null;
   // the routers before the break answer their hops; the one that reports
   // net unreachable answers its own hop first, then reports on the next
-  const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, u);
+  const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, found || null);
   const ms = (i) => (i === 0 ? "<1 ms" : `${i} ms`).padStart(9);
   const rows = hops.map((h, i) => `${String(i + 1).padStart(3)}${ms(i)}${ms(i)}${ms(i)}  ${h}`);
   if (u) return [`\nTracing route to ${r.name ? `${r.name} [${r.ip}]` : r.ip}`, "over a maximum of 30 hops:", "", ...rows, `${String(rows.length + 1).padStart(3)}  ${u.at}  reports: Destination net unreachable.`, "", "Trace complete."].join("\n");
