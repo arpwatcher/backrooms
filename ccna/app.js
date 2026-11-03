@@ -111,6 +111,14 @@ function openLab(def, { exam = null } = {}) {
   $(".crumbs").innerHTML = exam ? `<span>Exam · question ${exam.index + 1} of ${exam.list.length}</span>` : `<span>${esc(mod?.title ?? "")}</span>${def.hard ? '<span class="tag hard">challenge</span>' : def.kind === "sim" ? '<span class="tag sim">simulation</span>' : '<span class="tag">mini lab</span>'}${def.cmds.slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}`;
   $(".lab-title").textContent = def.title;
   $(".intro").innerHTML = rich(def.intro ?? "");
+  // a question lab with an exhibit and no devices: no topology, no console
+  const exhibit = $(".exhibit");
+  exhibit.hidden = !def.exhibit;
+  exhibit.textContent = def.exhibit ?? "";
+  const solo = !consoles.length;
+  $(".work").classList.toggle("solo", solo);
+  $(".topo-panel").hidden = solo;
+  $(".term-panel").hidden = solo;
   // replay what was typed here before (not in the exam)
   const saved = !exam && work[def.id];
   if (saved) {
@@ -177,6 +185,7 @@ function answerBox(task, i) {
 }
 
 function renderTabs() {
+  if (!current.selected) return;
   const tabs = $(".tabs");
   tabs.innerHTML = "";
   for (const name of current.consoles) {
@@ -209,6 +218,7 @@ function isBundledSafe(dev, f) {
 }
 
 function renderTopology() {
+  if (!current.selected) return;
   drawTopology($(".topo"), current.lab, {
     selected: current.selected,
     statusOf: lightOf,
@@ -240,6 +250,7 @@ function select(name) {
 }
 
 function renderScreen() {
+  if (!current.selected) return;
   const dev = current.lab.devices[current.selected];
   $(".out").textContent = current.buffers[current.selected];
   $(".prompt").textContent = prompt(dev);

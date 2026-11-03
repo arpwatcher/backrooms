@@ -66,6 +66,9 @@ main { padding: 16px; min-width: 0; }
 .topo-panel { position: relative; }
 .topo { width: 100%; height: auto; display: block; aspect-ratio: 100 / 60; background: radial-gradient(circle at 50% 40%, #13283a, #0e1d2a 70%); border-radius: 8px; }
 .work.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.work.solo { grid-template-columns: minmax(0, 860px); }
+.panel[hidden] { display: none; }
+.exhibit { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; white-space: pre; color: var(--text); }
 .work.wide .topo-panel { grid-column: 1 / -1; }
 .work.wide .term-panel { grid-column: auto; }
 .work.wide .topo { max-height: 60vh; }
