@@ -17,6 +17,7 @@ import legacy from "./legacy.js";
 import troubleshooting from "./troubleshooting.js";
 import hostos from "./hostos.js";
 import challenge from "./challenge.js";
+import exhibits from "./exhibits.js";
 
 export const MODULES = [
   { id: "basics", title: "IOS basics", blurb: "modes, hostname, passwords, interfaces, saving" },
@@ -35,8 +36,9 @@ export const MODULES = [
   { id: "ipv6", title: "IPv6", blurb: "addressing, EUI-64, link-local, SLAAC, static routes" },
   { id: "management", title: "Device management", blurb: "IOS image, boot system, config-register, TFTP" },
   { id: "hostos", title: "Host OS commands", blurb: "Windows, Linux and macOS: ipconfig, ip addr, ifconfig, ARP, DNS" },
+  { id: "exhibits", title: "Exhibit questions", blurb: "automation, JSON, REST, wireless, QoS: read the exhibit and answer" },
   { id: "challenge", title: "Challenge labs", blurb: "harder sims: bigger topologies, several topics, faults and questions" },
   { id: "legacy", title: "Legacy (not on 200-301)", blurb: "RIP, EIGRP, VTP" },
 ];
 
-export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...troubleshooting, ...hsrp, ...services, ...nat, ...acl, ...security, ...ipv6, ...management, ...hostos, ...challenge, ...legacy];
+export const LABS = [...basics, ...switching, ...stp, ...etherchannel, ...intervlan, ...routing, ...ospf, ...troubleshooting, ...hsrp, ...services, ...nat, ...acl, ...security, ...ipv6, ...management, ...hostos, ...exhibits, ...challenge, ...legacy];
