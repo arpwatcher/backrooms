@@ -167,5 +167,18 @@ export default [
     ],
     solution: { R1: ["enable", "show ip interface g0/0", "configure terminal", "access-list 100 permit ip any any", "interface g0/0", "no ip access-group 100 out", "ip access-group 100 in"] },
     teach: "In and out are from the router's point of view: in = arriving on the interface, out = leaving it. Every ACL ends with an implicit deny any, so a list of permits and denies for one host needs a permit at the end.",
+  }),  lab({
+    id: "acl-resequence", module: M, title: "Renumbering an ACL with resequence",
+    cmds: ["ip access-list resequence", "show access-lists"],
+    devices: [R("R1", 50, 30, cfg("ip access-list standard MGMT", "permit host 10.0.99.10", "permit host 10.0.99.11", "1 deny host 10.0.99.66", "2 deny host 10.0.99.67", "3 permit 10.0.99.0 0.0.0.255"))],
+    intro: "After many quick fixes, ACL MGMT is numbered 1, 2, 3, 10, 20: there is no room left to insert a line between the first entries. Renumber it without retyping it.",
+    tasks: [
+      { text: "MGMT starts at 10 and goes up in steps of 10, in the same order.", check: (t) => { const a = t.acl("R1", "MGMT"); const old = a?.entries.filter((e) => e.src?.host !== "10.0.99.68") ?? []; return need(old.map((e) => e.seq).join() === "10,20,30,40,50" && old[0].src.host === "10.0.99.66", "ip access-list resequence MGMT 10 10"); } },
+      { text: "After the renumbering, which sequence number does permit host 10.0.99.11 have?", ask: "Sequence number", check: (t) => need(is.num(t.reply, 50), "show access-lists MGMT: the order stays, only the numbers change.") },
+      { text: "Insert deny host 10.0.99.68 so that it is checked right after deny host 10.0.99.67.", check: (t) => { const a = t.acl("R1", "MGMT"); const i = a?.entries.findIndex((e) => e.src?.host === "10.0.99.68" && e.action === "deny"); return need(i === 2, "25 deny host 10.0.99.68 inside ip access-list standard MGMT."); } },
+    ],
+    solution: { R1: [...EN, "ip access-list resequence MGMT 10 10", "do show access-lists MGMT", "ip access-list standard MGMT", "25 deny host 10.0.99.68", "end", "show access-lists MGMT"] },
+    answers: { 1: "50" },
+    teach: "Entries are kept in sequence-number order, and a new one without a number goes 10 past the last. ip access-list resequence <acl> <start> <step> renumbers the whole list in place (same order), which makes room to insert lines between old ones.",
   }),
 ];

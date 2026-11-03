@@ -1079,6 +1079,12 @@ def("config", "access-list <n:num:1-2699> remark <text:rest>", (c) => {
   acl.remarks = [...(acl.remarks ?? []), c.args.text];
 });
 def("config", "no access-list <n:num:1-2699>", (c) => delete c.dev.acls[String(c.args.n)]);
+// renumber an ACL's entries: start, start + step, ...
+def("config", "ip access-list resequence (<n:num:1-2699> | <name:word>) <start:num:1-2147483647> <step:num:1-2147483647>", (c) => {
+  const acl = c.dev.acls[String(c.args.n ?? c.args.name)];
+  if (!acl) fail(`%Access list ${c.args.n ?? c.args.name} does not exist`);
+  acl.entries.forEach((e, i) => (e.seq = c.args.start + i * c.args.step));
+});
 def("config", "ip access-list (standard | extended) (<n:num:1-2699> | <name:word>)", (c) => {
   const name = String(c.args.n ?? c.args.name);
   const type = c.has("standard") ? "standard" : "extended";

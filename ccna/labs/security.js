@@ -242,5 +242,25 @@ export default [
     answers: { 1: "Forwarded", 2: "Dropped and DHCP Drops", 3: "%SW_DAI-4-DHCP_SNOOPING_DENY", 4: "G0/1 is trusted, so ARPs arriving on it are not inspected" },
     failingPings: true,
     teach: "Dynamic ARP Inspection checks every ARP that arrives on an untrusted port against the DHCP snooping bindings (leases, or static ip source binding entries): a match is forwarded, anything else is dropped and logged as DHCP_SNOOPING_DENY. Trusted ports (uplinks to routers and switches) are not inspected. show ip arp inspection counts both per VLAN.",
+  }),  lab({
+    id: "telnet-vs-ssh", module: M, title: "Telnet from a router, then SSH only",
+    cmds: ["telnet", "transport input", "ssh -l", "show users"],
+    devices: [
+      R("R1", 25, 30, cfg("interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown")),
+      R("R2", 75, 30, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "exit", "ip domain-name corp.lab", "crypto key generate rsa modulus 2048", "ip ssh version 2", "username admin secret Adm1nPass", "line vty 0 4", "password Vty0ld", "login")),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"]],
+    intro: "R2 still accepts Telnet with a shared line password. Try it from R1, then make R2 accept SSH only, checked against its local users.",
+    tasks: [
+      { text: "From R1, telnet 10.0.12.2. Which prompt does R2 show?", choices: ["Password:", "Username:", "% Connection refused by remote host", "R2>"], check: (t) => need(t.ran("R1", /^telnet 10\.0\.12\.2/) && t.reply === "Password:", "login with a line password asks only for the password.") },
+      { text: "Why is Telnet a problem here?", choices: ["It sends the password and the whole session in clear text", "It uses UDP", "It cannot be used across a router", "It needs a domain name"], check: (t) => need(t.reply === "It sends the password and the whole session in clear text", "Anyone capturing TCP 23 reads everything; SSH (TCP 22) encrypts it.") },
+      { text: "R2's vty lines take SSH only, checked against the local users.", check: (t) => { const v = t.dev("R2").lines.vty; return need(v.transport.join() === "ssh" && v.loginLocal, "line vty 0 4, transport input ssh, login local."); } },
+      { text: "Now what does R1 print for telnet 10.0.12.2?", choices: ["% Connection refused by remote host", "Password:", "% Connection timed out; remote host not responding", "Username:"], check: (t) => need(t.reply === "% Connection refused by remote host", "R2 answers but refuses Telnet on its vty lines.") },
+      { text: "R1 reaches R2 with ssh -l admin 10.0.12.2.", check: (t) => need(t.ran("R1", /^ssh -l admin 10\.0\.12\.2/) && t.session("R1", "10.0.12.2", "ssh") === "ok", "ssh -l admin 10.0.12.2 on R1.") },
+    ],
+    solution: { R1: ["enable", "telnet 10.0.12.2"], R2: [...EN, "line vty 0 4", "transport input ssh", "login local", "end"], "R1#2": ["telnet 10.0.12.2", "ssh -l admin 10.0.12.2"] },
+    answers: { 0: "Password:", 1: "It sends the password and the whole session in clear text", 3: "% Connection refused by remote host" },
+    failingPings: true,
+    teach: "Telnet (TCP 23) and SSH (TCP 22) both reach the vty lines; transport input decides which ones a line accepts. login uses the line password, login local the usernames (SSH always needs a username). A refused connection means the device is reachable but its lines do not take that protocol; a timeout means nothing answered.",
   }),
 ];
