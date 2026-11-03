@@ -139,6 +139,12 @@ English.
   direction, HSRP peers in different groups, an err-disabled port, a DHCP
   pool on the wrong network, a stray root priority) and labs whose tasks
   are questions answered from `show` output.
+- **Exhibit questions for the topics without a CLI.** The exam asks about
+  automation, wireless, QoS and security from an exhibit, so a chapter of
+  labs shows one (a RESTCONF JSON body, REST calls and their status codes,
+  an Ansible playbook, a capture with DSCP and CoS markings, WLC output, a
+  TCP handshake, a controller's northbound API, a log of a password attack)
+  and asks questions about it, with no console at all.
 - **Challenge labs, harder than the exam.** A separate chapter of sims with
   four to eight devices and nine or ten tasks each, mixing topics the way a
   real network does: a three-switch campus with STP questions, a five-fault
@@ -153,14 +159,18 @@ English.
   working IPv4 network, four OSPF routers on one segment, a NAT pool that
   runs out, a Layer 3 switch taking over the routing, two desks knocked
   offline by port security and BPDU Guard, a second ISP that should only
-  be a backup, and a square of OSPF routers that should share the load.
-  Exam mode has a harder option made only of these. 213 labs, 50 of them
-  sims.
+  be a backup, a square of OSPF routers that should share the load, and
+  two ACLs to hunt down from what the pings and traceroutes say. Exam mode
+  has a harder option made only of these. 222 labs, 51 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
-  a ping needs a route back (and a router with no route answers
-  Destination net unreachable, which Windows counts as received), HSRP
+  a ping needs a route back, and a router that drops a packet answers
+  the way IOS does: Destination net unreachable for a missing route
+  (Windows counts it as received), administratively prohibited for an ACL
+  (`Packet filtered` on Linux, `U.U.U` on a router, `!N` and `!A`/`!X` in
+  traceroute, which probes with UDP while Windows tracert uses ICMP). ACL
+  entries count their matches. HSRP
   answers ARP with its virtual MAC, and
   nothing on the Internet answers a private address that was not NATed.
   ACLs filter the packets themselves (echo and echo-reply separately, a
