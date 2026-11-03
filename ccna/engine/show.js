@@ -6,7 +6,7 @@ import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
 import { ntpSync, aaaServerUp } from "./host.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes, staticUsable } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -515,6 +515,47 @@ function accessLists(dev, which, ipOnly) {
   return out.join("\n");
 }
 
+// the area's link-state database as this router holds it: a router LSA for
+// every router it can reach over full adjacencies (its link count: one per
+// transit or stub network, two per point-to-point neighbor), a network LSA
+// per segment with a DR, and a type-5 for a default an ASBR originates
+function ospfDatabase(dev) {
+  const pid = Number(Object.keys(dev.ospf)[0] ?? 1);
+  if (!dev.ospf[pid]) return "";
+  const routers = [dev];
+  for (let i = 0; i < routers.length; i++) for (const n of ospfNeighbors(routers[i])) if (n.up && !routers.includes(n.device)) routers.push(n.device);
+  const hex = (n) => "0x00" + (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+  const sum = (t) => [...t].reduce((a, ch) => (a * 33 + ch.charCodeAt(0)) & 0xffffff, 5381);
+  const ridOf = (r) => routerId(r, Number(Object.keys(r.ospf)[0] ?? 1));
+  const rows = [], nets = [], ext = [];
+  routers.forEach((r, i) => {
+    const rid = ridOf(r);
+    let links = 0;
+    for (const f of Object.values(r.interfaces)) {
+      if (!ospfOf(r, f) || status(r, f)[1] !== "up" || !f.ip) continue;
+      const nb = ospfNeighbors(r).filter((n) => n.iface === f && n.up);
+      if (nb.length && (f.ospf.network === "point-to-point" || nb.some((n) => n.p2p))) links += 2;
+      else links += 1;
+      const e = nb.length ? ospfElection(r, f) : null;
+      if (e?.mine === "DR") nets.push({ id: f.ip, adv: rid });
+    }
+    rows.push({ id: rid, adv: rid, age: 312 - i * 17, links });
+    const p = Object.values(r.ospf)[0];
+    if (p?.defaultOriginate && (p.defaultOriginate === "always" || r.routes.some((x) => x.net === "0.0.0.0" && x.mask === "0.0.0.0" && staticUsable(r, x)))) ext.push({ id: "0.0.0.0", adv: rid });
+  });
+  const out = [`            OSPF Router with ID (${ridOf(dev)}) (Process ID ${pid})`, "", "                Router Link States (Area 0)", "", "Link ID         ADV Router      Age         Seq#       Checksum Link count"];
+  for (const r of rows.sort((a, b) => parseIp(a.id) - parseIp(b.id))) out.push(`${pad(r.id, 16)}${pad(r.adv, 16)}${pad(r.age, 12)}0x80000004 ${hex(sum(r.id + r.links))} ${r.links}`);
+  if (nets.length) {
+    out.push("", "                Net Link States (Area 0)", "", "Link ID         ADV Router      Age         Seq#       Checksum");
+    for (const n of nets.sort((a, b) => parseIp(a.id) - parseIp(b.id))) out.push(`${pad(n.id, 16)}${pad(n.adv, 16)}${pad(298, 12)}0x80000001 ${hex(sum(n.id))}`);
+  }
+  if (ext.length) {
+    out.push("", "                Type-5 AS External Link States", "", "Link ID         ADV Router      Age         Seq#       Checksum Tag");
+    for (const x of ext) out.push(`${pad(x.id, 16)}${pad(x.adv, 16)}${pad(402, 12)}0x80000001 ${hex(sum(x.adv + "e"))} 1`);
+  }
+  return out.join("\n");
+}
+
 // AAA servers as IOS lists them: RADIUS with its state, TACACS+ with its socket counters
 function aaaServers(dev) {
   if (!dev.aaa.newModel) return "";
@@ -743,7 +784,7 @@ export const SHOWS = {
     ["show ip ospf interface [<name:iface>]", (d, a) => ospfInterface(d, a.name, false)],
     ["show ip ospf interface brief", (d) => ospfInterface(d, null, true)],
     ["show ip ospf", (d) => Object.keys(d.ospf).map((pid) => ` Routing Process "ospf ${pid}" with ID ${routerId(d, Number(pid))}\n Start time: 00:00:12.508, Time elapsed: 01:12:03.304\n Supports only single TOS(TOS0) routes\n Reference bandwidth unit is ${d.ospf[pid].refBw ?? 100} mbps\n    Area BACKBONE(0)\n        Number of interfaces in this area is ${Object.values(d.interfaces).filter((f) => ospfOf(d, f)?.pid === Number(pid)).length}`).join("\n")],
-    ["show ip ospf database", (d) => `            OSPF Router with ID (${routerId(d, Number(Object.keys(d.ospf)[0] ?? 1))}) (Process ID ${Object.keys(d.ospf)[0] ?? 1})\n\n                Router Link States (Area 0)\n\nLink ID         ADV Router      Age         Seq#       Checksum Link count\n${[routerId(d, Number(Object.keys(d.ospf)[0] ?? 1)), ...ospfNeighbors(d).filter((n) => n.up).map((n) => n.rid)].map((r) => `${pad(r, 16)}${pad(r, 16)}${pad("312", 12)}0x80000004 0x00${(parseIp(r) % 251).toString(16).padStart(2, "0")}a1 2`).join("\n")}`],
+    ["show ip ospf database", (d) => ospfDatabase(d)],
     ["show ip rip database", () => ""],
     ["show ip eigrp neighbors", () => "EIGRP-IPv4 Neighbors for AS(100)\nH   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq"],
     ["show spanning-tree [vlan <v:num:1-4094>]", (d, a) => spanningTree(d, a.v)],
