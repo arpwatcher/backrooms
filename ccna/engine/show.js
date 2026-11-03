@@ -496,16 +496,24 @@ function cdpNeighbors(dev, lldp) {
   return rows.join("\n");
 }
 
-function cdpDetail(dev) {
+// one neighbor (show cdp entry <name>, * for all) or every one (detail)
+function cdpDetail(dev, entry = null) {
   const out = [];
   for (const [name, end] of Object.entries(dev.links)) {
     const f = dev.interfaces[name];
     const g = end.device.interfaces[end.iface];
     if (!f || !g || f.shutdown || g.shutdown || !dev.cdp || !end.device.cdp || !f.cdp || !g.cdp || end.device.type === "pc") continue;
+    if (entry && entry !== "*" && end.device.hostname !== entry) continue;
     const ip = g.ip ?? Object.values(end.device.interfaces).find((x) => x.ip)?.ip;
-    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ip ? `  IP address: ${ip}` : "", `Platform: cisco ${end.device.type === "router" ? "C2900" : "WS-C2960-24TT-L"},  Capabilities: ${end.device.type === "router" ? "Router" : "Switch"}`, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, "Holdtime : 163 sec", "", "Version :", "Cisco IOS Software, Version 15.1(4)M4, RELEASE SOFTWARE (fc2)", "");
+    // what the neighbor's CDP advertisement carries, as IOS 15 prints it
+    const t = end.device.type;
+    const platform = t === "router" ? "Cisco CISCO2911/K9" : t === "l3switch" ? "cisco WS-C3560-24PS" : "cisco WS-C2960-24TT-L";
+    const caps = t === "switch" ? "Switch IGMP" : "Router Switch IGMP";
+    const version = t === "router" ? "Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4, RELEASE SOFTWARE (fc2)" : t === "l3switch" ? "Cisco IOS Software, C3560 Software (C3560-IPSERVICESK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)" : "Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)";
+    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, "Holdtime : 163 sec", "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${g.duplex === "half" ? "half" : "full"}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
   }
-  return out.filter((l) => l !== "").join("\n");
+  if (!entry) out.push(`Total cdp entries displayed : ${out.filter((l) => l.startsWith("Device ID:")).length}`);
+  return out.join("\n");
 }
 
 // a router that is a DHCP client: the lease the lab gave it, or a request
@@ -896,6 +904,7 @@ export const SHOWS = {
     ["show etherchannel port-channel", (d) => etherchannel(d)],
     ["show cdp neighbors", (d) => cdpNeighbors(d, false)],
     ["show cdp neighbors detail", (d) => cdpDetail(d)],
+    ["show cdp entry <name:word>", (d, a) => cdpDetail(d, a.name)],
     ["show cdp", (d) => (d.cdp ? "Global CDP information:\n        Sending CDP packets every 60 seconds\n        Sending a holdtime value of 180 seconds\n        Sending CDPv2 advertisements is  enabled" : "% CDP is not enabled")],
     ["show lldp neighbors [detail]", (d) => cdpNeighbors(d, true)],
     ["show lldp", (d) => (d.lldp ? "Global LLDP Information:\n    Status: ACTIVE\n    LLDP advertisements are sent every 30 seconds\n    LLDP hold time advertised is 120 seconds" : "% LLDP is not enabled")],

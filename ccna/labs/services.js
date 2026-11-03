@@ -1,4 +1,4 @@
-import { lab, R, S, PC, SRV, HOST, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, SRV, HOST, cfg, EN, need, is } from "./kit.js";
 
 const M = "services";
 const lanRouter = (extra = []) => R("R1", 30, 25, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", ...extra));
@@ -228,5 +228,25 @@ export default [
     ],
     solution: { PC1: ["ipconfig"], R1: ["enable", "show ip dhcp pool", "configure terminal", "ip dhcp pool LAN", "network 10.10.10.0 255.255.255.0"], "PC1#2": ["ipconfig /renew"] },
     teach: "A router leases from a pool only when the pool's network matches the subnet of the interface the request arrives on (or the relay's giaddr). A typo in the network statement means no offers at all, and Windows falls back to 169.254.x.x.",
+  }),  lab({
+    id: "cdp-detail", module: M, title: "Mapping the network with show cdp neighbors detail",
+    cmds: ["show cdp neighbors detail", "show cdp entry"],
+    devices: [
+      R("R1", 50, 14, cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown")),
+      R("R2", 86, 44, cfg("interface g0/2", "ip address 10.0.12.2 255.255.255.252", "no shutdown")),
+      S("SW1", 18, 44, cfg("interface vlan 1", "ip address 10.0.0.2 255.255.255.0", "no shutdown", "exit", "ip default-gateway 10.0.0.1")),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["R1", "g0/1", "R2", "g0/2"]],
+    intro: "You can only log in to R1. Use CDP to fill in the rest of the diagram: addresses, ports and models of its neighbors.",
+    tasks: [
+      { text: "Which IP address does R2 advertise to R1?", ask: "Address", check: (t) => need(t.ran("R1", /^sh(ow?)? cdp nei(ghbors)? det/) && is.ip(t.reply, "10.0.12.2"), "show cdp neighbors detail on R1: Entry address(es) under Device ID: R2.") },
+      { text: "Which of R2's ports is R1's G0/1 cabled to?", choices: ["GigabitEthernet0/2", "GigabitEthernet0/1", "GigabitEthernet0/0", "FastEthernet0/1"], check: (t) => need(t.reply === "GigabitEthernet0/2", "Port ID (outgoing port) is the neighbor's own port.") },
+      { text: "Which model is SW1?", choices: ["WS-C2960-24TT-L", "WS-C3560-24PS", "CISCO2911/K9", "C9300-48P"], check: (t) => need(t.reply === "WS-C2960-24TT-L", "The Platform line.") },
+      { text: "At which address can you manage SW1?", ask: "Address", check: (t) => need(is.ip(t.reply, "10.0.0.2"), "SW1 advertises its management (SVI) address.") },
+      { text: "Why does show cdp neighbors (without detail) not answer the first question?", choices: ["It lists device, local port, holdtime, capability, platform and port ID, but no addresses", "It only shows switches", "It needs cdp run first", "It only lists neighbors on trunks"], check: (t) => need(t.reply === "It lists device, local port, holdtime, capability, platform and port ID, but no addresses", "The addresses and the software version are only in detail (or show cdp entry <name>).") },
+    ],
+    solution: { R1: ["enable", "show cdp neighbors", "show cdp neighbors detail"] },
+    answers: { 0: "10.0.12.2", 1: "GigabitEthernet0/2", 2: "WS-C2960-24TT-L", 3: "10.0.0.2", 4: "It lists device, local port, holdtime, capability, platform and port ID, but no addresses" },
+    teach: "CDP neighbors are only directly connected Cisco devices. show cdp neighbors gives a table (device, local interface, holdtime, capability, platform, port ID); show cdp neighbors detail (or show cdp entry <name>) adds each neighbor's addresses, IOS version, native VLAN and duplex. LLDP (show lldp neighbors detail) gives the same for any vendor.",
   }),
 ];
