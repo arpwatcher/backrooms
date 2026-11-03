@@ -680,6 +680,23 @@ function ipv6Brief(dev) {
   return out.join("\n");
 }
 
+// the neighbor cache: the IPv6 addresses (global on the same prefix, and
+// link-local) of the device across each up IPv6 link, as neighbor discovery
+// finds them
+function ipv6Neighbors(dev, only) {
+  const rows = ["IPv6 Address                              Age Link-layer Addr State Interface"];
+  for (const f of sortedInterfaces(dev)) {
+    if ((only && f.name !== only) || !(f.ipv6Enabled || f.ipv6.length) || status(dev, f)[1] !== "up") continue;
+    const end = far(dev, f.name);
+    const p = end?.iface;
+    if (!p || !(p.ipv6Enabled || p.ipv6?.length) || status(end.device, p)[1] !== "up") continue;
+    const mine = f.ipv6.map((a) => ipv6Network(a.addr, a.bits));
+    const addrs = [...p.ipv6.filter((a) => mine.includes(ipv6Network(a.addr, a.bits))).map((a) => a.addr), p.ipv6LinkLocal ?? linkLocal(end.device)];
+    for (const a of addrs) rows.push(`${pad(compressIpv6(a).toUpperCase(), 42)}${"0".padStart(3)} ${pad(end.device.mac, 16)}${pad("REACH", 6)}${short(f.name)}`);
+  }
+  return rows.join("\n");
+}
+
 function linkLocal(dev) {
   const hex = dev.mac.replace(/\./g, "");
   const first = (parseInt(hex.slice(0, 2), 16) ^ 2).toString(16).padStart(2, "0");
@@ -870,6 +887,7 @@ export const SHOWS = {
     ["show port-security address", (d) => ["          Secure Mac Address Table", "-----------------------------------------------------------------------------", "Vlan    Mac Address       Type                          Ports   Remaining Age", ...sortedInterfaces(d).flatMap((f) => [...f.ps.macs.map((m) => [m, "SecureConfigured"]), ...(f.ps.learned ?? []).map((l) => [l.mac, l.sticky ? "SecureSticky" : "SecureDynamic"])].map(([m, type]) => `${pad(f.accessVlan, 8)}${pad(m, 18)}${pad(type, 30)}${pad(short(f.name), 8)}-`)), "-----------------------------------------------------------------------------", `Total Addresses in System (excluding one mac per port)     : ${Math.max(0, Object.values(d.interfaces).reduce((n, f) => n + Math.max(0, f.ps.macs.length + (f.ps.learned ?? []).length - 1), 0))}`, "Max Addresses limit in System (excluding one mac per port) : 1024"].join("\n")],
     ["show standby [brief]", (d, a, c) => standby(d, c.has("brief"), d.lab?.all)],
     ["show ipv6 interface brief", (d) => ipv6Brief(d)],
+    ["show ipv6 neighbors [<name:iface>]", (d, a) => ipv6Neighbors(d, a.name)],
     ["show ipv6 interface [<name:iface>]", (d, a) => ipv6Brief({ ...d, interfaces: a.name ? { [a.name]: d.interfaces[a.name] } : d.interfaces })],
     ["show ipv6 route", (d) => ipv6Route(d)],
     ["show clock [detail]", (d) => `*${d.clock.set ?? "12:13:47.123 UTC Mon Mar 1 1993"}`.replace(/^\*(\d+:\d+(:\d+)?) (\d+) (\w+) (\d+)$/, "*$1.000 UTC $4 $3 $5")],
