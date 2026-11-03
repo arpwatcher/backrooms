@@ -160,8 +160,9 @@ English.
   runs out, a Layer 3 switch taking over the routing, two desks knocked
   offline by port security and BPDU Guard, a second ISP that should only
   be a backup, a square of OSPF routers that should share the load, and
-  two ACLs to hunt down from what the pings and traceroutes say. Exam mode
-  has a harder option made only of these. 222 labs, 51 of them sims.
+  two ACLs to hunt down from what the pings and traceroutes say, and AAA
+  that locks everyone out (TACACS+ with no fallback, then RADIUS). Exam
+  mode has a harder option made only of these. 235 labs, 53 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -178,7 +179,14 @@ English.
   renew its DHCP binding, a router's first ping shows `.!!!!` (and
   `ping ... source` tests from another interface), telnet and ssh from a
   router or a PC are refused or let in by transport input, RSA keys,
-  access-class and login local, NTP syncs only to a server that answers
+  access-class and login local, or with `aaa new-model` by the login
+  method list: a TACACS+ or RADIUS server that does not answer (blocked,
+  wrong key) passes to the next method, one that rejects ends the login.
+  Switches learn MAC addresses from the frames that cross them, routers
+  keep an ARP cache of their neighbors, and `show ip ospf database`,
+  `show ipv6 neighbors`, `show lacp neighbor`, `show etherchannel
+  port-channel`, `show cdp neighbors detail` and the DAI counters are
+  worked out from the network. NTP syncs only to a server that answers
   and has time itself, port security learns and counts violations, DHCP
   snooping drops offers from untrusted ports and DAI drops ARPs with no
   binding, BPDU Guard err-disables a port that hears a switch, OSPF elects
