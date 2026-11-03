@@ -714,10 +714,24 @@ function sshInfo(dev) {
   return `SSH Enabled - version ${v}\nAuthentication timeout: ${dev.sshTimeout ?? 120} secs; Authentication retries: ${dev.sshRetries ?? 3}\nMinimum expected Diffie Hellman key size : 1024 bits\nIOS Keys in SECSH format(ssh-rsa, base64 encoded): ${dev.hostname}`;
 }
 
+// the ARP cache: the router's own addresses (age -), and what it has learned:
+// next hops it sent to, OSPF neighbors on Ethernet, hosts that ARPed for it
 function arp(dev) {
   const rows = [`${pad("Protocol", 10)}${pad("Address", 17)}${pad("Age (min)", 11)}${pad("Hardware Addr", 16)}${pad("Type", 7)}Interface`];
-  for (const f of sortedInterfaces(dev)) if (f.ip && status(dev, f)[1] === "up") rows.push(`${pad("Internet", 10)}${pad(f.ip, 17)}${pad("-", 11)}${pad(dev.mac, 16)}${pad("ARPA", 7)}${f.name}`);
-  for (const a of dev.lab?.arp ?? []) rows.push(`${pad("Internet", 10)}${pad(a.ip, 17)}${pad("0", 11)}${pad(a.mac, 16)}${pad("ARPA", 7)}${a.iface}`);
+  const entries = new Map();
+  for (const f of sortedInterfaces(dev)) if (f.ip && status(dev, f)[1] === "up") entries.set(f.ip, { mac: dev.mac, iface: f.name, age: "-" });
+  const upIf = (ip) => sortedInterfaces(dev).find((f) => f.ip && f.mask && status(dev, f)[1] === "up" && network(ip, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)));
+  const learn = (ip, mac, iface, age) => {
+    if (!entries.has(ip) && iface) entries.set(ip, { mac, iface, age });
+  };
+  for (const n of ospfNeighbors(dev).filter((n) => n.up && !n.iface.name.startsWith("Serial"))) learn(n.ip, n.device.mac, n.iface.name, "12");
+  for (const ip of dev.arped ?? []) {
+    const o = (dev.lab?.all ?? []).find((d) => d !== dev && Object.values(d.interfaces).some((f) => f.ip === ip));
+    if (o) learn(ip, o.mac, upIf(ip)?.name, "3");
+  }
+  for (const [ip, a] of Object.entries(dev.arpLearned ?? {})) if (upIf(ip)) learn(ip, a.mac, a.iface, "1");
+  for (const a of dev.lab?.arp ?? []) learn(a.ip, a.mac, a.iface, "0");
+  for (const [ip, e] of [...entries].sort((a, b) => parseIp(a[0]) - parseIp(b[0]))) rows.push(`${pad("Internet", 10)}${pad(ip, 17)}${pad(e.age, 11)}${pad(e.mac, 16)}${pad("ARPA", 7)}${e.iface}`);
   return rows.join("\n");
 }
 

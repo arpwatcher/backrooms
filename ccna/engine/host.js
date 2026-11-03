@@ -490,6 +490,9 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   if (!gw || !local(dev, gw) || !onSegment(dev, gw)) return false;
   if (!arpPasses(dev, onSegment(dev, gw))) return false;
   learnArp(dev, gw);
+  // the gateway learns the PC's MAC from its ARP request, too
+  const gwn = onSegment(dev, gw);
+  if (ROUTER(gwn.device)) (gwn.device.arpLearned ??= {})[f.ip] = { mac: dev.mac, iface: gwn.iface.name };
   dev.host.atGateway = true;
   const gwIf = onSegment(dev, gw).iface;
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
