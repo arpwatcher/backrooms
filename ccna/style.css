@@ -185,3 +185,5 @@ main { padding: 16px; min-width: 0; }
 /* a task that asks for an answer */
 .tasks .answer { display: block; margin-top: 7px; width: 100%; max-width: 320px; padding: 6px 9px; border-radius: 6px; border: 1px solid #2d4b63; background: var(--bg); color: var(--text); font: 14px var(--mono); }
 .tasks .answer:focus { outline: none; border-color: var(--accent); }
+/* a list of choices may be long sentences: let it use the task's width */
+.tasks select.answer { width: auto; min-width: min(320px, 100%); max-width: 100%; }
