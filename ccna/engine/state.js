@@ -75,6 +75,7 @@ export function createDevice({ name, type = "router", hostname, ports, mac } = {
     vtp: { mode: "server", domain: null, version: 1, password: null },
     configRegister: "0x2102", boot: [],
     loadBalance: null,
+    macStatic: [], macAging: 300,
     saved: null,
     // what was typed, and what it was understood as
     history: [], ran: [],

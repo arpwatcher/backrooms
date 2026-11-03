@@ -193,7 +193,12 @@ def("priv", "clear ip ospf process", (c) => c.ask({ prompt: "Reset ALL OSPF proc
   if (/^\s*y/i.test(a)) for (const p of Object.values(c.dev.ospf)) p.ridRunning = null;
   return "";
 } }));
-def("priv", "clear mac address-table dynamic", () => {});
+// learned (and the lab's dynamic) entries go; static ones stay
+def("priv", "clear mac address-table dynamic [(address <mac:mac> | interface <name:iface> | vlan <v:num:1-4094>)]", (c) => {
+  const keep = (e) => (c.args.mac && e.mac !== c.args.mac) || (c.args.name && normalize(e.port) !== c.args.name) || (c.args.v && Number(e.vlan) !== c.args.v);
+  c.dev.macLearned = Object.fromEntries(Object.entries(c.dev.macLearned ?? {}).filter(([, e]) => keep(e)));
+  if (c.dev.lab?.macs) c.dev.lab.macs = c.dev.lab.macs.filter((e) => e.type === "STATIC" || keep(e));
+}, { only: ["switch", "l3switch"] });
 // secure addresses off every port, or one port, or one address
 def("priv", "clear port-security (all | configured | dynamic | sticky) [(interface <name:iface> | address <mac:mac>)]", (c) => {
   const kind = c.words[2];
@@ -522,6 +527,16 @@ def(IF_MODES, "channel-group <group:num:1-48> mode (active | passive | on | desi
 }, { only: SW });
 def(IF_MODES, "no channel-group", (c) => each(c, (f) => (f.channel = null)), { only: SW });
 def(IF_MODES, "channel-protocol (lacp | pagp)", (c) => each(c, (f) => (f.channelProtocol = c.words[1])), { only: SW });
+def("config", "mac address-table static <mac:mac> vlan <v:num:1-4094> interface <name:iface>", (c) => {
+  c.dev.macStatic = c.dev.macStatic.filter((e) => !(e.mac === c.args.mac && e.vlan === c.args.v));
+  c.dev.macStatic.push({ mac: c.args.mac, vlan: c.args.v, port: c.args.name });
+}, { only: SW });
+def("config", "no mac address-table static <mac:mac> vlan <v:num:1-4094> [interface <name:iface>]", (c) => (c.dev.macStatic = c.dev.macStatic.filter((e) => !(e.mac === c.args.mac && e.vlan === c.args.v))), { only: SW });
+def("config", "mac address-table aging-time <s:num:0-1000000>", (c) => {
+  if (c.args.s > 0 && c.args.s < 10) fail("% Invalid input detected at '^' marker.");
+  c.dev.macAging = c.args.s;
+}, { only: SW });
+def("config", "no mac address-table aging-time", (c) => (c.dev.macAging = 300), { only: SW });
 def("config", "port-channel load-balance (dst-ip | dst-mac | src-dst-ip | src-dst-mac | src-ip | src-mac)", (c) => (c.dev.loadBalance = c.words[2]), { only: SW });
 def("config", "no port-channel load-balance", (c) => (c.dev.loadBalance = null), { only: SW });
 

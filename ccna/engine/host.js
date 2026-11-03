@@ -142,6 +142,15 @@ function neighbors(dev) {
   return out;
 }
 const onSegment = (dev, ip) => neighbors(dev).find((n) => n.ip === ip) ?? null;
+// a frame and its answer cross the switches on the path: each one learns the
+// sender's MAC on the port it came in by, and the answer's on the way out
+function learnMacs(dev, n) {
+  for (const h of n?.path ?? []) {
+    const t = (h.sw.macLearned ??= {});
+    if (h.entry) t[`${h.vlan}|${dev.mac}`] = { vlan: h.vlan, mac: dev.mac, port: h.entry.name };
+    if (h.exit && n.mac) t[`${h.vlan}|${n.mac}`] = { vlan: h.vlan, mac: n.mac, port: h.exit.name };
+  }
+}
 
 // --- layer 2 security on the way: port security, DAI, DHCP snooping -----------------------------
 
@@ -483,6 +492,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     if (!n || !arpPasses(dev, n)) return false;
     if (n.device.host && !portAdmit(n.device)) return false;
     learnArp(dev, ip);
+    if (ping) learnMacs(dev, n);
     return true;
   }
   if (dev.host.apipa) return false;
@@ -493,6 +503,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   // the gateway learns the PC's MAC from its ARP request, too
   const gwn = onSegment(dev, gw);
   if (ROUTER(gwn.device)) (gwn.device.arpLearned ??= {})[f.ip] = { mac: dev.mac, iface: gwn.iface.name };
+  if (ping) learnMacs(dev, gwn);
   dev.host.atGateway = true;
   const gwIf = onSegment(dev, gw).iface;
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {

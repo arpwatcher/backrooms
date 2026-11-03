@@ -125,14 +125,34 @@ function vlanBrief(dev, full) {
   return rows.join("\n");
 }
 
-function macTable(dev) {
+// every MAC the switch knows: learned from traffic, the lab's own, static
+// entries and port-security addresses, sorted by VLAN and MAC like IOS
+function macEntries(dev) {
+  const all = new Map();
+  const add = (vlan, mac, type, port) => all.set(`${vlan}|${mac}`, { vlan: Number(vlan), mac, type, port: short(port) });
+  for (const m of dev.lab?.macs ?? []) add(m.vlan, m.mac, m.type ?? "DYNAMIC", m.port);
+  for (const m of Object.values(dev.macLearned ?? {})) add(m.vlan, m.mac, "DYNAMIC", m.port);
+  for (const m of dev.macStatic ?? []) add(m.vlan, m.mac, "STATIC", m.port);
+  for (const f of Object.values(dev.interfaces)) for (const mac of f.ps.macs) add(f.accessVlan, mac, "STATIC", f.name);
+  return [...all.values()].sort((a, b) => a.vlan - b.vlan || a.mac.localeCompare(b.mac));
+}
+function macTable(dev, a = {}, c) {
   const rows = ["          Mac Address Table", "-------------------------------------------", "", "Vlan    Mac Address       Type        Ports", "----    -----------       --------    -----"];
-  const entries = dev.lab?.macs ?? [];
-  for (const m of entries) rows.push(`${pad(m.vlan, 8)}${pad(m.mac, 18)}${pad(m.type ?? "DYNAMIC", 12)}${m.port}`);
-  // sticky / static port-security addresses
-  for (const f of Object.values(dev.interfaces)) for (const mac of f.ps.macs) rows.push(`${pad(f.accessVlan, 8)}${pad(mac, 18)}${pad("STATIC", 12)}${short(f.name)}`);
-  rows.push(`Total Mac Addresses for this criterion: ${entries.length}`);
+  const shown = macEntries(dev).filter((m) => (!c?.has("dynamic") || m.type === "DYNAMIC") && (!c?.has("static") || m.type === "STATIC") && (!a.name || m.port === short(a.name)) && (!a.v || m.vlan === a.v));
+  for (const m of shown) rows.push(`${pad(String(m.vlan).padStart(4), 8)}${pad(m.mac, 18)}${pad(m.type, 12)}${m.port}`);
+  rows.push(`Total Mac Addresses for this criterion: ${shown.length}`);
   return rows.join("\n");
+}
+function macCount(dev) {
+  const by = {};
+  for (const m of macEntries(dev)) (by[m.vlan] ??= []).push(m);
+  const out = [];
+  for (const [v, list] of Object.entries(by)) {
+    const dyn = list.filter((m) => m.type === "DYNAMIC").length;
+    out.push(`Mac Entries for Vlan ${v}:`, "---------------------------", `Dynamic Address Count  : ${dyn}`, `Static  Address Count  : ${list.length - dyn}`, `Total Mac Addresses    : ${list.length}`, "");
+  }
+  out.push(`Total Mac Address Space Available: ${8000 - macEntries(dev).length}`);
+  return out.join("\n");
 }
 
 const CODES = `Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
@@ -848,7 +868,9 @@ export const SHOWS = {
     ["show interfaces description", (d) => [`${pad("Interface", 31)}${pad("Status", 15)}${pad("Protocol", 9)}Description`, ...sortedInterfaces(d).map((f) => `${pad(short(f.name), 31)}${pad(status(d, f)[0] === "administratively down" ? "admin down" : status(d, f)[0], 15)}${pad(status(d, f)[1], 9)}${f.description ?? ""}`)].join("\n")],
     ["show vlan [brief]", (d, a, c) => vlanBrief(d, !c.has("brief"))],
     ["show vlan id <id:num:1-4094>", (d, a) => (d.vlans[a.id] ? vlanBrief({ ...d, vlans: { [a.id]: d.vlans[a.id] } }, false).split("\n").slice(0, 3).join("\n") : `VLAN id ${a.id} not found in current VLAN database`)],
-    ["show mac address-table [(dynamic | static)] [interface <name:iface>]", (d) => macTable(d)],
+    ["show mac address-table [(dynamic | static)] [(interface <name:iface> | vlan <v:num:1-4094>)]", (d, a, c) => macTable(d, a, c)],
+    ["show mac address-table count", (d) => macCount(d)],
+    ["show mac address-table aging-time", (d) => `Global Aging Time: ${String(d.macAging).padStart(5)}\nVlan    Aging Time\n----    ----------`],
     ["show ip route [(<net:ip> | static | connected | ospf)]", (d, a, c) => {
       if (c.has("static")) return ipRoute(d, { only: (r) => r.code === "S" });
       if (c.has("connected")) return ipRoute(d, { only: (r) => r.code === "C" || r.code === "L" });

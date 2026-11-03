@@ -194,6 +194,8 @@ export function runningConfig(dev, onlyIface) {
   if (!dev.snooping.option82) L.push("no ip dhcp snooping information option");
   if (dev.dai.vlans.length) L.push(`ip arp inspection vlan ${rangeText(dev.dai.vlans)}`);
   if (dev.type === "l3switch" && dev.ipRouting) L.push("ip routing");
+  for (const m of dev.macStatic ?? []) L.push(`mac address-table static ${m.mac} vlan ${m.vlan} interface ${m.port}`);
+  if (dev.macAging !== undefined && dev.macAging !== 300) L.push(`mac address-table aging-time ${dev.macAging}`);
   if (!dev.domainLookup) L.push("no ip domain-lookup");
   if (dev.domainName) L.push(`ip domain-name ${dev.domainName}`);
   if (dev.nameServers.length) L.push(`ip name-server ${dev.nameServers.join(" ")}`);
