@@ -1,4 +1,5 @@
 import { lab, R, S, PC, cfg, EN, need, is } from "./kit.js";
+import { stpPorts } from "../engine/net.js";
 
 const M = "stp";
 const tri = (s1 = [], s2 = [], s3 = []) => [S("SW1", 50, 12, s1), S("SW2", 22, 45, s2), S("SW3", 78, 45, s3)];
@@ -224,5 +225,22 @@ export default [
     solution: { SW2: ["enable", "show spanning-tree vlan 1"], SW3: ["enable", "show spanning-tree vlan 1"] },
     answers: { 1: "SW3", 2: "G0/2" },
     teach: "On each non-root switch the root port is the lowest root path cost (then lowest neighbor bridge ID, then lowest neighbor port ID). On each link the designated port is on the switch with the lower root path cost, then the lower bridge ID. Any port that is neither blocks: Altn BLK.",
+  }),  lab({
+    id: "stp-port-priority", module: M, title: "Port priority: choosing between two equal links",
+    cmds: ["spanning-tree port-priority", "spanning-tree cost", "show spanning-tree"],
+    devices: [S("SW1", 28, 26, cfg("spanning-tree mode rapid-pvst", "spanning-tree vlan 1 priority 4096")), S("SW2", 72, 26, cfg("spanning-tree mode rapid-pvst"))],
+    links: [["SW1", "g0/1", "SW2", "g0/1"], ["SW1", "g0/2", "SW2", "g0/2"]],
+    intro: "SW1 is the root for VLAN 1 and two Gigabit links join it to SW2. SW2 has to send its traffic over G0/2, keeping G0/1 as the backup.",
+    tasks: [
+      { text: "Which port is SW2's root port right now?", choices: ["Gi0/1", "Gi0/2"], check: (t) => need(t.reply === "Gi0/1" && t.ran("SW2", /^sh(ow?)? span/), "show spanning-tree on SW2.") },
+      { text: "Both links cost 4. What breaks the tie?", choices: ["The lower port ID of the sending switch: SW1's Gi0/1 is 128.25", "SW2's own lower port number", "The lower MAC address on the link", "The link that came up first"], check: (t) => need(t.reply === "The lower port ID of the sending switch: SW1's Gi0/1 is 128.25", "Tie-breakers: lowest root path cost, lowest sender bridge ID, lowest sender port ID (priority.number).") },
+      { text: "SW2's root port is G0/2, by port priority, without touching any cost.", check: (t) => { const p = stpPorts(t.dev("SW2"), 1); return need(p.rootPort?.name === "GigabitEthernet0/2" && (t.f("SW1", "g0/2").stp.priority ?? 128) < 128 && Object.values(t.dev("SW2").interfaces).every((f) => !f.stp.cost), "The port ID SW2 compares is the one SW1 sends: spanning-tree port-priority 64 on SW1's G0/2."); } },
+      { text: "On which switch did the port priority have to change?", choices: ["SW1, the switch that sends the BPDUs on those links", "SW2, the switch whose root port it is", "Both", "Either one"], check: (t) => need(t.reply === "SW1, the switch that sends the BPDUs on those links", "Port priority is compared as the neighbor's port ID, so it is set on the upstream switch.") },
+      { text: "What does SW1's show spanning-tree give G0/2 in the Prio.Nbr column now?", ask: "Prio.Nbr", check: (t) => need(t.reply.trim() === "64.26", "Priority 64, port number 26.") },
+      { text: "Which change on SW2 alone would also have moved its root port to G0/2?", choices: ["spanning-tree cost 2 on SW2's G0/2", "spanning-tree port-priority 64 on SW2's G0/2", "spanning-tree vlan 1 priority 0 on SW2", "shutdown on SW1's G0/1"], check: (t) => need(t.reply === "spanning-tree cost 2 on SW2's G0/2", "Cost is added on the receiving port, so a lower cost on SW2's G0/2 makes it the cheaper path. Port priority on SW2 changes nothing for SW2; priority 0 would make SW2 the root.") },
+    ],
+    solution: { SW2: ["enable", "show spanning-tree vlan 1"], SW1: [...EN, "interface g0/2", "spanning-tree port-priority 64", "end", "show spanning-tree vlan 1"], "SW2#2": ["show spanning-tree vlan 1"] },
+    answers: { 0: "Gi0/1", 1: "The lower port ID of the sending switch: SW1's Gi0/1 is 128.25", 3: "SW1, the switch that sends the BPDUs on those links", 4: "64.26", 5: "spanning-tree cost 2 on SW2's G0/2" },
+    teach: "A non-root switch picks its root port by lowest root path cost, then lowest sender bridge ID, then lowest sender port ID (port priority, 0-240 in steps of 16, default 128, then the port number). Port priority is therefore set on the upstream switch; cost (spanning-tree cost, or per VLAN with spanning-tree vlan N cost) is added on the receiving port, so it is set on the downstream one.",
   }),
 ];
