@@ -1080,6 +1080,8 @@ function addAce(c, name, type, action, text, seq) {
   if (parsed.bad !== undefined) throw c.invalidAt(offsetOf(c.line, text, parsed.bad));
   const last = acl.entries.length ? acl.entries[acl.entries.length - 1].seq : 0;
   const entry = { seq: seq ?? last + 10, action, ...parsed.ace };
+  // remarks typed since the last entry belong to this one, and print above it
+  if (acl.remarks?.length) (entry.remarks = acl.remarks), (acl.remarks = []);
   acl.entries = [...acl.entries.filter((e) => e.seq !== entry.seq), entry].sort((a, b) => a.seq - b.seq);
 }
 const standardNumber = (n) => (n >= 1 && n <= 99) || (n >= 1300 && n <= 1999);

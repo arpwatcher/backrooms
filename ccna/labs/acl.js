@@ -1,6 +1,9 @@
 import { lab, R, PC, SRV, cfg, EN, need, is } from "./kit.js";
 
 const M = "acl";
+// the remarks typed just before an entry
+const remarked = (e, text) => (e?.remarks ?? []).some((r) => r.trim().toLowerCase() === text);
+const pick = (want, why) => (t) => need(t.reply === want, why);
 const same = (a, b) => (b.any ? a?.any : b.host ? a?.host === b.host : a?.net === b.net && a?.wild === b.wild);
 // does this ACL contain an entry like `want` (only the given fields are compared)
 const has = (acl, want) => Boolean(acl?.entries.some((e) =>
@@ -180,5 +183,21 @@ export default [
     solution: { R1: [...EN, "ip access-list resequence MGMT 10 10", "do show access-lists MGMT", "ip access-list standard MGMT", "25 deny host 10.0.99.68", "end", "show access-lists MGMT"] },
     answers: { 1: "50" },
     teach: "Entries are kept in sequence-number order, and a new one without a number goes 10 past the last. ip access-list resequence <acl> <start> <step> renumbers the whole list in place (same order), which makes room to insert lines between old ones.",
+  }),
+  lab({
+    id: "acl-remark", module: M, title: "Documenting an ACL with remarks",
+    cmds: ["remark", "access-list remark", "show running-config"],
+    devices: [R("R1", 50, 30, cfg("interface g0/0", "ip address 10.0.50.1 255.255.255.0", "no shutdown"))],
+    intro: "Six months from now nobody will remember why an ACL line is there. Write the reason above each line as you build two ACLs on R1.",
+    tasks: [
+      { text: "Named extended ACL GUEST-IN: first the remark Guests stay out of the servers, then deny ip 10.0.50.0 0.0.0.255 10.0.10.0 0.0.0.255.", check: (t) => { const e = t.acl("R1", "GUEST-IN")?.entries[0]; return need(e?.action === "deny" && e.dst?.net === "10.0.10.0" && remarked(e, "guests stay out of the servers"), "ip access-list extended GUEST-IN, then remark Guests stay out of the servers, then the deny line: the remark goes in just before the entry it explains."); } },
+      { text: "Then the remark Everything else is allowed, and permit ip any any.", check: (t) => { const e = t.acl("R1", "GUEST-IN")?.entries[1]; return need(e?.action === "permit" && e.src?.any && remarked(e, "everything else is allowed"), "remark Everything else is allowed, then permit ip any any, still inside GUEST-IN."); } },
+      { text: "Numbered ACL 10: the remark Management hosts, then permit host 10.0.99.10.", check: (t) => { const e = t.acl("R1", 10)?.entries[0]; return need(e?.src?.host === "10.0.99.10" && remarked(e, "management hosts"), "access-list 10 remark Management hosts, then access-list 10 permit host 10.0.99.10."); } },
+      { text: "Where do the remarks show up?", choices: ["show running-config", "show access-lists", "show ip interface", "Nowhere: they are dropped once typed"], check: pick("show running-config", "show access-lists prints the entries and their match counts but no remarks; the configuration keeps them, each above its entry.") },
+      { text: "What does a remark change in what the ACL permits?", choices: ["Nothing", "It permits the next entry's traffic", "It logs matches", "It disables the next entry"], check: pick("Nothing", "A remark is a comment: it is not matched against packets.") },
+    ],
+    solution: { R1: [...EN, "ip access-list extended GUEST-IN", "remark Guests stay out of the servers", "deny ip 10.0.50.0 0.0.0.255 10.0.10.0 0.0.0.255", "remark Everything else is allowed", "permit ip any any", "exit", "access-list 10 remark Management hosts", "access-list 10 permit host 10.0.99.10", "end", "show running-config", "show access-lists"] },
+    answers: { 3: "show running-config", 4: "Nothing" },
+    teach: "remark <text> (inside a named ACL) or access-list <n> remark <text> adds a comment of up to 100 characters. It belongs to the entry typed after it and prints just above that entry in the running-config; show access-lists leaves remarks out. Remarks never match packets.",
   }),
 ];

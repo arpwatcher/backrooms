@@ -271,11 +271,11 @@ export function runningConfig(dev, onlyIface) {
   for (const [name, acl] of Object.entries(dev.acls)) {
     if (acl.named) {
       L.push(`ip access-list ${acl.type} ${name}`);
+      for (const e of acl.entries) L.push(...(e.remarks ?? []).map((r) => ` remark ${r}`), ` ${aceText(e, acl.type === "standard")}`);
       for (const r of acl.remarks ?? []) L.push(` remark ${r}`);
-      for (const e of acl.entries) L.push(` ${aceText(e, acl.type === "standard")}`);
     } else {
+      for (const e of acl.entries) L.push(...(e.remarks ?? []).map((r) => `access-list ${name} remark ${r}`), `access-list ${name} ${aceText(e, acl.type === "standard")}`);
       for (const r of acl.remarks ?? []) L.push(`access-list ${name} remark ${r}`);
-      for (const e of acl.entries) L.push(`access-list ${name} ${aceText(e, acl.type === "standard")}`);
     }
   }
   if (Object.keys(dev.acls).length) bang();
