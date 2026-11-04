@@ -280,6 +280,11 @@ export function runningConfig(dev, onlyIface) {
   }
   if (Object.keys(dev.acls).length) bang();
   if (!dev.cdp) L.push("no cdp run");
+  if ((dev.cdpTimer ?? 60) !== 60) L.push(`cdp timer ${dev.cdpTimer}`);
+  if ((dev.cdpHold ?? 180) !== 180) L.push(`cdp holdtime ${dev.cdpHold}`);
+  if ((dev.lldpTimer ?? 30) !== 30) L.push(`lldp timer ${dev.lldpTimer}`);
+  if ((dev.lldpHold ?? 120) !== 120) L.push(`lldp holdtime ${dev.lldpHold}`);
+  if ((dev.lldpReinit ?? 2) !== 2) L.push(`lldp reinit ${dev.lldpReinit}`);
   if (dev.lldp) L.push("lldp run");
   for (const h of dev.logging.hosts) L.push(`logging host ${h}`);
   if (dev.logging.trap !== null) L.push(`logging trap ${LEVELS[dev.logging.trap]}`);
@@ -299,6 +304,7 @@ export function runningConfig(dev, onlyIface) {
     if (l.execTimeout) L.push(` exec-timeout ${l.execTimeout.min} ${l.execTimeout.sec}`);
     if (l.password) L.push(` password ${dev.passwordEncryption ? "7 " + type7(l.password) : l.password}`);
     if (l.logSync) L.push(" logging synchronous");
+    if (l.history != null) L.push(` history size ${l.history}`);
     if (l.loginAuth && l.loginAuth !== "default") L.push(` login authentication ${l.loginAuth}`);
     if (l.loginLocal) L.push(" login local");
     else if (l.login) L.push(" login");

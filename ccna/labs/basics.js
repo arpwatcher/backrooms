@@ -1,4 +1,4 @@
-import { lab, R, S, PC, cfg, EN, need } from "./kit.js";
+import { lab, R, S, PC, cfg, EN, need, is } from "./kit.js";
 
 const M = "basics";
 const solo = (setup = [], extra = {}) => [R("R1", 50, 30, setup, extra)];
@@ -294,5 +294,22 @@ export default [
     ],
     solution: { SW1: [...EN, "interface vlan 1", "ip address 192.168.1.2 255.255.255.0", "no shutdown", "exit", "ip default-gateway 192.168.1.1"] },
     teach: "A Layer 2 switch's address goes on an SVI (interface vlan X). To reach other networks it needs ip default-gateway; it does not use ip route.",
+  }),
+  lab({
+    id: "history-terminal", module: M, title: "Command history and terminal settings",
+    cmds: ["show history", "terminal history size", "history size", "terminal length", "show terminal"],
+    devices: solo(cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.0", "no shutdown")),
+    intro: "You type the same long show commands over and over. Make IOS remember more of them, and stop it from pausing long output.",
+    tasks: [
+      { text: "Type a few commands, then show history. How many commands does IOS keep by default?", ask: "Commands", check: (t) => need(t.ran("R1", /^show history$/) && is.num(t.reply, 10), "show terminal says it: History is enabled, history size is 10.") },
+      { text: "For this session only, keep the last 25 commands.", check: (t) => need(t.dev("R1").term?.history === 25, "terminal history size 25 (in privileged EXEC; it lasts until you log out).") },
+      { text: "Every future console session keeps 50.", check: (t) => need(t.dev("R1").lines.con.history === 50, "line console 0, then history size 50.") },
+      { text: "Stop the --More-- pauses for this session, so long output prints in one go.", check: (t) => need(t.dev("R1").term?.length === 0, "terminal length 0 (24 is the default).") },
+      { text: "Which keys bring back the previous command?", choices: ["Up arrow or Ctrl+P", "Down arrow or Ctrl+N", "Tab", "Ctrl+Z"], check: (t) => need(t.reply === "Up arrow or Ctrl+P", "Up or Ctrl+P walks back through the history, Down or Ctrl+N forward; Tab completes a keyword; Ctrl+Z leaves configuration mode.") },
+      { text: "Does show history in privileged EXEC list the commands you typed in configuration mode?", choices: ["No: EXEC and configuration mode keep separate histories", "Yes, all of them", "Only the last one", "Only after copy run start"], check: (t) => need(t.reply === "No: EXEC and configuration mode keep separate histories", "IOS keeps one history for EXEC and another for configuration mode; do show history from (config)# lists the configuration commands.") },
+    ],
+    solution: { R1: ["enable", "show ip interface brief", "show version", "show history", "show terminal", "terminal history size 25", "terminal length 0", "configure terminal", "line console 0", "history size 50", "end", "show terminal"] },
+    answers: { 0: "10", 4: "Up arrow or Ctrl+P", 5: "No: EXEC and configuration mode keep separate histories" },
+    teach: "IOS keeps the last 10 commands per mode (EXEC and configuration separately). show history lists them; Up/Ctrl+P and Down/Ctrl+N walk through them. terminal history size <n> changes it for the session, history size <n> under a line for every session on that line. terminal length 0 turns off the --More-- pause (show terminal shows length, width and history).",
   }),
 ];

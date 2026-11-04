@@ -229,7 +229,15 @@ def("priv", "clear counters [<name:iface>]", (c) => {
 // the dynamic ARP entries go; the router's own addresses stay
 def("priv", "clear arp-cache", (c) => { c.dev.arpLearned = {}; c.dev.arped = []; });
 def("priv", "clear ip dhcp binding *", () => {});
-def("priv", "terminal (length <n:num:0-512> | monitor | no monitor)", () => {});
+// the terminal settings last for this session only; history size starts from
+// the line's own (history size on line con 0, 10 by default)
+const term = (c) => (c.dev.term ??= { length: 24, width: 80, history: c.dev.lines.con.history ?? 10, on: true });
+def(EXEC, "terminal length <n:num:0-512>", (c) => (term(c).length = c.args.n));
+def(EXEC, "terminal width <n:num:0-512>", (c) => (term(c).width = c.args.n));
+def(EXEC, "terminal history size <n:num:0-256>", (c) => Object.assign(term(c), { history: c.args.n, on: true }));
+def(EXEC, "terminal history", (c) => (term(c).on = true));
+def(EXEC, "terminal no history [size]", (c) => (c.has("size") ? (term(c).history = c.dev.lines.con.history ?? 10) : (term(c).on = false)));
+def(EXEC, "terminal (monitor | no monitor)", () => {});
 def(EXEC, "dir [flash:]", (c) => c.say(SHOWS.flash(c.dev)));
 def("priv", "setup", (c) => c.say("--- System Configuration Dialog ---\n(the setup wizard is not simulated; use configure terminal)"));
 
@@ -314,6 +322,18 @@ def("config", "username <user:word> [privilege <priv:num:0-15>] (secret | passwo
 def("config", "no username <user:word>", (c) => delete c.dev.users[c.args.user]);
 def("config", "cdp run", (c) => (c.dev.cdp = true));
 def("config", "no cdp run", (c) => (c.dev.cdp = false));
+// how often CDP/LLDP advertise, and how long a neighbor keeps what it heard
+def("config", "cdp timer <s:num:5-254>", (c) => (c.dev.cdpTimer = c.args.s));
+def("config", "no cdp timer", (c) => (c.dev.cdpTimer = 60));
+def("config", "cdp holdtime <s:num:10-255>", (c) => (c.dev.cdpHold = c.args.s));
+def("config", "no cdp holdtime", (c) => (c.dev.cdpHold = 180));
+def("config", "(cdp advertise-v2 | no cdp advertise-v2)", () => {});
+def("config", "lldp timer <s:num:5-65534>", (c) => (c.dev.lldpTimer = c.args.s));
+def("config", "no lldp timer", (c) => (c.dev.lldpTimer = 30));
+def("config", "lldp holdtime <s:num:0-65535>", (c) => (c.dev.lldpHold = c.args.s));
+def("config", "no lldp holdtime", (c) => (c.dev.lldpHold = 120));
+def("config", "lldp reinit <s:num:2-5>", (c) => (c.dev.lldpReinit = c.args.s));
+def("config", "no lldp reinit", (c) => (c.dev.lldpReinit = 2));
 def("config", "lldp run", (c) => (c.dev.lldp = true));
 def("config", "no lldp run", (c) => (c.dev.lldp = false));
 def("config", "config-register <reg:hex>", (c) => (c.dev.configRegister = c.args.reg));
@@ -767,6 +787,7 @@ def("line", "access-class (<n:num:1-199> | <name:word>) in", (c) => {
 });
 def("line", "no access-class (<n:num:1-199> | <name:word>) in", (c) => (c.dev.lines.vty.accessClass = null));
 def("line", "history size <n:num:0-256>", (c) => (line(c).history = c.args.n));
+def("line", "no history size", (c) => delete line(c).history);
 
 // --- vlans -----------------------------------------------------------------------------------------
 
@@ -1226,7 +1247,7 @@ for (const [pattern, fn, privOnly] of SHOWS.patterns) def(privOnly ? "priv" : EX
 
 // --- helpers --------------------------------------------------------------------------------------------------------------------
 
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term"]);
 function stripRuntime(d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) if (!RUNTIME.has(k)) o[k] = v;

@@ -537,6 +537,9 @@ function etherchannel(dev) {
   return out.join("\n");
 }
 
+// the holdtime a neighbor's entry shows: CDP counts down from the holdtime the
+// neighbor sends and starts again at each advertisement; LLDP shows the TTL received
+export const cdpHoldLeft = (d) => (d.cdpHold ?? 180) - (17 % (d.cdpTimer ?? 60));
 function cdpNeighbors(dev, lldp) {
   const on = (d, f) => (lldp ? d.lldp && f.lldpTx !== false && f.lldpRx !== false : d.cdp && f.cdp);
   const rows = lldp
@@ -550,8 +553,8 @@ function cdpNeighbors(dev, lldp) {
     n++;
     const cap = end.device.type === "router" ? "R" : end.device.type === "l3switch" ? "R S" : "S";
     const platform = end.device.type === "router" ? "C2900" : end.device.type === "l3switch" ? "3560" : "2960";
-    if (lldp) rows.push(`${pad(end.device.hostname, 21)}${pad(short(f.name), 15)}${pad("120", 11)}${pad(cap, 15)}${short(g.name)}`);
-    else rows.push(`${pad(end.device.hostname, 17)}${pad(short(f.name), 17)}${pad("163", 10)}${pad(cap, 12)}${pad(platform, 10)}${short(g.name)}`);
+    if (lldp) rows.push(`${pad(end.device.hostname, 21)}${pad(short(f.name), 15)}${pad(end.device.lldpHold ?? 120, 11)}${pad(end.device.type === "router" ? "R" : end.device.type === "l3switch" ? "B,R" : "B", 15)}${short(g.name)}`);
+    else rows.push(`${pad(end.device.hostname, 17)}${pad(short(f.name), 17)}${pad(cdpHoldLeft(end.device), 10)}${pad(cap, 12)}${pad(platform, 10)}${short(g.name)}`);
   }
   if (lldp) rows.push("", `Total entries displayed: ${n}`);
   if (lldp && !dev.lldp) return "% LLDP is not enabled";
@@ -573,7 +576,7 @@ function cdpDetail(dev, entry = null) {
     const platform = t === "router" ? "Cisco CISCO2911/K9" : t === "l3switch" ? "cisco WS-C3560-24PS" : "cisco WS-C2960-24TT-L";
     const caps = t === "switch" ? "Switch IGMP" : "Router Switch IGMP";
     const version = t === "router" ? "Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4, RELEASE SOFTWARE (fc2)" : t === "l3switch" ? "Cisco IOS Software, C3560 Software (C3560-IPSERVICESK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)" : "Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)";
-    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, "Holdtime : 163 sec", "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${linkMode(end.device, g)?.duplex ?? (g.duplex === "half" ? "half" : "full")}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
+    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, `Holdtime : ${cdpHoldLeft(end.device)} sec`, "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${linkMode(end.device, g)?.duplex ?? (g.duplex === "half" ? "half" : "full")}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
   }
   if (!entry) out.push(`Total cdp entries displayed : ${out.filter((l) => l.startsWith("Device ID:")).length}`);
   return out.join("\n");
@@ -983,9 +986,9 @@ export const SHOWS = {
     ["show cdp neighbors", (d) => cdpNeighbors(d, false)],
     ["show cdp neighbors detail", (d) => cdpDetail(d)],
     ["show cdp entry <name:word>", (d, a) => cdpDetail(d, a.name)],
-    ["show cdp", (d) => (d.cdp ? "Global CDP information:\n        Sending CDP packets every 60 seconds\n        Sending a holdtime value of 180 seconds\n        Sending CDPv2 advertisements is  enabled" : "% CDP is not enabled")],
+    ["show cdp", (d) => (d.cdp ? `Global CDP information:\n        Sending CDP packets every ${d.cdpTimer ?? 60} seconds\n        Sending a holdtime value of ${d.cdpHold ?? 180} seconds\n        Sending CDPv2 advertisements is  enabled` : "% CDP is not enabled")],
     ["show lldp neighbors [detail]", (d) => cdpNeighbors(d, true)],
-    ["show lldp", (d) => (d.lldp ? "Global LLDP Information:\n    Status: ACTIVE\n    LLDP advertisements are sent every 30 seconds\n    LLDP hold time advertised is 120 seconds" : "% LLDP is not enabled")],
+    ["show lldp", (d) => (d.lldp ? `Global LLDP Information:\n    Status: ACTIVE\n    LLDP advertisements are sent every ${d.lldpTimer ?? 30} seconds\n    LLDP hold time advertised is ${d.lldpHold ?? 120} seconds\n    LLDP interface reinitialisation delay is ${d.lldpReinit ?? 2} seconds` : "% LLDP is not enabled")],
     ["show ip dhcp pool [<name:word>]", (d, a) => dhcpPool(d, a.name)],
     ["show ip dhcp binding", (d) => ["Bindings from all pools not associated with VRF:", `${pad("IP address", 18)}${pad("Client-ID/", 20)}${pad("Lease expiration", 26)}Type`, `${pad("", 18)}Hardware address/`, ...(d.lab?.bindings ?? []).map((b) => `${pad(b.ip, 18)}${pad(b.mac, 20)}${pad("Mar 02 2026 12:00 AM", 26)}Automatic`), ...(d.dhcp?.leases ?? []).map((l) => `${pad(l.ip, 18)}${pad(l.clientId ? clientId(l.mac) : l.mac, 20)}${pad(expires(l.days), 26)}Automatic`)].join("\n")],
     ["show ip dhcp conflict", () => "IP address        Detection method   Detection time          VRF"],
@@ -1003,7 +1006,16 @@ export const SHOWS = {
     ["show ntp status", (d) => ntpStatus(d)],
     ["show ntp associations", (d) => ntpAssociations(d)],
     ["show logging", (d) => logging(d)],
-    ["show history", (d) => d.history.slice(-20).map((h) => "  " + h).join("\n")],
+    // the last commands of this mode (exec or config), as many as the history size
+    ["show history", (d) => {
+      const t = d.term ?? { history: d.lines.con.history ?? 10, on: true };
+      const list = (/^(user|priv)$/.test(d.mode) ? d.execHistory : d.configHistory) ?? [];
+      return t.on && t.history ? list.slice(-t.history).map((h) => "  " + h).join("\n") : "";
+    }],
+    ["show terminal", (d) => {
+      const t = d.term ?? { length: 24, width: 80, history: d.lines.con.history ?? 10, on: true };
+      return [`Line 0, Location: "", Type: ""`, `Length: ${t.length} lines, Width: ${t.width} columns`, "Baud rate (TX/RX) is 9600/9600, no parity, 2 stopbits, 8 databits", "Status: PSI Enabled, Ready, Active, Automore On", "Capabilities: none", "Modem state: Ready", `Time since activation: 00:${String(12 + (d.history.length % 40)).padStart(2, "0")}:31`, `Editing is enabled.`, `History is ${t.on ? "enabled" : "disabled"}, history size is ${t.history}.`, "DNS resolution in show commands is enabled", "Full user help is disabled", "Allowed input transports are none.", "Allowed output transports are telnet ssh.", "Preferred transport is telnet.", "No output characters are padded", "No special data dispatching characters"].join("\n");
+    }],
     ["show flash: ", (d) => flash(d)],
     ["show users", (d) => "    Line       User       Host(s)              Idle       Location\n*  0 con 0                idle                 00:00:00"],
     ["show ip ssh", (d) => sshInfo(d)],

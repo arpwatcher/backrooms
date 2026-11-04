@@ -112,6 +112,8 @@ function execOnly(dev, raw) {
     // an error is printed as it is
     if (/% (Invalid|Incomplete|Ambiguous)/.test(out)) return out;
     dev.history[dev.history.length - 1] = raw;
+    const kept = /^(user|priv)$/.test(dev.mode) ? dev.execHistory : dev.configHistory;
+    if (kept?.length) kept[kept.length - 1] = raw;
     return filter(out, PIPE_KIND(piped[2]), piped[3].trim());
   }
   return execLine(dev, raw);
@@ -127,6 +129,7 @@ function execLine(dev, raw) {
   }
   if (!line.trim()) return "";
   dev.history.push(line);
+  (/^(user|priv)$/.test(dev.mode) ? (dev.execHistory ??= []) : (dev.configHistory ??= [])).push(line);
   // ctrl-z / end from any config mode
   if (/^\s*\^z\s*$/i.test(line)) return leaveConfig(dev);
   const mode = dev.mode;
@@ -175,7 +178,7 @@ export function leaveConfig(dev) {
 }
 
 // a copy of the configuration, for startup-config and reload
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "lab", "gateway"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "lab", "gateway", "ctr", "execHistory", "configHistory", "term"]);
 export function snapshot(dev) {
   const copy = {};
   for (const [k, v] of Object.entries(dev)) if (!RUNTIME.has(k)) copy[k] = structuredClone(v);
@@ -192,7 +195,7 @@ export function restore(dev, snap) {
 // run a list of commands as setup (a lab's starting state), quietly; throws
 // if one of them doesn't go in, so a broken lab is caught by the tests
 export function apply(dev, lines) {
-  const keep = { history: dev.history, ran: dev.ran };
+  const keep = { history: dev.history, ran: dev.ran, exec: dev.execHistory, config: dev.configHistory };
   dev.history = [];
   dev.ran = [];
   for (const line of lines) {
@@ -204,6 +207,8 @@ export function apply(dev, lines) {
   }
   dev.history = keep.history;
   dev.ran = keep.ran;
+  dev.execHistory = keep.exec;
+  dev.configHistory = keep.config;
   dev.mode = "user";
   dev.ctx = {};
 }

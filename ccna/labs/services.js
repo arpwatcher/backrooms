@@ -249,4 +249,29 @@ export default [
     answers: { 0: "10.0.12.2", 1: "GigabitEthernet0/2", 2: "WS-C2960-24TT-L", 3: "10.0.0.2", 4: "It lists device, local port, holdtime, capability, platform and port ID, but no addresses" },
     teach: "CDP neighbors are only directly connected Cisco devices. show cdp neighbors gives a table (device, local interface, holdtime, capability, platform, port ID); show cdp neighbors detail (or show cdp entry <name>) adds each neighbor's addresses, IOS version, native VLAN and duplex. LLDP (show lldp neighbors detail) gives the same for any vendor.",
   }),
+  lab({
+    id: "cdp-lldp-timers", module: M, title: "CDP and LLDP timers",
+    cmds: ["cdp timer", "cdp holdtime", "lldp timer", "lldp holdtime", "lldp reinit", "show cdp", "show lldp"],
+    devices: [
+      R("R1", 30, 25, cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.0", "no shutdown")),
+      S("SW1", 70, 25),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"]],
+    intro: "The team wants neighbor changes to show up faster in the CDP and LLDP tables. Tune SW1's timers and see what R1 learns.",
+    tasks: [
+      { text: "With the defaults, how often does SW1 send a CDP advertisement (seconds)?", ask: "Seconds", check: (t) => need(is.num(t.reply, 60), "show cdp on SW1: Sending CDP packets every 60 seconds (holdtime 180).") },
+      { text: "SW1 sends CDP every 20 seconds and tells neighbors to keep its entry for 60.", check: (t) => need(t.dev("SW1").cdpTimer === 20 && t.dev("SW1").cdpHold === 60, "cdp timer 20 and cdp holdtime 60 in global configuration.") },
+      { text: "Seen from R1 (show cdp neighbors), what is the most the Holdtme for SW1 can read now?", ask: "Seconds", check: (t) => need(t.ran("R1", /^sh(ow?)? cdp nei/) && is.num(t.reply, 60), "The neighbor's holdtime (60) counts down and starts again at 60 with every advertisement, so it never reads more than 60.") },
+      { text: "Turn LLDP on on SW1 and R1, and make SW1 advertise every 10 seconds with a hold time of 40.", check: (t) => need(t.dev("SW1").lldp && t.dev("R1").lldp && t.dev("SW1").lldpTimer === 10 && t.dev("SW1").lldpHold === 40, "lldp run on both; lldp timer 10 and lldp holdtime 40 on SW1.") },
+      { text: "SW1 waits 4 seconds before LLDP starts again on a port that was re-enabled.", check: (t) => need(t.dev("SW1").lldpReinit === 4, "lldp reinit 4") },
+      { text: "Which Hold-time does R1's show lldp neighbors list for SW1?", ask: "Seconds", check: (t) => need(t.ran("R1", /^sh(ow?)? lldp nei/) && is.num(t.reply, 40), "LLDP shows the hold time (TTL) the neighbor sent: 40.") },
+      { text: "A holdtime shorter than the timer makes the neighbor drop the entry between two advertisements. Which pair is safe?", choices: ["timer 20, holdtime 60", "timer 60, holdtime 30", "timer 30, holdtime 20", "timer 90, holdtime 60"], check: (t) => need(t.reply === "timer 20, holdtime 60", "The holdtime must be longer than the timer (the defaults keep 3 to 1: 60 and 180 for CDP, 30 and 120 for LLDP).") },
+    ],
+    solution: {
+      SW1: ["enable", "show cdp", "configure terminal", "cdp timer 20", "cdp holdtime 60", "lldp run", "lldp timer 10", "lldp holdtime 40", "lldp reinit 4", "end", "show lldp"],
+      R1: [...EN, "lldp run", "end", "show cdp neighbors", "show lldp neighbors"],
+    },
+    answers: { 0: "60", 2: "60", 5: "40", 6: "timer 20, holdtime 60" },
+    teach: "CDP (Cisco) and LLDP (802.1AB, any vendor) advertise on every port at an interval and carry a holdtime: how long the neighbor keeps the entry if no new advertisement arrives. CDP: cdp timer (60 s) and cdp holdtime (180 s), shown by show cdp. LLDP: lldp timer (30 s), lldp holdtime (120 s) and lldp reinit (2 s, the wait before LLDP starts again on a port), shown by show lldp. LLDP is off until lldp run. Keep the holdtime well above the timer.",
+  }),
 ];
