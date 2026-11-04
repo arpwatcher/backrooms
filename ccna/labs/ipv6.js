@@ -1,4 +1,4 @@
-import { lab, R, PC, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, PC, HOST, cfg, EN, need, is } from "./kit.js";
 import { expandIpv6 } from "../engine/ip.js";
 
 const M = "ipv6";
@@ -119,5 +119,36 @@ export default [
     solution: { R1: ["enable", "show ipv6 neighbors"] },
     answers: { 0: "FE80::201:42FF:FEA3:2467", 1: "Neighbor Solicitation and Neighbor Advertisement", 2: "0001.42a3.2467" },
     teach: "show ipv6 neighbors is the IPv6 counterpart of show ip arp: each neighbor's global and link-local addresses with the MAC learned by Neighbor Solicitation/Advertisement (sent to the solicited-node multicast address FF02::1:FFxx:xxxx). States: REACH (confirmed recently), STALE, DELAY, PROBE, INCMP.",
+  }),
+  lab({
+    id: "ipv6-hosts", module: M, title: "PCs on IPv6: SLAAC and ping -6",
+    cmds: ["ipv6 unicast-routing", "ipv6 address link-local", "ipconfig", "ip -6 addr", "ip -6 route", "ping -6", "ping6"],
+    devices: [
+      R("R1", 50, 14, cfg("interface g0/0", "ipv6 address 2001:db8:acad:10::1/64", "no shutdown", "interface g0/1", "ipv6 address 2001:db8:acad:20::1/64", "no shutdown")),
+      S("SW1", 26, 38),
+      HOST("PC1", 12, 64, "windows", { ipv6: "auto", mac: "0050.7966.0611" }),
+      HOST("PC2", 40, 64, "linux", { ipv6: "auto", mac: "0050.7966.0612" }),
+      HOST("PC3", 78, 46, "mac", { ipv6: "2001:db8:acad:20::30/64", gateway6: "fe80::1", mac: "0050.7966.0613" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"], ["R1", "g0/1", "PC3", "fa0"]],
+    intro: "An IPv6-only office. PC1 and PC2 should configure themselves with SLAAC from R1; PC3 has a static address with fe80::1 as its gateway. Right now neither PC on the LAN has a global address.",
+    tasks: [
+      { text: "Why does PC2 (ip -6 addr) show only its fe80:: address?", choices: ["R1 does not route IPv6, so it sends no Router Advertisements", "PC2 needs DHCPv6", "The switch blocks IPv6", "Link-local addresses replace global ones"], check: (t) => need(t.reply === "R1 does not route IPv6, so it sends no Router Advertisements", "A router sends RAs (the prefix for SLAAC) only with ipv6 unicast-routing on.") },
+      { text: "Make R1 route IPv6, and give both its interfaces the link-local address fe80::1.", check: (t) => need(t.dev("R1").ipv6Routing && ["g0/0", "g0/1"].every((i) => t.f("R1", i).ipv6LinkLocal === expandIpv6("fe80::1")), "ipv6 unicast-routing, then ipv6 address fe80::1 link-local on G0/0 and on G0/1.") },
+      { text: "Which global address did PC2 (Linux, EUI-64) build?", ask: "IPv6 address", check: (t) => need(expandIpv6(t.reply.trim().split("/")[0]) === expandIpv6("2001:db8:acad:10:250:79ff:fe66:612"), "ip -6 addr on PC2: the prefix 2001:db8:acad:10::/64 and the EUI-64 ID from MAC 0050.7966.0612 (flip the 7th bit: 02, insert ff:fe): 250:79ff:fe66:612.") },
+      { text: "What does PC1's ipconfig show as its IPv6 default gateway?", choices: ["fe80::1%12", "2001:db8:acad:10::1", "::", "There is none"], check: (t) => need(t.reply === "fe80::1%12", "Hosts use the router's link-local address (from the RA) as the IPv6 gateway; %12 is the interface index.") },
+      { text: "Is PC1's interface ID built from its MAC like PC2's?", choices: ["No: Windows picks a random interface ID", "Yes: every OS uses EUI-64", "No: Windows uses DHCPv6", "Yes, but with ff:fe at the end"], check: (t) => need(t.reply === "No: Windows picks a random interface ID", "Compare ipconfig with the MAC 0050.7966.0611: Windows (and macOS) use a random ID for privacy; Linux here uses EUI-64.") },
+      { text: "From PC1, ping PC3 (2001:db8:acad:20::30) over IPv6.", check: (t) => need(t.ran("PC1", /^ping .*-6|^ping .*2001:/) && t.reach6("PC1", "2001:db8:acad:20::30"), "ping -6 2001:db8:acad:20::30 on PC1. PC3 answers through fe80::1 on G0/1.") },
+      { text: "From PC2, ping6 PC1.", check: (t) => need(t.ran("PC2", /^ping6? /) && t.reach6("PC2", t.dev("PC1").interfaces.FastEthernet0.ipv6[0]?.addr ?? "::"), "ping6 to the address ipconfig shows on PC1 (on-link, no router needed).") },
+    ],
+    solution: {
+      PC2: ["ip -6 addr"],
+      R1: [...EN, "ipv6 unicast-routing", "interface g0/0", "ipv6 address fe80::1 link-local", "interface g0/1", "ipv6 address fe80::1 link-local", "end"],
+      "PC2#2": ["ip -6 addr", "ip -6 route"],
+      PC1: ["ipconfig", "ping -6 2001:db8:acad:20::30"],
+      "PC2#3": ["ping6 -c 2 2001:db8:acad:10:e997:8d95:84b7:6103"],
+    },
+    answers: { 0: "R1 does not route IPv6, so it sends no Router Advertisements", 2: "2001:db8:acad:10:250:79ff:fe66:612", 3: "fe80::1%12", 4: "No: Windows picks a random interface ID" },
+    teach: "SLAAC: a host sends a Router Solicitation, the router (only with ipv6 unicast-routing) answers with a Router Advertisement carrying the /64 prefix, and the host adds its own interface ID: EUI-64 from the MAC (Linux here), or a random one (Windows, macOS). The default gateway is the router's link-local address, so a short manual one like fe80::1 is easy to read. Test with ping -6 (Windows, Linux) or ping6 (Linux, macOS).",
   }),
 ];

@@ -4,7 +4,7 @@
 // It reads the lab around it, so a ping or a DHCP renew only works when the
 // network really allows it.
 
-import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network } from "./ip.js";
+import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network, expandIpv6, parseIpv6Prefix } from "./ip.js";
 import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry } from "./net.js";
 import { routeTable } from "./show.js";
 
@@ -21,6 +21,8 @@ export function makeHost(dev, d, def) {
     os: d.os, user: d.user ?? "student", domain: d.domain ?? null, dns: d.dns ?? [], dhcp: Boolean(d.dhcp),
     gw: d.gateway ?? null, dhcpServer: null, records: def.records ?? {}, extern: def.extern ?? [], hops: def.hops ?? {},
     dnsCache: [], arp: [], leased: false, apipa: false,
+    // IPv6: "auto" takes SLAAC from the routers' advertisements; "addr/nn" is static
+    slaac: d.ipv6 === "auto", ipv6Static: d.ipv6 && d.ipv6 !== "auto" ? parseIpv6Prefix(d.ipv6) : null, gateway6: d.gateway6 ? expandIpv6(d.gateway6) : null, gw6: null,
   };
   dev.host = host;
   if (d.mac) dev.mac = d.mac;
@@ -118,7 +120,7 @@ export function segment(dev) {
     // or the subinterface for the frame's VLAN
     for (const s of Object.values(d.interfaces)) {
       const mine = s === f || s.name.startsWith(`${f.name}.`);
-      if (!mine || s.shutdown || !s.ip) continue;
+      if (!mine || s.shutdown || (!s.ip && !s.ipv6?.length)) continue;
       const enc = s.encap;
       if (tagged ? enc?.vlan === vlan && !enc.native : s === f ? !enc : enc?.native) found.push({ device: d, iface: s, path });
     }
@@ -609,6 +611,7 @@ const WIN = {
   "Lease Obtained": "Lease Obtained. . . . . . . . . .",
   "Lease Expires": "Lease Expires . . . . . . . . . .",
   "Default Gateway": "Default Gateway . . . . . . . . .",
+  "IPv6 Address": "IPv6 Address. . . . . . . . . . .",
   "DHCP Server": "DHCP Server . . . . . . . . . . .",
   "DNS Servers": "DNS Servers . . . . . . . . . . .",
   "NetBIOS over Tcpip": "NetBIOS over Tcpip. . . . . . . .",
@@ -633,12 +636,16 @@ function ipconfigWin(dev, all) {
   out.push(winLine("Connection-specific DNS Suffix", h.leased || !h.dhcp ? h.domain ?? "" : ""));
   if (all) out.push(winLine("Description", "Intel(R) Ethernet Connection I219-LM"), winLine("Physical Address", macWin(dev.mac)), winLine("DHCP Enabled", h.dhcp ? "Yes" : "No"), winLine("Autoconfiguration Enabled", "Yes"));
   const pref = all ? "(Preferred)" : "";
+  syncIpv6(dev.lab?.all);
+  const v6 = pcV6(dev);
+  if (v6) out.push(winLine("IPv6 Address", v6s(v6) + pref));
   out.push(winLine("Link-local IPv6 Address", `${linkLocal(dev)}%12${pref}`));
   if (f.ip) {
     out.push(winLine(h.apipa ? "Autoconfiguration IPv4 Address" : "IPv4 Address", f.ip + pref), winLine("Subnet Mask", f.mask));
     if (all && h.leased) out.push(winLine("Lease Obtained", "Monday, March 2, 2026 9:14:03 AM"), winLine("Lease Expires", "Tuesday, March 3, 2026 9:14:03 AM"));
   }
-  out.push(winLine("Default Gateway", h.gw ?? ""));
+  if (h.gw6) out.push(winLine("Default Gateway", `${v6s(h.gw6)}%12`), ...(h.gw ? [" ".repeat(39) + h.gw] : []));
+  else out.push(winLine("Default Gateway", h.gw ?? ""));
   if (all) {
     if (h.leased) out.push(winLine("DHCP Server", h.dhcpServer ?? ""));
     if (h.dns.length) out.push(winLine("DNS Servers", h.dns[0]), ...h.dns.slice(1).map((s) => " ".repeat(39) + s));
@@ -863,6 +870,7 @@ function windows(dev, line) {
       if (n >= 0) count = Math.min(Number(args[n + 1]) || 4, 20);
       const target = words.slice(1).filter((w, i) => !w.startsWith("-") && args[i - 1] !== "-n").pop();
       if (!target) return "Usage: ping [-t] [-a] [-n count] [-l size] target_name";
+      if (args.includes("-6") || target.includes(":")) return ping6Host(dev, target, count);
       return pingWin(dev, target, count);
     }
     case "tracert":
@@ -900,10 +908,24 @@ function ipAddr(dev, linkOnly) {
   if (f.ip && up) {
     eth.push(`    inet ${f.ip}/${bitsOf(dev)} brd ${broadcastOf(f.ip, f.mask)} scope global ${h.leased ? "dynamic noprefixroute " : ""}eth0`, h.leased ? "       valid_lft 86213sec preferred_lft 86213sec" : "       valid_lft forever preferred_lft forever");
   }
+  syncIpv6(dev.lab?.all);
+  const v6 = up && own(dev).ipv6?.[0];
+  if (v6) eth.push(`    inet6 ${v6s(v6.addr)}/${v6.bits} scope global ${h.slaac ? "dynamic mngtmpaddr noprefixroute" : ""}`.trimEnd(), h.slaac ? "       valid_lft 2591998sec preferred_lft 604798sec" : "       valid_lft forever preferred_lft forever");
   eth.push(`    inet6 ${linkLocal(dev)}/64 scope link`, "       valid_lft forever preferred_lft forever");
   return [...lo, ...eth].join("\n");
 }
 
+function ipRoute6(dev) {
+  syncIpv6(dev.lab?.all);
+  const h = dev.host, v6 = own(dev).ipv6?.[0];
+  if (!linkUp(dev)) return "";
+  const proto = h.slaac ? "ra" : "static";
+  return [
+    ...(v6 ? [`${v6s(ipv6Network(v6.addr, v6.bits))}/${v6.bits} dev eth0 proto ${h.slaac ? "ra" : "kernel"} metric 100 ${h.slaac ? "expires 2591998sec " : ""}pref medium`] : []),
+    "fe80::/64 dev eth0 proto kernel metric 1024 pref medium",
+    ...(h.gw6 ? [`default via ${v6s(h.gw6)} dev eth0 proto ${proto} metric 100 ${h.slaac ? "expires 1798sec " : ""}pref medium`] : []),
+  ].join("\n");
+}
 function ipRoute(dev) {
   const h = dev.host, f = own(dev);
   if (!f.ip || !linkUp(dev)) return "";
@@ -917,6 +939,7 @@ function ifconfigLinux(dev) {
   return [
     `eth0: flags=${up ? "4163<UP,BROADCAST,RUNNING,MULTICAST>" : "4099<UP,BROADCAST,MULTICAST>"}  mtu 1500`,
     ...(f.ip && up ? [`        inet ${f.ip}  netmask ${f.mask}  broadcast ${broadcastOf(f.ip, f.mask)}`] : []),
+    ...((v6) => (v6 && up ? [`        inet6 ${v6s(v6.addr)}  prefixlen ${v6.bits}  scopeid 0x0<global>`] : []))((syncIpv6(dev.lab?.all), own(dev).ipv6?.[0])),
     `        inet6 ${linkLocal(dev)}  prefixlen 64  scopeid 0x20<link>`,
     `        ether ${macLinux(dev.mac)}  txqueuelen 1000  (Ethernet)`,
     "        RX packets 1520  bytes 180332 (180.3 KB)",
@@ -1007,8 +1030,13 @@ function linux(dev, line) {
   const a = args.join(" ");
   switch (cmd) {
     case "ip": {
+      // ip -6 addr / ip -6 route: the IPv6 side only
+      const six = args[0] === "-6";
+      if (six) args.shift();
       const obj = args[0] ?? "";
       const rest = args.slice(1).filter((w) => w !== "show" && w !== "list");
+      if (six && ["r", "ro", "rou", "rout", "route"].includes(obj)) return ipRoute6(dev);
+      if (six && ["a", "ad", "add", "addr", "addre", "addres", "address"].includes(obj)) return ipAddr(dev).split("\n").filter((l, i, all) => !/^\s+inet /.test(l) && !(/valid_lft/.test(l) && /^\s+inet /.test(all[i - 1] ?? ""))).filter((l) => !/link\/(ether|loopback)/.test(l)).join("\n");
       if (rest.length > 1 || (rest.length === 1 && rest[0] !== "eth0" && rest[0] !== "dev")) return `Command "${rest[0]}" is unknown, try "ip ${obj} help".`;
       if (["a", "ad", "add", "addr", "addre", "addres", "address"].includes(obj)) return ipAddr(dev);
       if (["l", "li", "lin", "link"].includes(obj)) return ipAddr(dev, true);
@@ -1020,9 +1048,12 @@ function linux(dev, line) {
       return ifconfigLinux(dev);
     case "arp":
       return arpLinux(dev, a === "-a" ? "a" : "n");
+    case "ping6":
     case "ping": {
       const target = targetOf(args, ["-c"]);
-      return target ? pingUnix(dev, target, countOf(args, "-c", 4)) + (args.includes("-c") ? "" : "\n(ping runs until Ctrl+C on Linux; stopped after 4 here - use ping -c 4)") : "ping: usage error: Destination address required";
+      const more = args.includes("-c") ? "" : "\n(ping runs until Ctrl+C on Linux; stopped after 4 here - use ping -c 4)";
+      if (target && (cmd === "ping6" || args.includes("-6") || target.includes(":"))) return ping6Host(dev, target, countOf(args, "-c", 4)) + more;
+      return target ? pingUnix(dev, target, countOf(args, "-c", 4)) + more : "ping: usage error: Destination address required";
     }
     case "traceroute":
       return args.length ? traceUnix(dev, args[args.length - 1]) : "Usage:\n  traceroute [ -46dFITnreAUDV ] host [ packetlen ]";
@@ -1060,6 +1091,7 @@ function ifconfigMac(dev, only) {
     "\toptions=6460<TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>",
     `\tether ${macLinux(dev.mac)}`,
     `\tinet6 ${linkLocal(dev)}%en0 prefixlen 64 secured scopeid 0x6`,
+    ...((v6) => (v6 && up ? [`\tinet6 ${v6s(v6.addr)} prefixlen ${v6.bits} ${dev.host.slaac ? "autoconf secured" : ""}`.trimEnd()] : []))((syncIpv6(dev.lab?.all), own(dev).ipv6?.[0])),
     ...(f.ip && up ? [`\tinet ${f.ip} netmask ${hexMask(f.mask)} broadcast ${broadcastOf(f.ip, f.mask)}`] : []),
     "\tnd6 options=201<PERFORMNUD,DAD>",
     `\tmedia: autoselect${up ? " (1000baseT <full-duplex>)" : ""}`,
@@ -1105,8 +1137,13 @@ function macos(dev, line) {
       if (a === "-a" || a === "-an") return [...dev.host.arp.map((x) => `? (${x.ip}) at ${macMacShort(x.mac)} on en0 ifscope [ethernet]`), ...(dev.host.arpFailed ?? []).map((ip) => `? (${ip}) at (incomplete) on en0 ifscope [ethernet]`)].join("\n");
       if (/^-a?d/.test(a)) return (dev.host.arp = []), "";
       return "usage: arp [-n] [-i interface] hostname\n       arp [-n] [-i interface] [-l] -a";
+    case "ping6": {
+      const target = targetOf(args, ["-c"]);
+      return target ? ping6Host(dev, target, countOf(args, "-c", 4)) + (args.includes("-c") ? "" : "\n(ping6 runs until Ctrl+C on macOS; stopped after 4 here - use ping6 -c 4)") : "usage: ping6 [-DdfHmnNoqtvwW] [-c count] host";
+    }
     case "ping": {
       const target = targetOf(args, ["-c"]);
+      if (target?.includes(":")) return `ping: cannot resolve ${target}: Unknown host`;
       return target ? pingUnix(dev, target, countOf(args, "-c", 4), true) + (args.includes("-c") ? "" : "\n(ping runs until Ctrl+C on macOS; stopped after 4 here - use ping -c 4)") : "usage: ping [-AaDdfnoQqRrv] [-c count] host";
     }
     case "traceroute":
@@ -1127,6 +1164,92 @@ function macos(dev, line) {
       return `zsh: command not found: ${cmd}`;
   }
 }
+
+// --- ipv6 on a PC --------------------------------------------------------------------------------
+
+// router advertisements: a router on the PC's segment with ipv6 unicast-routing
+// advertises the /64s of that interface, from its link-local address
+function routerAdverts(dev) {
+  if (!linkUp(dev)) return [];
+  return segment(dev).filter((n) => ROUTER6(n.device) && n.device.ipv6Routing && v6Up(n.device, n.iface)).flatMap((n) => {
+    const ll = expandIpv6(n.iface.ipv6LinkLocal ?? eui64("fe80::", n.device.mac));
+    return n.iface.ipv6.filter((a) => a.bits === 64 && !a.addr.startsWith("fe80")).map((a) => ({ prefix: ipv6Network(a.addr, 64), router: a.addr, ll, device: n.device }));
+  });
+}
+// the interface ID a PC puts after a SLAAC prefix: Linux EUI-64 from its MAC,
+// Windows and macOS a random-looking one (fixed per MAC here)
+function slaacAddr(dev, prefix) {
+  if (dev.host.os === "linux") return eui64(prefix, dev.mac);
+  let h = 2166136261;
+  for (const ch of dev.mac + dev.host.os) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const g = [h >>> 16, h & 0xffff, Math.imul(h, 2654435761) >>> 16, (Math.imul(h, 40503) >>> 0) & 0xffff].map((x) => x.toString(16).padStart(4, "0"));
+  return [...expandIpv6(prefix).split(":").slice(0, 4), ...g].join(":");
+}
+// the PCs' addresses and default routes, worked out again from what the
+// routers advertise now (a static gateway may be the router's link-local)
+export function syncIpv6(all = []) {
+  for (const dev of all) {
+    const h = dev.host;
+    if (!h || (!h.slaac && !h.ipv6Static)) continue;
+    const f = own(dev);
+    const ras = routerAdverts(dev);
+    let addr = h.ipv6Static, via = null, ll = null;
+    if (h.slaac) {
+      const ra = ras[0];
+      addr = ra ? { addr: slaacAddr(dev, ra.prefix), bits: 64 } : null;
+      via = ra?.router ?? null;
+      ll = ra?.ll ?? null;
+    } else if (h.gateway6) {
+      // a link-local gateway is reached as that router's address on the segment
+      const hit = h.gateway6.startsWith("fe80") ? ras.find((r) => r.ll === h.gateway6) : null;
+      via = hit ? hit.router : h.gateway6;
+      ll = h.gateway6;
+    }
+    f.ipv6 = addr ? [addr] : [];
+    f.ipv6Enabled = true;
+    h.gw6 = ll;
+    dev.ipv6Routes = via ? [{ addr: expandIpv6("::"), bits: 0, via, ad: 1 }] : [];
+  }
+}
+const v6s = (a) => compressIpv6(a).toLowerCase();
+const pcV6 = (dev) => own(dev).ipv6?.find((a) => !a.addr.startsWith("fe80"))?.addr ?? null;
+// a ping from a PC to an IPv6 address: out through its first hop (on its own
+// segment), and back
+function reach6(dev, ip) {
+  syncIpv6(dev.lab?.all);
+  const src = pcV6(dev);
+  if (!src || !linkUp(dev)) return { ok: false, noRoute: true };
+  const best = best6(dev, ip);
+  if (!best) return { ok: false, noRoute: true };
+  const hop = best.via ?? ip;
+  const seg = segment(dev);
+  if (!seg.some((n) => n.iface.ipv6?.some((a) => a.addr === hop))) return { ok: false };
+  const path = path6(dev, ip);
+  const t = owner6(dev, ip)?.device;
+  return { ok: path !== null && Boolean(t) && path6(t, src) !== null, path };
+}
+function ping6Host(dev, text, count) {
+  const os = dev.host.os;
+  const ip = expandIpv6(text);
+  const shown = ip ? v6s(ip) : text;
+  const r = ip ? reach6(dev, ip) : { ok: false, noRoute: true };
+  const src = pcV6(dev);
+  if (os === "windows") {
+    if (r.noRoute) return `\nPinging ${shown} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${shown}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
+    const lines = Array.from({ length: count }, (_, i) => (r.ok ? `Reply from ${shown}: time${i === 0 ? "=1ms" : "<1ms"}` : "Request timed out."));
+    return [`\nPinging ${shown} with 32 bytes of data:`, ...lines, `\nPing statistics for ${shown}:\n    Packets: Sent = ${count}, Received = ${r.ok ? count : 0}, Lost = ${r.ok ? 0 : count} (${r.ok ? 0 : 100}% loss),${r.ok ? "\nApproximate round trip times in milli-seconds:\n    Minimum = 0ms, Maximum = 1ms, Average = 0ms" : ""}`].join("\n");
+  }
+  if (os === "mac") {
+    if (r.noRoute) return "ping6: UDP connect: No route to host";
+    const lines = r.ok ? Array.from({ length: count }, (_, i) => `16 bytes from ${shown}, icmp_seq=${i} hlim=64 time=0.${512 + i * 37} ms`) : Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq=${i}`);
+    return [`PING6(56=40+8+8 bytes) ${v6s(src)} --> ${shown}`, ...lines, "", `--- ${shown} ping6 statistics ---`, `${count} packets transmitted, ${r.ok ? count : 0} packets received, ${r.ok ? "0.0" : "100.0"}% packet loss`, ...(r.ok ? ["round-trip min/avg/max/std-dev = 0.512/0.567/0.623/0.041 ms"] : [])].join("\n");
+  }
+  if (r.noRoute) return "ping: connect: Network is unreachable";
+  const lines = r.ok ? Array.from({ length: count }, (_, i) => `64 bytes from ${shown}: icmp_seq=${i + 1} ttl=64 time=0.${4 + i}21 ms`) : [];
+  return [`PING ${shown}(${shown}) 56 data bytes`, ...lines, "", `--- ${shown} ping statistics ---`, `${count} packets transmitted, ${r.ok ? count : 0} received, ${r.ok ? 0 : 100}% packet loss, time ${count === 1 ? 0 : (count - 1) * 1000 + 3}ms`, ...(r.ok ? ["rtt min/avg/max/mdev = 0.421/0.571/0.721/0.112 ms"] : [])].join("\n");
+}
+// for the labs' checks: does this PC's IPv6 ping get there and back
+export const canReach6 = (dev, ip) => Boolean(expandIpv6(ip) && reach6(dev, expandIpv6(ip)).ok);
 
 // --- ipv6 from a router ------------------------------------------------------------------------------
 
@@ -1167,6 +1290,7 @@ function path6(router, ip, seen = new Set(), sender = true) {
 // whether the reply finds its way back to the exit interface's address
 export function fromRouter6(router, ip) {
   if (!router.lab?.all) return null;
+  syncIpv6(router.lab.all);
   if (owns6(router, ip)) return { ok: true, hops: [ip] };
   const best = best6(router, ip);
   if (!best) return { ok: false, noRoute: true, hops: [] };
@@ -1334,8 +1458,8 @@ export function hostExec(dev, raw) {
 
 const WORDS = {
   windows: ["ipconfig", "ping", "tracert", "nslookup", "arp", "netsh", "hostname", "cls"],
-  linux: ["ip", "ifconfig", "arp", "ping", "traceroute", "tracepath", "nslookup", "dig", "resolvectl", "cat", "hostname", "clear"],
-  mac: ["ifconfig", "netstat", "scutil", "arp", "ping", "traceroute", "nslookup", "dig", "hostname", "clear"],
+  linux: ["ip", "ifconfig", "arp", "ping", "ping6", "traceroute", "tracepath", "nslookup", "dig", "resolvectl", "cat", "hostname", "clear"],
+  mac: ["ifconfig", "netstat", "scutil", "arp", "ping", "ping6", "traceroute", "nslookup", "dig", "hostname", "clear"],
 };
 
 // tab completes the command name only, as a shell does
