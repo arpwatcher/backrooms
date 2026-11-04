@@ -117,8 +117,10 @@ English.
   Linux or macOS, with the commands for checking a client's settings:
   `ipconfig` (`/all`, `/release`, `/renew`, `/displaydns`, `/flushdns`),
   `ip addr`, `ip route`, `ip neigh`, `ifconfig`, `netstat -rn`, `scutil --dns`,
-  `resolvectl status`, `arp`, `nslookup`, `dig`, `ping`, `tracert` and
-  `traceroute`. Their output comes from the lab: a renew gets a lease only
+  `resolvectl status`, `arp`, `nslookup`, `dig`, `ping` (and `ping -6`,
+  `ping6`), `tracert` and `traceroute`. On IPv6 they take an address by
+  SLAAC from a router's advertisements (EUI-64 on Linux, a random interface
+  ID on Windows and macOS) with the router's link-local address as gateway. Their output comes from the lab: a renew gets a lease only
   when a router on the segment has a pool for it (or a relay to one), and
   otherwise the PC falls back to 169.254.x.x. Some tasks are questions
   answered from that output.
@@ -161,8 +163,10 @@ English.
   offline by port security and BPDU Guard, a second ISP that should only
   be a backup, a square of OSPF routers that should share the load, and
   two ACLs to hunt down from what the pings and traceroutes say, and AAA
-  that locks everyone out (TACACS+ with no fallback, then RADIUS). Exam
-  mode has a harder option made only of these. 235 labs, 53 of them sims.
+  that locks everyone out (TACACS+ with no fallback, then RADIUS), and a
+  branch whose phone never learns its voice VLAN, behind a slow uplink and
+  with no IPv6 yet. Exam mode has a harder option made only of these.
+  242 labs, 56 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -197,7 +201,15 @@ English.
   four equal-cost paths, a floating static waits outside the table, and
   `default-information originate` stops when the router's own default is
   gone. `show ip route` prints the classful headings IOS 15 does, with
-  equal-cost paths under one entry. A test replays every model answer and fails if one of its
+  equal-cost paths under one entry. A link settles its speed and duplex as
+  autonegotiation does (a fixed end makes the auto end fall back to half
+  duplex, two fixed speeds that differ stay down), and `show interfaces`
+  counts what crossed it since `clear counters`: late collisions on the
+  half-duplex end, runts and CRC errors on the other, with CDP's duplex
+  mismatch message. A host whose ARP goes unanswered reports Destination
+  host unreachable itself, and a router keeps the entry as Incomplete. An
+  IP phone learns its voice VLAN from the switch's CDP, tags its own
+  frames and passes the PC behind it untagged. A test replays every model answer and fails if one of its
   pings gets no reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
