@@ -310,4 +310,27 @@ export default [
     answers: { 2: "10.10.20.99", 3: "Wrong DNS server address" },
     teach: "If an address works and a name does not, routing is fine and the problem is name resolution: the DNS server setting, the server itself, or its records.",
   }),
+  lab({
+    id: "sim-host-unreachable", module: M, title: "Sim: Destination host unreachable", kind: "sim",
+    cmds: ["ping", "arp -a", "ip neigh", "show ip arp"],
+    devices: [
+      HOST("PC1", 12, 46, "windows", { ip: "10.10.10.21/24", gateway: "10.10.10.254", dns: ["10.10.20.10"], mac: "0050.7966.6801" }),
+      HOST("PC2", 40, 62, "linux", { ip: "10.10.10.22/24", gateway: "10.10.10.1", mac: "0050.7966.6802" }),
+      S("SW1", 40, 18), R1(), DNS,
+    ],
+    links: [["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"], ["SW1", "g0/1", "R1", "g0/0"], ["R1", "g0/1", "DNS", "fa0"]],
+    intro: "PC1 cannot reach the DNS server at 10.10.20.10, and PC2 cannot print to 10.10.10.50. Neither ping simply times out. Find out what each answer means. Do not change anything yet.",
+    tasks: [
+      { text: "Ping 10.10.20.10 from PC1. Who sends Destination host unreachable?", choices: ["PC1 itself: nobody answered its ARP for the next hop", "R1, which has no route", "The DNS server", "SW1"], check: (t) => need(t.ran("PC1", /^ping .*10\.10\.20\.10/) && t.reply === "PC1 itself: nobody answered its ARP for the next hop", "The reply comes from 10.10.10.21, PC1's own address: it never got an ARP answer, so it reports the failure itself.") },
+      { text: "Windows ends with Received = 4, Lost = 0. Did the ping work?", choices: ["No: Windows counts the unreachable messages as replies", "Yes", "Yes, but slowly", "Only the first packet"], check: (t) => need(t.reply === "No: Windows counts the unreachable messages as replies", "Read the lines, not just the statistics: no Reply from 10.10.20.10 came back.") },
+      { text: "Which of PC1's settings is wrong (ipconfig)?", choices: ["Default gateway", "IPv4 address", "Subnet mask", "DNS server"], check: (t) => need(t.ran("PC1", /^ipconfig/) && t.reply === "Default gateway", "The gateway is 10.10.10.254, and no device owns that address. R1's G0/0 is 10.10.10.1. A remote destination makes the PC ARP for its gateway.") },
+      { text: "Ping 10.10.10.50 from PC2. What does ip neigh then say about 10.10.10.50?", choices: ["FAILED", "REACHABLE", "STALE", "PERMANENT"], check: (t) => need(t.ran("PC2", /^ping .*10\.10\.10\.50/) && t.ran("PC2", /^ip n/) && t.reply === "FAILED", "The address is on PC2's own subnet, so PC2 ARPs for the printer itself. Nobody answers, Linux prints From 10.10.10.22 ... Destination Host Unreachable and marks the entry FAILED.") },
+      { text: "Ping 10.10.10.50 from R1 as well. What is the Hardware Addr of 10.10.10.50 in show ip arp?", choices: ["Incomplete", "0000.0000.0000", "ffff.ffff.ffff", "It is not listed"], check: (t) => need(t.ran("R1", /^ping 10\.10\.10\.50/) && t.reply === "Incomplete", "IOS keeps an Incomplete entry while its ARP request goes unanswered. Its ping prints ..... (timeouts), not U.") },
+      { text: "What is the most likely cause for 10.10.10.50?", choices: ["The printer is off or unplugged, or has another address", "A missing route on R1", "An ACL on R1", "A DNS failure"], check: (t) => need(t.reply === "The printer is off or unplugged, or has another address", "An unanswered ARP on the local subnet means no device on the segment owns that address. Routing, ACLs and DNS do not come into it.") },
+    ],
+    solution: { PC1: ["ping 10.10.20.10", "ipconfig"], PC2: ["ping -c 3 10.10.10.50", "ip neigh"], R1: ["enable", "ping 10.10.10.50", "show ip arp"] },
+    answers: { 0: "PC1 itself: nobody answered its ARP for the next hop", 1: "No: Windows counts the unreachable messages as replies", 2: "Default gateway", 3: "FAILED", 4: "Incomplete", 5: "The printer is off or unplugged, or has another address" },
+    failingPings: true,
+    teach: "Before the first packet leaves, a host ARPs for the next hop: the destination if it is on its own subnet, otherwise its default gateway. If nobody answers, the sender itself reports the destination host unreachable, from its own address. Windows prints Reply from <own IP>: Destination host unreachable (and counts it as received), Linux From <own IP> ... Destination Host Unreachable (ip neigh: FAILED), and macOS ping: sendto: Host is down. A router just times out (.....) and shows the entry as Incomplete in show ip arp. A Request timed out, by contrast, means the ARP worked and the reply never came back.",
+  }),
 ];

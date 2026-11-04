@@ -151,7 +151,7 @@ test("a PC reaches its gateway only through the right VLAN, trunk and subinterfa
     ],
     links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"]],
   });
-  const ok = (l) => /Received = 4/.test(exec(l.devices.PC1, "ping 10.1.10.1"));
+  const ok = (l) => /Reply from [\d.]+: bytes=/.test(exec(l.devices.PC1, "ping 10.1.10.1"));
   assert.equal(ok(buildLab(def(10))), true);
   assert.equal(ok(buildLab(def(20))), false, "wrong access VLAN");
   assert.equal(ok(buildLab(def(10, "20"))), false, "VLAN not allowed on the trunk");
@@ -159,7 +159,7 @@ test("a PC reaches its gateway only through the right VLAN, trunk and subinterfa
   const l = buildLab(def(10));
   assert.match(exec(l.devices.PC2, "ping -c 1 10.1.20.1"), /0 received/);
   // inter-VLAN: PC1 to the other subinterface's address works through the router
-  assert.equal(/Received = 4/.test(exec(l.devices.PC1, "ping 10.1.20.1")), true);
+  assert.equal(/Reply from [\d.]+: bytes=/.test(exec(l.devices.PC1, "ping 10.1.20.1")), true);
 });
 
 test("an HSRP virtual IP answers as a gateway, with the virtual MAC", async () => {
@@ -170,7 +170,7 @@ test("an HSRP virtual IP answers as a gateway, with the virtual MAC", async () =
   const def = { ...base, devices: base.devices.map((d) => (d.name === "PC1" ? HOST("PC1", d.x, d.y, "windows", { ip: "10.10.10.50/24", gateway: "10.10.10.1" }) : d)) };
   const l = buildLab(def);
   const pc = l.devices.PC1;
-  assert.match(exec(pc, "ping 10.10.10.1"), /Received = 4/);
+  assert.match(exec(pc, "ping 10.10.10.1"), /Reply from [\d.]+: bytes=/);
   assert.match(exec(pc, "arp -a"), /10\.10\.10\.1\s+00-00-0c-07-ac-01\s+dynamic/);
 });
 
@@ -222,9 +222,9 @@ test("a private address gets no answer from the Internet without NAT", async () 
   const l = buildLab(LABS.find((x) => x.id === "ch-edge-policy"));
   const r1 = l.devices.R1;
   for (const c of ["enable", "configure terminal", "ip route 0.0.0.0 0.0.0.0 203.0.113.1"]) exec(r1, c);
-  assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 0/);
+  assert.doesNotMatch(exec(l.devices.PC1, "ping 8.8.8.8"), /bytes=/);
   for (const c of ["interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "access-list 1 permit 192.168.10.0 0.0.0.255", "ip nat inside source list 1 interface g0/1 overload"]) exec(r1, c);
-  assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Received = 4/);
+  assert.match(exec(l.devices.PC1, "ping 8.8.8.8"), /Reply from [\d.]+: bytes=/);
   // the ping left its translation behind, and clearing removes it
   exec(r1, "end");
   assert.match(exec(r1, "show ip nat translations"), /icmp 203\.0\.113\.\d+:1\s+192\.168\.10\.11:1\s+8\.8\.8\.8:1\s+8\.8\.8\.8:1/);
@@ -323,14 +323,14 @@ test("ACLs filter pings and DHCP, and the first matching entry decides", async (
   const { R1, PC1, PC2 } = l.devices;
   const cmds = (...lines) => lines.forEach((c) => exec(R1, c));
   assert.match(exec(PC1, "ipconfig /renew"), /10\.1\.1\.\d+/);
-  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 4/);
+  assert.match(exec(PC1, "ping 10.2.2.10"), /Reply from [\d.]+: bytes=/);
   // outbound towards PC2: echoes from 10.1.1.0/24 dropped
   cmds("enable", "configure terminal", "access-list 101 deny icmp 10.1.1.0 0.0.0.255 any echo", "access-list 101 permit ip any any", "interface g0/1", "ip access-group 101 out");
-  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 0/);
+  assert.doesNotMatch(exec(PC1, "ping 10.2.2.10"), /bytes=/);
   // the reply direction is a different packet: PC2's own pings still work
-  assert.match(exec(PC2, "ping 10.1.1.1"), /Received = 4/);
+  assert.match(exec(PC2, "ping 10.1.1.1"), /Reply from [\d.]+: bytes=/);
   cmds("no ip access-group 101 out", "exit");
-  assert.match(exec(PC1, "ping 10.2.2.10"), /Received = 4/);
+  assert.match(exec(PC1, "ping 10.2.2.10"), /Reply from [\d.]+: bytes=/);
   // inbound on the LAN, permitting only the subnet: the Discover comes from 0.0.0.0
   cmds("access-list 10 permit 10.1.1.0 0.0.0.255", "interface g0/0", "ip access-group 10 in", "end");
   exec(PC1, "ipconfig /release");
@@ -357,7 +357,7 @@ test("telnet and ssh connect only when the vty lines take them", async () => {
   // the admin PC is in the management subnet; PC1 is not (access-class 10)
   assert.match(exec(ADMIN, "ssh netadmin@192.168.99.2"), /netadmin@192\.168\.99\.2's password:/);
   assert.match(exec(PC1, "ssh netadmin@192.168.99.2"), /port 22: Connection refused/);
-  assert.match(exec(PC1, "ping 192.168.99.2"), /Received = 4/);
+  assert.match(exec(PC1, "ping 192.168.99.2"), /Reply from [\d.]+: bytes=/);
   // transport input ssh: telnet is refused
   assert.match(exec(R1, "telnet 192.168.99.2"), /Trying 192\.168\.99\.2 \.\.\.\n% Connection refused by remote host/);
   assert.match(exec(R1, "ssh -l netadmin 192.168.99.2"), /^Password:/);
@@ -435,14 +435,14 @@ test("port security learns sticky MACs, and a violation drops or err-disables", 
   for (const violation of ["restrict", "shutdown"]) {
     const l = buildLab(def(violation));
     const { SW1, PC1, PC2 } = l.devices;
-    assert.match(exec(PC1, "ping 10.1.1.1"), /Received = 4/);
+    assert.match(exec(PC1, "ping 10.1.1.1"), /Reply from [\d.]+: bytes=/);
     exec(SW1, "enable");
     assert.match(exec(SW1, "show running-config interface fa0/1"), /switchport port-security mac-address sticky 0050\.7966\.6871/);
     // another device on the same port (moved from PC1's cable)
     PC2.links.FastEthernet0 = PC1.links.FastEthernet0;
     delete PC1.links.FastEthernet0;
     SW1.links["FastEthernet0/1"] = { device: PC2, iface: "FastEthernet0" };
-    assert.match(exec(PC2, "ping 10.1.1.1"), /Received = 0/);
+    assert.doesNotMatch(exec(PC2, "ping 10.1.1.1"), /bytes=/);
     const ps = exec(SW1, "show port-security interface fa0/1");
     assert.match(ps, /Security Violation Count {3}: 1/);
     assert.match(ps, violation === "shutdown" ? /Secure-shutdown/ : /Secure-up/);

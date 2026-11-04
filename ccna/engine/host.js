@@ -245,6 +245,17 @@ function arpPasses(dev, n, count = false) {
   return true;
 }
 
+// nobody on the segment answers the ARP for the next hop (ip itself, or the
+// gateway): the sender gives up and reports the host unreachable itself, from
+// its own address, and keeps a failed entry for a while
+function arpFails(dev, ip) {
+  const h = dev.host;
+  if (ip === "127.0.0.1") return false;
+  const hop = local(dev, ip) ? ip : h.gw;
+  if (!hop || !local(dev, hop) || h.extern.includes(hop) || onSegment(dev, hop)) return false;
+  if (!(h.arpFailed ??= []).includes(hop)) h.arpFailed.push(hop);
+  return true;
+}
 function learnArp(dev, ip) {
   const n = onSegment(dev, ip);
   if (!n || dev.host.arp.some((a) => a.ip === ip)) return;
@@ -764,6 +775,7 @@ function pingWin(dev, target, count) {
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
   // Windows counts an unreachable answer as received (an ACL's
   // administratively prohibited is left as a timeout here)
+  if (!ok && arpFails(dev, r.ip)) return [head, ...Array(count).fill(`Reply from ${f.ip}: Destination host unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
   const u = !ok && netUnreachable(dev, r.ip);
   if (u?.why === "route") return [head, ...Array(count).fill(`Reply from ${u.at}: Destination net unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
   const lines = Array.from({ length: count }, (_, i) => (ok ? `Reply from ${r.ip}: bytes=32 time${i === 0 ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
@@ -921,9 +933,10 @@ function ifconfigLinux(dev) {
 
 function arpLinux(dev, style) {
   const rows = dev.host.arp;
-  if (style === "neigh") return rows.map((a) => `${a.ip} dev eth0 lladdr ${macLinux(a.mac)} REACHABLE`).join("\n");
-  if (style === "a") return rows.map((a) => `? (${a.ip}) at ${macLinux(a.mac)} [ether] on eth0`).join("\n");
-  return ["Address                  HWtype  HWaddress           Flags Mask            Iface", ...rows.map((a) => `${a.ip.padEnd(25)}ether   ${macLinux(a.mac)}   C                     eth0`)].join("\n");
+  const failed = dev.host.arpFailed ?? [];
+  if (style === "neigh") return [...rows.map((a) => `${a.ip} dev eth0 lladdr ${macLinux(a.mac)} REACHABLE`), ...failed.map((ip) => `${ip} dev eth0 FAILED`)].join("\n");
+  if (style === "a") return [...rows.map((a) => `? (${a.ip}) at ${macLinux(a.mac)} [ether] on eth0`), ...failed.map((ip) => `? (${ip}) at <incomplete> on eth0`)].join("\n");
+  return ["Address                  HWtype  HWaddress           Flags Mask            Iface", ...rows.map((a) => `${a.ip.padEnd(25)}ether   ${macLinux(a.mac)}   C                     eth0`), ...failed.map((ip) => `${ip.padEnd(25)}        (incomplete)                              eth0`)].join("\n");
 }
 
 function resolvectl(dev) {
@@ -943,6 +956,10 @@ function pingUnix(dev, target, count, mac) {
   if (noRoute(dev, r.ip)) return mac ? `PING ${r.ip} (${r.ip}): 56 data bytes\nping: sendto: No route to host\n\n--- ${r.ip} ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss` : "ping: connect: Network is unreachable";
   const ok = reaches(dev, r.ip, true, counted(ICMP, count));
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
+  if (!ok && arpFails(dev, r.ip)) {
+    if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}${i < count - 1 ? "\nping: sendto: Host is down" : ""}`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 packets received, 100.0% packet loss`].join("\n");
+    return [`PING ${shown} 56(84) bytes of data.`, ...Array.from({ length: count }, (_, i) => `From ${f.ip} icmp_seq=${i + 1} Destination Host Unreachable`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 received, +${count} errors, 100% packet loss, time ${count === 1 ? 0 : (count - 1) * 1000 + 27}ms`, ...(count > 1 ? [`pipe ${Math.min(count, 3)}`] : [])].join("\n");
+  }
   const u = !ok && netUnreachable(dev, r.ip);
   // an ACL's administratively prohibited: Linux "Packet filtered", macOS "Communication prohibited by filter"
   const why = u && (u.why === "route" ? "Destination Net Unreachable" : mac ? "Communication prohibited by filter" : "Packet filtered");
@@ -1085,7 +1102,7 @@ function macos(dev, line) {
     case "scutil":
       return a === "--dns" ? scutilDns(dev) : "usage: scutil --dns";
     case "arp":
-      if (a === "-a" || a === "-an") return dev.host.arp.map((x) => `? (${x.ip}) at ${macMacShort(x.mac)} on en0 ifscope [ethernet]`).join("\n");
+      if (a === "-a" || a === "-an") return [...dev.host.arp.map((x) => `? (${x.ip}) at ${macMacShort(x.mac)} on en0 ifscope [ethernet]`), ...(dev.host.arpFailed ?? []).map((ip) => `? (${ip}) at (incomplete) on en0 ifscope [ethernet]`)].join("\n");
       if (/^-a?d/.test(a)) return (dev.host.arp = []), "";
       return "usage: arp [-n] [-i interface] hostname\n       arp [-n] [-i interface] [-l] -a";
     case "ping": {

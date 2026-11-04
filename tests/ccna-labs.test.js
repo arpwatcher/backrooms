@@ -28,12 +28,12 @@ for (const def of LABS) {
 
 // a ping, traceroute or session in a model answer has to work, unless the
 // lab's point is to watch one fail first
-const failed = /Success rate is 0|\n {2}\d+ {2}\* {2}\* {2}\*|% Connection (refused|timed out)|Received = 0|100% packet loss|Request timed out|port 22: Connection/;
+const failed = /Destination host unreachable|Destination Host Unreachable|Host is down|100\.0% packet loss|Success rate is 0|\n {2}\d+ {2}\* {2}\* {2}\*|% Connection (refused|timed out)|Received = 0|100% packet loss|Request timed out|port 22: Connection/;
 for (const def of LABS) {
   if (def.failingPings) continue;
   test(`lab ${def.id}: the pings in the answer get their replies`, () => {
     const lab = buildLab(def);
-    const bad = runSolution(lab).filter((o) => /^(do )?(ping|traceroute|tracert|telnet|ssh)\b/.test(o.line) && failed.test(o.out));
+    const bad = runSolution(lab).filter((o) => /^(do )?(ping6?|traceroute|tracert|telnet|ssh)\b/.test(o.line) && failed.test(o.out));
     assert.deepEqual(bad.map((o) => `${o.name}: ${o.line}`), []);
   });
 }

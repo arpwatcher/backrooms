@@ -1337,6 +1337,7 @@ function ping(dev, target, count, src = null) {
   dev.arped ??= [];
   const miss = ok && r?.arp && !dev.arped.includes(r.arp) ? 1 : 0;
   if (r?.arp && (ok || r.hops.length)) dev.arped.push(r.arp);
+  else if (r?.arp && !(dev.lab?.all ?? []).some((d) => Object.values(d.interfaces).some((f) => f.ip === r.arp)) && !dev.arped.includes(r.arp)) dev.arped.push(r.arp);
   const got = ok ? count - miss : 0;
   // ICMP unreachables come back rate-limited, one every other probe: U.U.U
   const marks = ok ? ".".repeat(miss) + "!".repeat(count - miss) : r?.unreach ? Array.from({ length: count }, (_, i) => (i % 2 ? "." : "U")).join("") : ".".repeat(count);
