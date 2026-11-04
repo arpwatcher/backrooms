@@ -1,5 +1,5 @@
-import { lab, R, S, L3, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
-import { aclAllows, ospfElection } from "../engine/net.js";
+import { lab, R, S, L3, SRV, ISP, HOST, PHONE, cfg, EN, need, is } from "./kit.js";
+import { aclAllows, ospfElection, linkMode } from "../engine/net.js";
 import { ntpSync, fromRouter6, aaaServerUp } from "../engine/host.js";
 import { expandIpv6 } from "../engine/ip.js";
 
@@ -869,5 +869,40 @@ export default [
     answers: { 0: "Permission denied, whatever the password", 1: "The method list is only group tacacs+, and no TACACS+ server answers", 3: "The local user admin", 6: "No: the server answers and rejects it, and local is only tried when no server answers", 8: "1812" },
     failingPings: true,
     teach: "aaa new-model turns on AAA; then the vty lines use a login method list (default, or a named list with login authentication) instead of login local. The list is tried in order, and the next method is used only when the one before it errors: no server answers (unreachable, blocked, or the key is wrong) or the local database is empty. A server that answers and rejects the user ends the login. So always end a server list with local, and keep a local user for when the server is down. TACACS+ runs over TCP 49 and encrypts the whole body; RADIUS runs over UDP 1812/1813 and encrypts only the password.",
+  }),
+  // --- a branch office: an IP phone, a slow uplink and no IPv6 yet ---------------------------------
+  hard({
+    id: "ch-branch-voice", title: "Challenge: the branch phones, the slow uplink and IPv6",
+    cmds: ["show interfaces", "show interfaces status", "clear counters", "switchport voice vlan", "cdp enable", "show mac address-table", "ipv6 unicast-routing", "ip -6 addr", "ping6"],
+    devices: [
+      R("R1", 50, 4, cfg("interface g0/0", "speed 100", "duplex full", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.10.10.1 255.255.255.0", "ipv6 address 2001:db8:10::1/64", "interface g0/0.20", "encapsulation dot1q 20", "ip address 10.10.20.1 255.255.255.0")),
+      S("SW1", 50, 30, cfg("vlan 10", "name DATA", "vlan 20", "name VOICE", "exit", "interface g0/1", "switchport mode trunk", "interface fa0/5", "switchport mode access", "switchport access vlan 10", "switchport voice vlan 20", "no cdp enable", "interface fa0/6", "switchport mode access", "switchport access vlan 10")),
+      PHONE("IP1", 22, 52, "10.10.20.50/24", "10.10.20.1", { mac: "0011.2233.4466" }),
+      HOST("PC1", 22, 80, "windows", { ip: "10.10.10.21/24", gateway: "10.10.10.1", ipv6: "auto", mac: "0050.7966.2201" }),
+      HOST("PC2", 78, 60, "linux", { ip: "10.10.10.22/24", gateway: "10.10.10.1", ipv6: "auto", mac: "0050.7966.2202" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/5", "IP1", "fa0/1"], ["IP1", "fa0/2", "PC1", "fa0"], ["SW1", "fa0/6", "PC2", "fa0"]],
+    intro: "Three tickets from the branch: everything is slow, the phone on Fa0/5 cannot register with the call server, and the IPv6 pilot has not started (no PC has a global IPv6 address). R1 routes VLAN 10 (data) and 20 (voice) on a stick. You may change R1 and SW1.",
+    tasks: [
+      { text: "At which duplex does SW1's Gi0/1 run?", choices: ["Half, negotiated (a-half)", "Full, negotiated (a-full)", "Full, fixed", "It is down"], check: (t) => need(t.reply === "Half, negotiated (a-half)", "show interfaces status on SW1: R1's G0/0 is fixed at 100/full and does not negotiate, so SW1 falls back to half duplex.") },
+      { text: "Fix the uplink so both ends negotiate again.", check: (t) => { const m = linkMode(t.dev("SW1"), t.f("SW1", "g0/1")); return need(m && !m.mismatch && t.f("R1", "g0/0").duplex === "auto" && t.f("R1", "g0/0").speed === "auto", m?.mismatch ? `Still ${m.duplex} on SW1, ${m.farDuplex} on R1.` : "Put R1's G0/0 back on auto: no speed, no duplex."); } },
+      { text: "Clear SW1's counters, ping R1 (10.10.10.1) from PC2, and make sure Gi0/1 counts no collisions.", check: (t) => { const c = t.dev("SW1").ctr?.["GigabitEthernet0/1"]; return need(c?.cleared && c.in > 0 && c.coll === 0 && c.late === 0, !c?.cleared ? "clear counters on SW1." : !c.in ? "Ping 10.10.10.1 from PC2 after clearing." : "Gi0/1 still collides: fix the duplex first, then clear and ping again."); } },
+      { text: "Before you touch Fa0/5: in which VLAN does SW1 see the phone's MAC (0011.2233.4466)?", ask: "VLAN", check: (t) => need(is.num(t.reply, 10), "show mac address-table interface fa0/5: the phone sends untagged, so it lands in the data VLAN 10, where its 10.10.20.50 address is useless.") },
+      { text: "Why does the voice VLAN on Fa0/5 not work?", choices: ["CDP is off on Fa0/5, so the phone never learns VLAN 20", "VLAN 20 is not allowed on the trunk", "The phone needs a trunk port", "R1 has no subinterface for VLAN 20"], check: (t) => need(t.reply === "CDP is off on Fa0/5, so the phone never learns VLAN 20", "show running-config interface fa0/5: no cdp enable. The switch tells the phone its voice VLAN in CDP.") },
+      { text: "Get the phone onto VLAN 20: PC1 must reach 10.10.20.50.", check: (t) => need(t.reach("PC1", "10.10.20.50") && t.ran("PC1", /^ping .*10\.10\.20\.50/), "cdp enable on Fa0/5, then ping 10.10.20.50 from PC1.") },
+      { text: "Start the IPv6 pilot: PC2 must get an address by SLAAC.", check: (t) => need(t.dev("R1").ipv6Routing && t.dev("PC2").interfaces.FastEthernet0.ipv6?.length > 0, "R1 has 2001:db8:10::1/64 on G0/0.10 but sends no RAs until ipv6 unicast-routing.") },
+      { text: "Which IPv6 address does PC2 build (Linux, EUI-64)?", ask: "IPv6 address", check: (t) => need(expandIpv6(t.reply.trim().split("/")[0]) === expandIpv6("2001:db8:10::250:79ff:fe66:2202"), "ip -6 addr on PC2: the prefix 2001:db8:10::/64 plus EUI-64 from 0050.7966.2202 (00 becomes 02, ff:fe in the middle).") },
+      { text: "From PC2, ping6 R1's 2001:db8:10::1.", check: (t) => need(t.ran("PC2", /^ping6? .*2001:db8:10::1\b/) && t.reach6("PC2", "2001:db8:10::1"), "ping6 -c 2 2001:db8:10::1 on PC2.") },
+    ],
+    solution: {
+      SW1: ["enable", "show interfaces status", "show mac address-table interface fa0/5", "show running-config interface fa0/5"],
+      R1: [...EN, "interface g0/0", "no speed", "no duplex", "exit", "ipv6 unicast-routing", "end"],
+      "SW1#2": [...EN, "interface fa0/5", "cdp enable", "end", "clear counters", ""],
+      PC2: ["ping -c 2 10.10.10.1", "ip -6 addr", "ping6 -c 2 2001:db8:10::1"],
+      PC1: ["ping 10.10.20.50"],
+      "SW1#3": ["show interfaces g0/1", "show mac address-table interface fa0/5"],
+    },
+    answers: { 0: "Half, negotiated (a-half)", 3: "10", 4: "CDP is off on Fa0/5, so the phone never learns VLAN 20", 7: "2001:db8:10::250:79ff:fe66:2202" },
+    teach: "Three layers, three faults. Layer 1: a fixed end stops autonegotiation, the auto end guesses half duplex, and the half end counts late collisions. Clear the counters after the fix to see that they stay at zero. Layer 2: a voice VLAN only works if the phone learns it, through CDP (or LLDP-MED). Without CDP the phone sends untagged, into the data VLAN. Layer 3: a router sends no Router Advertisements, and hosts get no SLAAC address, until ipv6 unicast-routing is on.",
   }),
 ];
