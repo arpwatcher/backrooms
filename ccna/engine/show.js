@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { ntpSync, aaaServerUp } from "./host.js";
+import { ntpSync, aaaServerUp, phoneVlan } from "./host.js";
 import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes, staticUsable, linkMode, counters } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -125,7 +125,7 @@ function switchportInfo(dev, name) {
     `Negotiation of Trunking: ${f.nonegotiate ? "Off" : "On"}`,
     `Access Mode VLAN: ${f.accessVlan} (${dev.vlans[f.accessVlan]?.name ?? "Inactive"})`,
     `Trunking Native Mode VLAN: ${f.nativeVlan} (${dev.vlans[f.nativeVlan]?.name ?? "Inactive"})`,
-    `Voice VLAN: ${f.voiceVlan ?? "none"}`,
+    `Voice VLAN: ${f.voiceVlan ? `${f.voiceVlan} (${dev.vlans[f.voiceVlan]?.name ?? "Inactive"})` : "none"}`,
     `Trunking VLANs Enabled: ${f.allowed ? rangeText(f.allowed) || "NONE" : "ALL"}`,
     "Pruning VLANs Enabled: 2-1001",
   ].join("\n");
@@ -196,6 +196,10 @@ function macEntries(dev) {
   for (const m of dev.lab?.macs ?? []) add(m.vlan, m.mac, m.type ?? "DYNAMIC", m.port);
   for (const m of Object.values(dev.macLearned ?? {})) add(m.vlan, m.mac, "DYNAMIC", m.port);
   for (const m of dev.macStatic ?? []) add(m.vlan, m.mac, "STATIC", m.port);
+  for (const [port, end] of Object.entries(dev.links)) {
+    const f = dev.interfaces[port];
+    if (end.device.type === "phone" && f?.switchport && status(dev, f)[1] === "up") add(phoneVlan(end.device) ?? f.accessVlan, end.device.mac, "DYNAMIC", port);
+  }
   for (const f of Object.values(dev.interfaces)) for (const mac of f.ps.macs) add(f.accessVlan, mac, "STATIC", f.name);
   return [...all.values()].sort((a, b) => a.vlan - b.vlan || a.mac.localeCompare(b.mac));
 }
@@ -551,10 +555,11 @@ function cdpNeighbors(dev, lldp) {
     const g = end.device.interfaces[end.iface];
     if (!f || !g || f.shutdown || g.shutdown || !on(dev, f) || !on(end.device, g) || end.device.type === "pc") continue;
     n++;
-    const cap = end.device.type === "router" ? "R" : end.device.type === "l3switch" ? "R S" : "S";
-    const platform = end.device.type === "router" ? "C2900" : end.device.type === "l3switch" ? "3560" : "2960";
+    const phone = end.device.type === "phone";
+    const cap = phone ? "H P" : end.device.type === "router" ? "R" : end.device.type === "l3switch" ? "R S" : "S";
+    const platform = phone ? "IP Phone" : end.device.type === "router" ? "C2900" : end.device.type === "l3switch" ? "3560" : "2960";
     if (lldp) rows.push(`${pad(end.device.hostname, 21)}${pad(short(f.name), 15)}${pad(end.device.lldpHold ?? 120, 11)}${pad(end.device.type === "router" ? "R" : end.device.type === "l3switch" ? "B,R" : "B", 15)}${short(g.name)}`);
-    else rows.push(`${pad(end.device.hostname, 17)}${pad(short(f.name), 17)}${pad(cdpHoldLeft(end.device), 10)}${pad(cap, 12)}${pad(platform, 10)}${short(g.name)}`);
+    else rows.push(`${pad(end.device.hostname, 17)}${pad(short(f.name), 17)}${pad(cdpHoldLeft(end.device), 10)}${pad(cap, 12)}${pad(platform, 10)}${phone ? `Port ${g.name.slice(-1)}` : short(g.name)}`);
   }
   if (lldp) rows.push("", `Total entries displayed: ${n}`);
   if (lldp && !dev.lldp) return "% LLDP is not enabled";
@@ -573,10 +578,10 @@ function cdpDetail(dev, entry = null) {
     const ip = g.ip ?? Object.values(end.device.interfaces).find((x) => x.ip)?.ip;
     // what the neighbor's CDP advertisement carries, as IOS 15 prints it
     const t = end.device.type;
-    const platform = t === "router" ? "Cisco CISCO2911/K9" : t === "l3switch" ? "cisco WS-C3560-24PS" : "cisco WS-C2960-24TT-L";
-    const caps = t === "switch" ? "Switch IGMP" : "Router Switch IGMP";
-    const version = t === "router" ? "Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4, RELEASE SOFTWARE (fc2)" : t === "l3switch" ? "Cisco IOS Software, C3560 Software (C3560-IPSERVICESK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)" : "Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)";
-    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, `Holdtime : ${cdpHoldLeft(end.device)} sec`, "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${linkMode(end.device, g)?.duplex ?? (g.duplex === "half" ? "half" : "full")}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
+    const platform = t === "phone" ? "Cisco IP Phone 7960" : t === "router" ? "Cisco CISCO2911/K9" : t === "l3switch" ? "cisco WS-C3560-24PS" : "cisco WS-C2960-24TT-L";
+    const caps = t === "phone" ? "Host Phone" : t === "switch" ? "Switch IGMP" : "Router Switch IGMP";
+    const version = t === "phone" ? "P00308010200" : t === "router" ? "Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4, RELEASE SOFTWARE (fc2)" : t === "l3switch" ? "Cisco IOS Software, C3560 Software (C3560-IPSERVICESK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)" : "Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)";
+    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, `Holdtime : ${cdpHoldLeft(end.device)} sec`, "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" && t !== "phone" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${linkMode(end.device, g)?.duplex ?? (g.duplex === "half" ? "half" : "full")}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
   }
   if (!entry) out.push(`Total cdp entries displayed : ${out.filter((l) => l.startsWith("Device ID:")).length}`);
   return out.join("\n");

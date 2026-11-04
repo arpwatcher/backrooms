@@ -1,4 +1,4 @@
-import { lab, R, S, L3, PC, HOST, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, L3, PC, HOST, PHONE, cfg, EN, need, is } from "./kit.js";
 
 const M = "switching";
 const vlanName = (t, sw, id) => t.dev(sw).vlans[id]?.name;
@@ -41,16 +41,27 @@ export default [
   }),
   lab({
     id: "voice-vlan", module: M, title: "Voice VLAN for an IP phone",
-    cmds: ["switchport voice vlan", "switchport access vlan"],
-    devices: [S("SW1", 40, 30, cfg("vlan 10", "name DATA", "vlan 150", "name VOICE")), PC("PHONE1", 80, 30, "10.15.0.20/24")],
-    links: [["SW1", "fa0/3", "PHONE1", "fa0"]],
-    intro: "An IP phone is connected to Fa0/3, with the user's PC plugged in behind it.",
+    cmds: ["switchport voice vlan", "switchport access vlan", "show interfaces switchport", "show cdp neighbors"],
+    devices: [
+      R("R1", 50, 12, cfg("interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.10.0.1 255.255.255.0", "interface g0/0.150", "encapsulation dot1q 150", "ip address 10.15.0.1 255.255.255.0")),
+      S("SW1", 50, 36, cfg("vlan 10", "name DATA", "vlan 150", "name VOICE", "exit", "interface g0/1", "switchport mode trunk")),
+      PHONE("IP1", 30, 62, "10.15.0.20/24", "10.15.0.1", { mac: "0011.2233.4455" }),
+      HOST("PC1", 72, 62, "windows", { ip: "10.10.0.21/24", gateway: "10.10.0.1", mac: "0050.7966.0321" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/3", "IP1", "fa0/1"], ["IP1", "fa0/2", "PC1", "fa0"]],
+    intro: "An IP phone is plugged into SW1's Fa0/3, and the user's PC into the phone's PC port. One cable, two VLANs: data in 10, voice in 150.",
     tasks: [
       { text: "Make Fa0/3 an access port with the PC's data in VLAN 10.", check: (t) => need(t.f("SW1", "fa0/3").mode === "access" && t.f("SW1", "fa0/3").accessVlan === 10, "Fa0/3 must be an access port in VLAN 10.") },
       { text: "Put the phone's voice traffic in VLAN 150.", check: (t) => need(t.f("SW1", "fa0/3").voiceVlan === 150, "Expected switchport voice vlan 150.") },
+      { text: "From PC1, ping the phone (10.15.0.20).", check: (t) => need(t.ran("PC1", /^ping .*10\.15\.0\.20/) && t.reach("PC1", "10.15.0.20"), "The phone answers once it is in VLAN 150: the PC's ping goes to R1 in VLAN 10 and comes back down VLAN 150.") },
+      { text: "In which VLAN does SW1 learn the phone's MAC on Fa0/3?", ask: "VLAN", check: (t) => need(is.num(t.reply, 150), "show mac address-table interface fa0/3: the PC's MAC in VLAN 10, the phone's (0011.2233.4455) in VLAN 150.") },
+      { text: "Which Device ID does the phone have in SW1's show cdp neighbors?", ask: "Device ID", check: (t) => need(t.reply.trim().toUpperCase() === "SEP001122334455", "A Cisco phone calls itself SEP and its MAC: SEP001122334455, capability H P (host, phone).") },
+      { text: "How does the phone learn that voice goes in VLAN 150?", choices: ["From SW1's CDP advertisements", "From DHCP option 150", "From a trunk negotiated with DTP", "It is typed into the phone"], check: (t) => need(t.reply === "From SW1's CDP advertisements", "SW1 tells the phone its voice VLAN in CDP; with CDP off on the port the phone sends untagged, into VLAN 10.") },
+      { text: "How do the two kinds of frames cross the cable on Fa0/3?", choices: ["Voice tagged 802.1Q with VLAN 150, the PC's data untagged in VLAN 10", "Both tagged, as on a trunk", "Both untagged", "Data tagged with 10, voice untagged"], check: (t) => need(t.reply === "Voice tagged 802.1Q with VLAN 150, the PC's data untagged in VLAN 10", "The port stays an access port: its access VLAN untagged, its voice VLAN tagged.") },
     ],
-    solution: { SW1: [...EN, "interface fa0/3", "switchport mode access", "switchport access vlan 10", "switchport voice vlan 150"] },
-    teach: "The phone learns the voice VLAN through CDP and sends voice tagged. The PC's data VLAN stays untagged, and the port remains an access port.",
+    solution: { SW1: [...EN, "interface fa0/3", "switchport mode access", "switchport access vlan 10", "switchport voice vlan 150", "end"], PC1: ["ping 10.15.0.20"], "SW1#2": ["show mac address-table interface fa0/3", "show cdp neighbors", "show interfaces fa0/3 switchport"] },
+    answers: { 3: "150", 4: "SEP001122334455", 5: "From SW1's CDP advertisements", 6: "Voice tagged 802.1Q with VLAN 150, the PC's data untagged in VLAN 10" },
+    teach: "switchport voice vlan <id> on an access port adds a second VLAN for an IP phone. The switch tells the phone the voice VLAN through CDP (or LLDP-MED); the phone tags its own frames with it (and with CoS 5) and passes the PC's frames untagged, into the access VLAN. show interfaces switchport lists both (Access Mode VLAN, Voice VLAN), show vlan brief puts the port under both VLANs, and the MAC table shows the phone in the voice VLAN.",
   }),
   lab({
     id: "trunk", module: M, title: "Trunk between switches",

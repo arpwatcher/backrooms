@@ -13,9 +13,11 @@ const PORTS = {
   pc: () => ["FastEthernet0"],
   server: () => ["FastEthernet0"],
   cloud: () => ["GigabitEthernet0/0", "GigabitEthernet0/1"],
+  // a Cisco IP phone: the uplink to the switch and the PC port behind it
+  phone: () => ["FastEthernet0/1", "FastEthernet0/2"],
 };
 
-export const DEFAULT_NAME = { router: "Router", switch: "Switch", l3switch: "Switch", pc: "PC", server: "Server", cloud: "ISP" };
+export const DEFAULT_NAME = { router: "Router", switch: "Switch", l3switch: "Switch", pc: "PC", server: "Server", cloud: "ISP", phone: "SEP" };
 
 export function newInterface(dev, name) {
   const switching = dev.type !== "router" && /^(FastEthernet|GigabitEthernet)/.test(name);
@@ -86,7 +88,7 @@ export function createDevice({ name, type = "router", hostname, ports, mac } = {
   };
   for (const port of ports ?? PORTS[type]()) dev.interfaces[port] = newInterface(dev, port);
   // end hosts and the provider cloud are always plugged in and on
-  if (["pc", "server", "cloud"].includes(type)) for (const f of Object.values(dev.interfaces)) f.shutdown = false;
+  if (["pc", "server", "cloud", "phone"].includes(type)) for (const f of Object.values(dev.interfaces)) f.shutdown = false;
   return dev;
 }
 

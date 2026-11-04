@@ -204,7 +204,7 @@ function lightOf(name, ifname) {
   const dev = current.lab.devices[name];
   const f = dev.interfaces[normalize(ifname)];
   if (!f) return "none";
-  if (["pc", "server", "cloud"].includes(dev.type)) {
+  if (["pc", "server", "cloud", "phone"].includes(dev.type)) {
     const end = dev.links[f.name];
     const other = end?.device.interfaces[end.iface];
     return other && !other.shutdown ? "up" : "down";

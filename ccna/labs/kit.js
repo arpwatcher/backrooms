@@ -9,6 +9,8 @@ export const L3 = (name, x, y, setup = [], extra = {}) => ({ name, type: "l3swit
 export const PC = (name, x, y, ip, gateway) => ({ name, type: "pc", x, y, ip, gateway });
 export const SRV = (name, x, y, ip, gateway) => ({ name, type: "server", x, y, ip, gateway });
 export const ISP = (name, x, y) => ({ name, type: "cloud", x, y });
+// a Cisco IP phone: Fa0/1 goes to the switch, Fa0/2 to the PC behind it
+export const PHONE = (name, x, y, ip, gateway, extra = {}) => ({ name, type: "phone", x, y, ip, gateway, ...extra });
 
 // a lab is { id, module, title, kind, cmds, devices, links, intro, tasks,
 // solution, teach }; this fills the usual defaults

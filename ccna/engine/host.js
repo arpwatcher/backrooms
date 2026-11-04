@@ -95,7 +95,8 @@ export function segment(dev) {
       if (!link || !q.switchport || q.errdisabled || status(sw, q)[0] !== "up") continue;
       const eff = asSwitched(sw, q);
       if (!carries(sw, eff, vlan)) continue;
-      const tagged = operMode(sw, eff) === "trunk" && vlan !== eff.nativeVlan;
+      // an access port tags only its voice VLAN (for the phone behind it)
+      const tagged = operMode(sw, eff) === "trunk" ? vlan !== eff.nativeVlan : vlan === eff.voiceVlan && vlan !== eff.accessVlan;
       arrive(link.device, link.device.interfaces[link.iface], vlan, tagged, [...path, { sw, entry, exit: eff, vlan }]);
     }
   };
@@ -110,6 +111,22 @@ export function segment(dev) {
         return;
       }
       if (!tagged) flood(d, eff.accessVlan, path, eff);
+      // a phone's tagged frames go into the port's voice VLAN
+      else if (vlan === eff.voiceVlan) flood(d, vlan, path, eff);
+      return;
+    }
+    if (d.type === "phone") {
+      const up = d.interfaces["FastEthernet0/1"];
+      const pass = (port) => {
+        const l = d.links[port];
+        if (l) arrive(l.device, l.device.interfaces[l.iface], vlan, false, path);
+      };
+      if (f !== up) return pass("FastEthernet0/1");
+      // from the switch: tagged voice frames are the phone's own, untagged ones go
+      // to the PC port (and to the phone too while it has no voice VLAN)
+      const voice = phoneVlan(d);
+      if (up.ip && (tagged ? vlan === voice : voice === null)) found.push({ device: d, iface: up, path });
+      if (!tagged) pass("FastEthernet0/2");
       return;
     }
     if (d.type === "pc" || d.type === "server" || d.type === "cloud") {
@@ -125,8 +142,18 @@ export function segment(dev) {
       if (tagged ? enc?.vlan === vlan && !enc.native : s === f ? !enc : enc?.native) found.push({ device: d, iface: s, path });
     }
   };
-  arrive(start.device, start.device.interfaces[start.iface], null, false, []);
+  // a phone's own frames leave tagged with the voice VLAN it learned
+  const v = dev.type === "phone" ? phoneVlan(dev) : null;
+  arrive(start.device, start.device.interfaces[start.iface], v, v !== null, []);
   return found;
+}
+// the voice VLAN a phone uses: what the switch port's CDP tells it (none
+// without CDP, and then the phone sends untagged, into the access VLAN)
+export function phoneVlan(phone) {
+  const end = phone.links["FastEthernet0/1"];
+  const p = end?.device.interfaces[end.iface];
+  if (!p || !isSwitch(end.device) || !end.device.cdp || !p.cdp || operMode(end.device, p) !== "access") return null;
+  return p.voiceVlan ?? null;
 }
 
 // the addresses answering on this PC's segment, with the HSRP virtual IP on
@@ -307,6 +334,7 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
   if (pkt?.count) carry(router, exit, pkt.count, "out");
   if (best.code === "C") {
     const o = owner(router, ip);
+    if (o?.device.type === "phone" && !segment(o.device).some((n) => n.device === router && n.iface === exit)) return null;
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
   }
   // next hop, or the far end of the exit interface

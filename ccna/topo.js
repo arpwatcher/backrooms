@@ -49,6 +49,12 @@ const ICONS = {
     for (const y of [-13, -6, 1]) el("rect", { x: -7, y, width: 14, height: 4, class: "ico-screen" }, g);
     el("circle", { cx: 5, cy: 9, r: 1.6, class: "ico-led" }, g);
   },
+  phone(g) {
+    el("rect", { x: -15, y: -14, width: 30, height: 24, rx: 3, class: "ico-pc" }, g);
+    el("rect", { x: -3, y: -11, width: 15, height: 9, class: "ico-screen" }, g);
+    el("path", { d: "M-12,-12 C-16,-4 -16,4 -12,8 L-7,8 L-7,-12 Z", class: "ico-pc" }, g);
+    for (const x of [-1, 4, 9]) el("rect", { x, y: 1, width: 3, height: 2.5, class: "ico-screen" }, g);
+  },
   cloud(g) {
     el("path", { d: "M-24,8 C-34,8 -34,-6 -22,-6 C-22,-18 -4,-20 0,-10 C4,-20 24,-18 22,-6 C34,-6 34,8 24,8 Z", class: "ico-cloud" }, g);
   },
@@ -137,7 +143,7 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
     // a Layer 3 switch is the switch box with the routing mark on its face
     (ICONS[d.type] ?? (d.type === "l3switch" ? ICONS.switch : ICONS.router))(icon, d.type === "l3switch");
     const name = el("text", { x: 0, y: 26 * SCALE + 14, class: "devname", "text-anchor": "middle" }, g);
-    name.textContent = lab.devices[d.name].hostname ?? d.name;
+    name.textContent = d.type === "phone" ? d.name : lab.devices[d.name].hostname ?? d.name;
     // a PC with a terminal says which OS it runs
     const sub = [d.os && { windows: "Win", linux: "Linux", mac: "Mac" }[d.os], d.ip].filter(Boolean).join(" · ");
     if (sub) {
