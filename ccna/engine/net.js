@@ -42,7 +42,73 @@ export function status(dev, f) {
   if (!end || !end.iface) return ["down", "down"];
   if (end.iface.shutdown) return ["down", "down"];
   if (f.errdisabled) return ["down", "down"];
+  if (linkMode(dev, f)?.up === false) return ["down", "down"];
   return ["up", "up"];
+}
+
+// --- speed and duplex ----------------------------------------------------------------------------
+
+const topSpeed = (f) => (f?.name.startsWith("Gig") ? 1000 : f?.name.startsWith("Fast") ? 100 : null);
+const fixedSpeed = (f) => (f.speed && f.speed !== "auto" ? Number(f.speed) : null);
+// what an Ethernet link settles on. Two ends on auto negotiate the best both
+// support, at full duplex. An end with its duplex fixed does not negotiate:
+// the auto end senses the speed (parallel detection) but has to guess the
+// duplex, and guesses half at 10 or 100 Mb/s (full at 1000): a duplex
+// mismatch. Two fixed speeds that differ never bring the link up.
+export function linkMode(dev, f) {
+  const end = far(dev, f.name);
+  const g = end?.iface;
+  if (!topSpeed(f) || !topSpeed(g)) return null;
+  const a = fixedSpeed(f), b = fixedSpeed(g);
+  const up = !(a && b && a !== b) && !(a && a > topSpeed(g)) && !(b && b > topSpeed(f));
+  const speed = a ?? b ?? Math.min(topSpeed(f), topSpeed(g));
+  const fixed = (x) => ((x.duplex ?? "auto") === "auto" ? null : x.duplex);
+  const guess = speed >= 1000 ? "full" : "half";
+  const mine = fixed(f) ?? (fixed(g) ? guess : "full");
+  const theirs = fixed(g) ?? (fixed(f) ? guess : "full");
+  return { up, speed, duplex: mine, farDuplex: theirs, mismatch: up && mine !== theirs, auto: { speed: !a, duplex: !fixed(f) } };
+}
+
+// interface counters: what has crossed the port since the counters were last
+// cleared (before that, an hour of CDP, STP and the like). Over a duplex
+// mismatch the half-duplex end sees late collisions when the full end talks
+// over it, and the full end receives the cut-off frames as runts and CRC errors.
+const seed = (dev, f) => [...`${dev.hostname}${f.name}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7);
+export function counters(dev, f) {
+  const c = ((dev.ctr ??= {})[f.name] ??= { in: 0, inBytes: 0, out: 0, outBytes: 0, crc: 0, runts: 0, coll: 0, late: 0, resets: 0, cleared: null });
+  if (c.cleared || status(dev, f)[1] !== "up" || !topSpeed(f)) return { ...c, mcastIn: 0, bcastIn: 0 };
+  const h = seed(dev, f);
+  const m = linkMode(dev, f);
+  const base = { in: 2100 + (h % 700), out: 5600 + (h % 1300), resets: 1 };
+  base.inBytes = base.in * 84 + (h % 97);
+  base.outBytes = base.out * 71 + (h % 89);
+  const halfEnd = m?.mismatch && m.duplex === "half";
+  const fullEnd = m?.mismatch && m.duplex === "full";
+  const errs = 40 + (h % 25);
+  return {
+    in: c.in + base.in, inBytes: c.inBytes + base.inBytes, out: c.out + base.out, outBytes: c.outBytes + base.outBytes,
+    crc: c.crc + (fullEnd ? errs : 0), runts: c.runts + (fullEnd ? Math.round(errs * 0.6) : 0),
+    coll: c.coll + (halfEnd ? errs + 9 : 0), late: c.late + (halfEnd ? errs : 0), resets: c.resets + base.resets,
+    mcastIn: Math.round(base.in * 0.97), bcastIn: Math.round(base.in * 0.01), cleared: null,
+  };
+}
+// n packets in or out of a port: one ping is a request one way and a reply
+// the other, so each port it crosses counts both
+export function carry(dev, f, n, dir) {
+  if (!f || !n) return;
+  counters(dev, f);
+  const c = dev.ctr[f.name];
+  const bytes = n * 114;
+  if (dir === "in") (c.in += n), (c.inBytes += bytes);
+  else (c.out += n), (c.outBytes += bytes);
+  const m = linkMode(dev, f);
+  if (!m?.mismatch) return;
+  const hit = Math.ceil(n / 5);
+  if (m.duplex === "full" && dir === "in") (c.crc += hit), (c.runts += Math.ceil(n / 10));
+  if (m.duplex === "half" && dir === "out") (c.coll += hit + 1), (c.late += hit);
+}
+export function clearCounters(dev, f) {
+  (dev.ctr ??= {})[f.name] = { in: 0, inBytes: 0, out: 0, outBytes: 0, crc: 0, runts: 0, coll: 0, late: 0, resets: 0, cleared: Date.now() };
 }
 
 // --- trunking (DTP) --------------------------------------------------------------------------

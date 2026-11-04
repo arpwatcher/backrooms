@@ -6,7 +6,7 @@ import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
 import { ntpSync, aaaServerUp } from "./host.js";
-import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes, staticUsable } from "./net.js";
+import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes, staticUsable, linkMode, counters } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -37,15 +37,77 @@ function interfaces(dev, name) {
       lines.push(`  MTU ${f.mtu ?? 1500} bytes, BW ${bw} Kbit/sec, DLY 10 usec,`);
       lines.push("     reliability 255/255, txload 1/255, rxload 1/255");
       lines.push(`  Encapsulation ${f.encap ? `802.1Q Virtual LAN, Vlan ID  ${f.encap.vlan}` : f.name.startsWith("Serial") ? "HDLC" : "ARPA"}, loopback not set`);
-      if (!f.name.startsWith("Loopback") && !f.name.startsWith("Vlan")) {
-        const speed = f.speed === "auto" ? (f.name.startsWith("Gigabit") ? "1000Mb/s" : "100Mb/s") : `${f.speed}Mb/s`;
-        const duplex = f.duplex === "auto" ? "Full-duplex" : f.duplex === "full" ? "Full-duplex" : "Half-duplex";
-        lines.push(`  ${duplex}, ${speed}, media type is 10/100/1000BaseTX`);
+      const eth = /^(Fast|Gigabit)Ethernet/.test(f.name) && !isSub(f.name);
+      if (eth) {
+        const m = linkMode(dev, f);
+        const up = st === "up" && m;
+        const speed = up ? `${m.speed}Mb/s` : f.speed === "auto" ? "Auto-speed" : `${f.speed}Mb/s`;
+        const duplex = up ? (m.duplex === "full" ? "Full-duplex" : "Half-duplex") : f.duplex === "auto" ? "Auto-duplex" : f.duplex === "full" ? "Full-duplex" : "Half-duplex";
+        lines.push(`  Keepalive set (10 sec)`, `  ${duplex}, ${speed}, media type is ${f.name.startsWith("Gig") ? "10/100/1000BaseTX" : "10/100BaseTX"}`, "  input flow-control is off, output flow-control is unsupported", "  ARP type: ARPA, ARP Timeout 04:00:00");
       }
-      lines.push("  5 minute input rate 0 bits/sec, 0 packets/sec", "     0 packets input, 0 bytes, 0 no buffer", "     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored", "     0 packets output, 0 bytes, 0 underruns", "     0 output errors, 0 collisions, 0 interface resets");
+      if (!eth) {
+        lines.push("  5 minute input rate 0 bits/sec, 0 packets/sec", "     0 packets input, 0 bytes, 0 no buffer", "     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored", "     0 packets output, 0 bytes, 0 underruns", "     0 output errors, 0 collisions, 0 interface resets");
+        return lines.join("\n");
+      }
+      const c = counters(dev, f);
+      const ago = c.cleared ? clock(Date.now() - c.cleared) : "never";
+      const inErr = c.crc + c.runts;
+      lines.push(
+        `  Last input ${c.in ? "00:00:01" : "never"}, output ${c.out ? "00:00:00" : "never"}, output hang never`,
+        `  Last clearing of "show interface" counters ${ago}`,
+        "  Input queue: 0/75/0/0 (size/max/drops/flushes); Total output drops: 0",
+        "  Queueing strategy: fifo",
+        "  Output queue: 0/40 (size/max)",
+        "  5 minute input rate 0 bits/sec, 0 packets/sec",
+        "  5 minute output rate 0 bits/sec, 0 packets/sec",
+        `     ${c.in} packets input, ${c.inBytes} bytes, 0 no buffer`,
+        `     Received ${c.bcastIn + c.mcastIn} broadcasts (${c.mcastIn} multicasts)`,
+        `     ${c.runts} runts, 0 giants, 0 throttles`,
+        `     ${inErr} input errors, ${c.crc} CRC, 0 frame, 0 overrun, 0 ignored`,
+        `     0 watchdog, ${c.mcastIn} multicast, 0 pause input`,
+        "     0 input packets with dribble condition detected",
+        `     ${c.out} packets output, ${c.outBytes} bytes, 0 underruns`,
+        `     0 output errors, ${c.coll} collisions, ${c.resets} interface resets`,
+        "     0 unknown protocol drops",
+        `     0 babbles, ${c.late} late collision, 0 deferred`,
+        "     0 lost carrier, 0 no carrier, 0 pause output",
+        "     0 output buffer failures, 0 output buffers swapped out",
+      );
       return lines.join("\n");
     })
     .join("\n");
+}
+
+// hh:mm:ss since a moment
+const clock = (ms) => {
+  const t = Math.max(1, Math.floor(ms / 1000));
+  return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map((x) => String(x).padStart(2, "0")).join(":");
+};
+const ethPorts = (dev) => sortedInterfaces(dev).filter((f) => /^(Fast|Gigabit)Ethernet/.test(f.name) && !isSub(f.name));
+const rpad = (s, n) => String(s).padStart(n);
+
+// show interfaces counters: octets and packets in, then out, per port
+function intCounters(dev) {
+  const rows = ethPorts(dev).map((f) => [short(f.name), counters(dev, f)]);
+  const uc = (c, dir) => Math.max(0, dir === "in" ? c.in - c.mcastIn - c.bcastIn : c.out - Math.round(c.out * 0.4) - (c.cleared ? 0 : 3));
+  return [
+    `${pad("Port", 12)}${rpad("InOctets", 12)}${rpad("InUcastPkts", 15)}${rpad("InMcastPkts", 15)}${rpad("InBcastPkts", 15)}`,
+    ...rows.map(([n, c]) => `${pad(n, 12)}${rpad(c.inBytes, 12)}${rpad(uc(c, "in"), 15)}${rpad(c.mcastIn, 15)}${rpad(c.bcastIn, 15)}`),
+    "",
+    `${pad("Port", 12)}${rpad("OutOctets", 12)}${rpad("OutUcastPkts", 15)}${rpad("OutMcastPkts", 15)}${rpad("OutBcastPkts", 15)}`,
+    ...rows.map(([n, c]) => `${pad(n, 12)}${rpad(c.outBytes, 12)}${rpad(uc(c, "out"), 15)}${rpad(c.out - uc(c, "out") - (c.cleared ? 0 : 3), 15)}${rpad(c.cleared ? 0 : 3, 15)}`),
+  ].join("\n");
+}
+// show interfaces counters errors: the two tables a Catalyst prints
+function intErrors(dev) {
+  const rows = ethPorts(dev).map((f) => [short(f.name), counters(dev, f)]);
+  return [
+    `${pad("Port", 10)}${rpad("Align-Err", 12)}${rpad("FCS-Err", 12)}${rpad("Xmit-Err", 12)}${rpad("Rcv-Err", 12)}${rpad("UnderSize", 11)}${rpad("OutDiscards", 13)}`,
+    ...rows.map(([n, c]) => `${pad(n, 10)}${rpad(0, 12)}${rpad(c.crc, 12)}${rpad(0, 12)}${rpad(c.crc + c.runts, 12)}${rpad(c.runts, 11)}${rpad(0, 13)}`),
+    "",
+    `${pad("Port", 10)}${rpad("Single-Col", 11)}${rpad("Multi-Col", 11)}${rpad("Late-Col", 11)}${rpad("Excess-Col", 12)}${rpad("Carri-Sen", 11)}${rpad("Runts", 11)}${rpad("Giants", 11)}`,
+    ...rows.map(([n, c]) => `${pad(n, 10)}${rpad(c.coll - c.late, 11)}${rpad(0, 11)}${rpad(c.late, 11)}${rpad(0, 12)}${rpad(0, 11)}${rpad(c.runts, 11)}${rpad(0, 11)}`),
+  ].join("\n");
 }
 
 function switchportInfo(dev, name) {
@@ -100,8 +162,9 @@ function intStatus(dev, errOnly) {
     // auto settings show what was negotiated (a-full, a-100) only on a port
     // that is connected; the type follows the port's speed
     const gig = f.name.startsWith("Gig");
-    const duplex = f.duplex === "auto" ? (s === "connected" ? "a-full" : "auto") : f.duplex;
-    const speed = f.speed === "auto" ? (s === "connected" ? (gig ? "a-1000" : "a-100") : "auto") : f.speed;
+    const m = s === "connected" ? linkMode(dev, f) : null;
+    const duplex = f.duplex === "auto" ? (m ? `a-${m.duplex}` : "auto") : f.duplex;
+    const speed = f.speed === "auto" ? (m ? `a-${m.speed}` : "auto") : f.speed;
     const type = f.name.startsWith("Port-channel") ? "" : gig ? "10/100/1000BaseTX" : "10/100BaseTX";
     rows.push(`${pad(short(f.name), 10)}${pad((f.description ?? "").slice(0, 18), 19)}${pad(s, 13)}${pad(vlan, 11)}${pad(duplex, 7)}${pad(speed, 7)}${type}`);
   }
@@ -510,7 +573,7 @@ function cdpDetail(dev, entry = null) {
     const platform = t === "router" ? "Cisco CISCO2911/K9" : t === "l3switch" ? "cisco WS-C3560-24PS" : "cisco WS-C2960-24TT-L";
     const caps = t === "switch" ? "Switch IGMP" : "Router Switch IGMP";
     const version = t === "router" ? "Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4, RELEASE SOFTWARE (fc2)" : t === "l3switch" ? "Cisco IOS Software, C3560 Software (C3560-IPSERVICESK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)" : "Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)";
-    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, "Holdtime : 163 sec", "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${g.duplex === "half" ? "half" : "full"}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
+    out.push("-------------------------", `Device ID: ${end.device.hostname}`, "Entry address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), `Platform: ${platform},  Capabilities: ${caps} `, `Interface: ${f.name},  Port ID (outgoing port): ${g.name}`, "Holdtime : 163 sec", "", "Version :", version, "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 1986-2012 by Cisco Systems, Inc.", "", "advertisement version: 2", ...(t !== "router" ? ["VTP Management Domain: ''", `Native VLAN: ${g.switchport ? g.nativeVlan ?? 1 : 1}`] : []), `Duplex: ${linkMode(end.device, g)?.duplex ?? (g.duplex === "half" ? "half" : "full")}`, "Management address(es): ", ...(ip ? [`  IP address: ${ip}`] : []), "");
   }
   if (!entry) out.push(`Total cdp entries displayed : ${out.filter((l) => l.startsWith("Device ID:")).length}`);
   return out.join("\n");
@@ -789,10 +852,23 @@ function logging(dev) {
     `    Logging Exception size (4096 bytes)`,
     `    Trap logging: level ${lv[dev.logging.trap ?? 6]}, 15 message lines logged`,
     ...dev.logging.hosts.map((h) => `        Logging to ${h}  (udp port 514, audit disabled,\n              link up),\n              0 message lines logged,`),
-    // what the switch logged while the lab ran (violations, DAI drops)
-    ...(dev.logBuffer?.length ? ["", "Log Buffer (4096 bytes):", "", ...dev.logBuffer] : []),
+    // what the switch logged while the lab ran (violations, DAI drops), and
+    // CDP's complaint about a duplex mismatch with a neighbor
+    ...((log) => (log.length ? ["", "Log Buffer (4096 bytes):", "", ...log] : []))([...(dev.logBuffer ?? []), ...duplexLog(dev)]),
   ].join("\n");
 }
+
+// CDP compares its own duplex with the one the neighbor advertises
+function duplexLog(dev) {
+  if (!dev.cdp) return [];
+  return ethPorts(dev).flatMap((f) => {
+    const m = status(dev, f)[1] === "up" ? linkMode(dev, f) : null;
+    const end = far(dev, f.name);
+    if (!m?.mismatch || !f.cdp || !end.iface.cdp || !end.device.cdp || end.device.type === "pc") return [];
+    return [`*Mar  1 01:${String(10 + (seedOf(f.name) % 49)).padStart(2, "0")}:42.117: %CDP-4-DUPLEX_MISMATCH: duplex mismatch discovered on ${f.name} (not ${m.farDuplex} duplex), with ${end.device.hostname} ${end.name} (${m.farDuplex} duplex).`];
+  });
+}
+const seedOf = (s) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 3);
 
 function vtpStatus(dev) {
   return [`VTP Version capable             : 1 to 3`, `VTP version running             : ${dev.vtp.version}`, `VTP Domain Name                 : ${dev.vtp.domain ?? ""}`, "VTP Pruning Mode                : Disabled", "VTP Traps Generation            : Disabled", `Device ID                       : ${dev.mac}`, "", `Feature VLAN:`, "--------------", `VTP Operating Mode                : ${dev.vtp.mode[0].toUpperCase() + dev.vtp.mode.slice(1)}`, "Maximum VLANs supported locally   : 255", `Number of existing VLANs          : ${Object.keys(dev.vlans).length + 4}`].join("\n");
@@ -869,6 +945,8 @@ export const SHOWS = {
     ["show interfaces <name:iface> switchport", (d, a) => switchportInfo(d, a.name)],
     ["show interfaces switchport", (d) => sortedInterfaces(d).filter((f) => f.switchport).map((f) => switchportInfo(d, f.name)).join("\n\n")],
     ["show interfaces trunk", (d) => trunks(d)],
+    ["show interfaces counters", (d) => intCounters(d)],
+    ["show interfaces counters errors", (d) => intErrors(d)],
     ["show interfaces status", (d) => intStatus(d)],
     ["show interfaces status err-disabled", (d) => intStatus(d, true)],
     ["show spanning-tree pathcost method", (d) => `Spanning tree default pathcost method used is ${d.stp.pathcost}`],

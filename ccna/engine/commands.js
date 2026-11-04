@@ -8,7 +8,7 @@ import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
 import { fromRouter, fromRouter6, vtySession, TRACE, pings } from "./host.js";
-import { status, stpRoot, bridgePriority, routerId } from "./net.js";
+import { status, stpRoot, bridgePriority, routerId, clearCounters } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [], tacacs: [], radius: [], "sg-tacacs": [], "sg-radius": [] };
 
@@ -213,7 +213,22 @@ def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
 def("priv", "clear access-list counters [<name:word>]", (c) => {
   for (const [n, acl] of Object.entries(c.dev.acls)) if (!c.args.name || n === c.args.name) for (const e of acl.entries) e.matches = 0;
 });
-def("priv", "clear (counters | arp-cache | ip dhcp binding *)", () => {});
+// clear counters asks first, for every interface or for one
+def("priv", "clear counters [<name:iface>]", (c) => {
+  const one = c.args.name;
+  if (one && !c.dev.interfaces[one]) return c.say("% Invalid input detected at '^' marker.");
+  c.ask({
+    prompt: `Clear "show interface" counters on ${one ? "this interface" : "all interfaces"} [confirm]`,
+    answer: (a, d) => {
+      if (/^\s*n/i.test(a)) return "";
+      for (const f of Object.values(d.interfaces)) if (!one || f.name === one) clearCounters(d, f);
+      return "";
+    },
+  });
+});
+// the dynamic ARP entries go; the router's own addresses stay
+def("priv", "clear arp-cache", (c) => { c.dev.arpLearned = {}; c.dev.arped = []; });
+def("priv", "clear ip dhcp binding *", () => {});
 def("priv", "terminal (length <n:num:0-512> | monitor | no monitor)", () => {});
 def(EXEC, "dir [flash:]", (c) => c.say(SHOWS.flash(c.dev)));
 def("priv", "setup", (c) => c.say("--- System Configuration Dialog ---\n(the setup wizard is not simulated; use configure terminal)"));
@@ -1209,7 +1224,7 @@ for (const [pattern, fn, privOnly] of SHOWS.patterns) def(privOnly ? "priv" : EX
 
 // --- helpers --------------------------------------------------------------------------------------------------------------------
 
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr"]);
 function stripRuntime(d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) if (!RUNTIME.has(k)) o[k] = v;
@@ -1226,6 +1241,8 @@ function reloadDevice(dev) {
   Object.assign(dev, structuredClone(saved ?? fresh));
   dev.mode = "user";
   dev.ctx = {};
+  // a reload starts the interface counters again
+  dev.ctr = {};
 }
 function mergeSaved(dev) {
   const saved = structuredClone(dev.saved);

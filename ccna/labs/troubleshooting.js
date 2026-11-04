@@ -1,4 +1,5 @@
-import { lab, R, PC, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, PC, HOST, cfg, EN, need, is } from "./kit.js";
+import { linkMode } from "../engine/net.js";
 
 const M = "troubleshooting";
 const r1 = cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 10.3.3.0 255.255.255.0 10.0.12.2");
@@ -88,5 +89,38 @@ export default [
     solution: { R1: ["enable", "ping 10.3.3.10", "show ip arp"] },
     answers: { 1: "0001.42a3.2467", 2: "The address is R1's own", 3: "10.0.12.2" },
     teach: "A router keeps an ARP entry for each neighbor it talks to on Ethernet: hosts that ARPed for it, and the next hops it forwards to (never a remote destination). Its own addresses are listed with age -. show ip arp and show arp print the same table; clear arp-cache empties it.",
+  }),
+  lab({
+    id: "duplex-mismatch", module: M, title: "Sim: errors on the uplink (duplex and speed)", kind: "sim",
+    cmds: ["show interfaces", "show interfaces status", "show interfaces counters errors", "clear counters", "speed", "duplex"],
+    devices: [
+      S("SW1", 50, 22, cfg("interface fa0/24", "speed 100", "duplex full", "interface g0/1", "speed 100", "duplex full")),
+      S("SW2", 20, 22),
+      S("SW3", 80, 22, cfg("interface g0/1", "speed 10", "duplex full")),
+      HOST("PC1", 50, 60, "windows", { ip: "10.10.10.11/24", mac: "0050.7966.1101" }),
+      HOST("PC2", 20, 60, "linux", { ip: "10.10.10.12/24", mac: "0050.7966.1102" }),
+      HOST("PC3", 80, 60, "linux", { ip: "10.10.10.13/24", mac: "0050.7966.1103" }),
+    ],
+    links: [["SW1", "fa0/24", "SW2", "fa0/24"], ["SW1", "g0/1", "SW3", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW2", "fa0/1", "PC2", "fa0"], ["SW3", "fa0/1", "PC3", "fa0"]],
+    intro: "Users behind SW2 complain that the network is slow, and nobody behind SW3 can reach anything. Someone hard-coded speed and duplex on SW1's uplinks last week. SW2 and SW3 belong to another team: change only SW1.",
+    tasks: [
+      { text: "At which duplex does SW2's Fa0/24 run?", choices: ["Half, negotiated (a-half)", "Full, negotiated (a-full)", "Full, fixed", "It is down"], check: (t) => need(t.reply === "Half, negotiated (a-half)", "show interfaces status on SW2: SW1 does not negotiate, so SW2's auto port senses 100 Mb/s but has to fall back to half duplex.") },
+      { text: "Which counter climbs on SW2's Fa0/24, the half-duplex end?", choices: ["Late collisions", "CRC errors and runts", "Giants", "Output drops"], check: (t) => need(t.reply === "Late collisions", "show interfaces fa0/24 on SW2: collisions and late collision. The half end sees SW1 talk while it is still sending.") },
+      { text: "And on SW1's Fa0/24, the full-duplex end?", choices: ["CRC errors and runts", "Late collisions", "Giants", "Nothing: full duplex has no errors"], check: (t) => need(t.reply === "CRC errors and runts", "SW1 receives the frames SW2 cut short when it backed off: runts and CRC (FCS) errors, as input errors.") },
+      { text: "Make SW1 and SW2 agree on Fa0/24 again (from SW1 only).", check: (t) => { const m = linkMode(t.dev("SW1"), t.f("SW1", "fa0/24")); return need(t.up("SW1", "fa0/24") && m && !m.mismatch, !m ? "Fa0/24 is down." : `The link still runs ${m.duplex} on SW1 and ${m.farDuplex} on SW2. Let SW1's port negotiate: no speed, no duplex.`); } },
+      { text: "Clear SW1's counters, then ping PC2 from PC1: Fa0/24 must count the traffic and no input errors.", check: (t) => { const c = t.dev("SW1").ctr?.["FastEthernet0/24"]; return need(c?.cleared && c.in > 0 && c.crc === 0 && c.runts === 0, !c?.cleared ? "clear counters on SW1 (it asks to confirm)." : !c.in ? "Ping PC2 from PC1 after clearing: Fa0/24 has counted no packets yet." : "Fa0/24 still counts CRC errors: the mismatch was still there when the ping crossed. Fix it, clear again, ping again."); } },
+      { text: "SW1's Gi0/1 to SW3 is down/down. Why?", choices: ["Both ends have a fixed speed, and the speeds differ", "A duplex mismatch", "SW3's port is shut down", "The cable is a crossover"], check: (t) => need(t.reply === "Both ends have a fixed speed, and the speeds differ", "show running-config interface g0/1 on both: SW1 fixed at 100, SW3 at 10. With no negotiation and different speeds the link never comes up; a duplex mismatch still comes up.") },
+      { text: "Bring SW1-SW3 up, with no duplex mismatch, changing only SW1.", check: (t) => { const m = linkMode(t.dev("SW1"), t.f("SW1", "g0/1")); return need(t.f("SW3", "g0/1").speed === "10" && t.up("SW1", "g0/1") && m && !m.mismatch, !t.up("SW1", "g0/1") || !m ? "Gi0/1 is still down: SW1's speed must be 10 or auto." : m.mismatch ? `Up, but SW1 runs ${m.duplex} and SW3 ${m.farDuplex} duplex. SW3 does not negotiate (its duplex is fixed): keep SW1's duplex fixed at full.` : "Leave SW3 as it is."); } },
+      { text: "At what speed does the SW1-SW3 link run now?", ask: "Mb/s", check: (t) => need(is.num(t.reply.replace(/[^0-9]/g, ""), 10), "show interfaces g0/1 on SW1: 10Mb/s, the speed SW3 is fixed at.") },
+      { text: "Ping PC3 from PC1.", check: (t) => need(t.ran("PC1", /^ping .*10\.10\.10\.13/) && t.reach("PC1", "10.10.10.13"), "Once Gi0/1 is up, PC1 reaches PC3 (10.10.10.13).") },
+    ],
+    solution: {
+      SW2: ["enable", "show interfaces status", "show interfaces fa0/24"],
+      SW1: ["enable", "show interfaces fa0/24", "show running-config interface g0/1", "configure terminal", "interface fa0/24", "no speed", "no duplex", "interface g0/1", "speed 10", "end", "clear counters", ""],
+      PC1: ["ping 10.10.10.12", "ping 10.10.10.13"],
+      "SW1#2": ["show interfaces counters errors", "show interfaces g0/1"],
+    },
+    answers: { 0: "Half, negotiated (a-half)", 1: "Late collisions", 2: "CRC errors and runts", 5: "Both ends have a fixed speed, and the speeds differ", 7: "10" },
+    teach: "Autonegotiation needs both ends. When one end has its duplex fixed it stops negotiating; the auto end still senses the speed but has to guess the duplex, and guesses half at 10/100 Mb/s (full at 1000). The link comes up with a duplex mismatch: the half end counts collisions and late collisions, the full end runts and CRC errors, and throughput collapses under load (a ping may still work). Two fixed speeds that differ keep the link down. Fix by letting both ends negotiate, or fixing both the same. clear counters (it asks to confirm) zeroes show interfaces, so you can see whether errors still climb.",
   }),
 ];

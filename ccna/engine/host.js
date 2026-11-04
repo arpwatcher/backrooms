@@ -5,7 +5,7 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network } from "./ip.js";
-import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry } from "./net.js";
+import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry } from "./net.js";
 import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
@@ -144,11 +144,19 @@ function neighbors(dev) {
 const onSegment = (dev, ip) => neighbors(dev).find((n) => n.ip === ip) ?? null;
 // a frame and its answer cross the switches on the path: each one learns the
 // sender's MAC on the port it came in by, and the answer's on the way out
-function learnMacs(dev, n) {
+function learnMacs(dev, n, count = 0) {
   for (const h of n?.path ?? []) {
     const t = (h.sw.macLearned ??= {});
     if (h.entry) t[`${h.vlan}|${dev.mac}`] = { vlan: h.vlan, mac: dev.mac, port: h.entry.name };
     if (h.exit && n.mac) t[`${h.vlan}|${n.mac}`] = { vlan: h.vlan, mac: n.mac, port: h.exit.name };
+    // the requests come in by the entry port and leave by the exit, the replies the other way
+    if (count) carry(h.sw, h.entry, count, "in"), carry(h.sw, h.entry, count, "out"), carry(h.sw, h.exit, count, "out"), carry(h.sw, h.exit, count, "in");
+  }
+  if (count) {
+    const mine = own(dev);
+    carry(dev, mine, count, "out"), carry(dev, mine, count, "in");
+    // a router counts its own side as it routes (pathFrom)
+    if (n?.device && n.iface && !ROUTER(n.device)) carry(n.device, n.iface, count, "in"), carry(n.device, n.iface, count, "out");
   }
 }
 
@@ -274,6 +282,7 @@ const dropped = (seen, router, inIf, why) => {
   return null;
 };
 function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
+  if (pkt?.count) carry(router, inIf, pkt.count, "in");
   if (pkt && inIf?.aclIn && !passes(router, inIf.aclIn, pkt)) return dropped(seen, router, inIf, "acl-in");
   if (ownsIp(router, ip)) return [];
   if (seen.has(router) || seen.size > 15) return null;
@@ -282,6 +291,7 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
   if (!best) return dropped(seen, router, inIf, "route");
   const exit = exitOf(router, best, ip);
   if (pkt && pkt.from !== router && exit?.aclOut && !passes(router, exit.aclOut, pkt)) return dropped(seen, router, inIf, "acl-out");
+  if (pkt?.count) carry(router, exit, pkt.count, "out");
   if (best.code === "C") {
     const o = owner(router, ip);
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
@@ -496,7 +506,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     if (!n || !arpPasses(dev, n, ping)) return false;
     if (n.device.host && !portAdmit(n.device)) return false;
     learnArp(dev, ip);
-    if (ping) learnMacs(dev, n);
+    if (ping) learnMacs(dev, n, kind.go(f.ip, ip).count ?? 0);
     return true;
   }
   if (dev.host.apipa) return false;
@@ -507,7 +517,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
   // the gateway learns the PC's MAC from its ARP request, too
   const gwn = onSegment(dev, gw);
   if (ROUTER(gwn.device)) (gwn.device.arpLearned ??= {})[f.ip] = { mac: dev.mac, iface: gwn.iface.name };
-  if (ping) learnMacs(dev, gwn);
+  if (ping) learnMacs(dev, gwn, kind.go(f.ip, ip).count ?? 0);
   dev.host.atGateway = true;
   const gwIf = onSegment(dev, gw).iface;
   if (dev.host.extern.includes(ip) && !(dev.lab?.all ?? []).some((d) => ownsIp(d, ip))) {
