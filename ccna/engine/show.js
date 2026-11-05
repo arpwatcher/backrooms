@@ -456,6 +456,29 @@ function spanningTree(dev, vlanArg) {
   return out.join("\n");
 }
 
+// show spanning-tree root: one line per VLAN, the root as this switch sees it
+function stpRootTable(dev) {
+  const vlans = Object.keys(dev.vlans).map(Number).filter((v) => v < 1002 && sortedInterfaces(dev).some((f) => f.switchport && carries(dev, f, v) && status(dev, f)[0] === "up")).sort((a, b) => a - b);
+  if (!vlans.length) return "No spanning tree instance exists.";
+  const rows = [`${" ".repeat(40)}Root    Hello Max Fwd`, `${pad("Vlan", 23)}${pad("Root ID", 17)}Cost    Time  Age Dly  Root Port`, "---------------- -------------------- --------- ----- --- ---  ------------"];
+  for (const v of vlans) {
+    const tree = stpPorts(dev, v);
+    const id = `${bridgePriority(tree.root, v)} ${tree.root.mac}`;
+    rows.push(`${pad(`VLAN${String(v).padStart(4, "0")}`, 17)}${pad(id, 21)}${String(tree.root === dev ? 0 : tree.cost).padStart(9)}${"2".padStart(6)}${"20".padStart(4)}${"15".padStart(4)}  ${tree.root === dev || !tree.rootPort ? "" : short(tree.rootPort.name)}`.trimEnd());
+  }
+  return rows.join("\n");
+}
+// show cdp interface: which ports send CDP, and how often
+function cdpInterfaces(dev, only) {
+  if (!dev.cdp) return "% CDP is not enabled";
+  return sortedInterfaces(dev).filter((f) => f.cdp && !isSub(f.name) && !/^(Vlan|Loopback|Port-channel)/.test(f.name) && (!only || f.name === only)).map((f) => `${f.name} is ${status(dev, f).join(", line protocol is ")}\n  Encapsulation ${f.name.startsWith("Serial") ? "HDLC" : "ARPA"}\n  Sending CDP packets every ${dev.cdpTimer ?? 60} seconds\n  Holdtime is ${dev.cdpHold ?? 180} seconds`).join("\n");
+}
+// show snmp: the agent's counters, once a community turns it on
+function snmpSummary(dev) {
+  if (!Object.keys(dev.snmp.communities).length) return "%SNMP agent not enabled";
+  return [`Chassis: FTX${String(dev.mac.replace(/\./g, "")).slice(-8).toUpperCase()}`, ...(dev.snmp.contact ? [`Contact: ${dev.snmp.contact}`] : []), ...(dev.snmp.location ? [`Location: ${dev.snmp.location}`] : []), "0 SNMP packets input", "    0 Bad SNMP version errors", "    0 Unknown community name", "    0 Illegal operation for community name supplied", "    0 Encoding errors", "    0 Number of requested variables", "    0 Number of altered variables", "    0 Get-request PDUs", "    0 Get-next PDUs", "    0 Set-request PDUs", "    0 Input queue packet drops (Maximum queue size 1000)", "0 SNMP packets output", "    0 Too big errors (Maximum packet size 1500)", "    0 No such name errors", "    0 Bad values errors", "    0 General errors", "    0 Response PDUs", "    0 Trap PDUs", `SNMP global trap: ${dev.snmp.traps ? "enabled" : "disabled"}`, "", "SNMP logging: " + (dev.snmp.hosts.length ? "enabled" : "disabled"), ...dev.snmp.hosts.map((h) => `    Logging to ${h.ip}.162, 0/10, 0 sent, 0 dropped.`)].join("\n");
+}
+
 function stpSummary(dev) {
   return [
     `Switch is in ${dev.stp.mode} mode`,
@@ -994,6 +1017,7 @@ export const SHOWS = {
     ["show ip eigrp neighbors", () => "EIGRP-IPv4 Neighbors for AS(100)\nH   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq"],
     ["show spanning-tree [vlan <v:num:1-4094>]", (d, a) => spanningTree(d, a.v)],
     ["show spanning-tree summary", (d) => stpSummary(d)],
+    ["show spanning-tree root", (d) => stpRootTable(d)],
     ["show spanning-tree interface <name:iface> [detail]", (d, a) => stpInterface(d, a.name)],
     ["show etherchannel summary", (d) => etherchannel(d)],
     ["show etherchannel load-balance", (d) => loadBalance(d)],
@@ -1002,6 +1026,7 @@ export const SHOWS = {
     ["show pagp neighbor", (d) => channelNeighbors(d, "pagp")],
     ["show etherchannel port-channel", (d) => etherchannel(d)],
     ["show cdp neighbors", (d) => cdpNeighbors(d, false)],
+    ["show cdp interface [<name:iface>]", (d, a) => cdpInterfaces(d, a.name)],
     ["show cdp neighbors detail", (d) => cdpDetail(d)],
     ["show cdp entry <name:word>", (d, a) => cdpDetail(d, a.name)],
     ["show cdp", (d) => (d.cdp ? `Global CDP information:\n        Sending CDP packets every ${d.cdpTimer ?? 60} seconds\n        Sending a holdtime value of ${d.cdpHold ?? 180} seconds\n        Sending CDPv2 advertisements is  enabled` : "% CDP is not enabled")],
@@ -1057,6 +1082,7 @@ export const SHOWS = {
       return ["ErrDisable Reason            Timer Status", "-----------------            --------------", ...["arp-inspection", "bpduguard", "dhcp-rate-limit", "link-flap", "psecure-violation", "udld"].map((r) => `${pad(r, 29)}${on(r) ? "Enabled" : "Disabled"}`), "", `Timer interval: ${every} seconds`, "", "Interfaces that will be enabled at the next timeout:", "", ...(due.length ? ["Interface       Errdisable reason       Time left(sec)", "---------       -----------------       --------------", ...due.map((f, i) => `${pad(short(f.name), 16)}${pad(f.errReason ?? "psecure-violation", 24)}${Math.max(1, every - 83 - 17 * i)}`)] : [])].join("\n");
     }],
     ["show debugging", (d) => (d.debugs.length ? d.debugs.map((x) => `  ${x} debugging is on`).join("\n") : "")],
+    ["show snmp", (d) => snmpSummary(d)],
     ["show snmp community", (d) => Object.entries(d.snmp.communities).map(([n, c]) => `Community name: ${n}\nCommunity Index: ${n}\nCommunity SecurityName: ${n}\nstorage-type: nonvolatile        active   access: ${c.access === "rw" ? "read-write" : "read-only"}`).join("\n\n")],
     ["show line", () => "   Tty Typ     Tx/Rx    A Modem  Roty AccO AccI   Uses   Noise  Overruns   Int\n*    0 CTY              -    -      -    -    -      0       0     0/0       -"],
   ],

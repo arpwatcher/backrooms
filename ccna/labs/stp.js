@@ -221,9 +221,10 @@ export default [
       { text: "Check spanning tree for VLAN 1 on SW2 and on SW3.", check: (t) => need(t.ran("SW2", /^show spanning-tree( vlan 1)?$/) && t.ran("SW3", /^show spanning-tree( vlan 1)?$/), "Run show spanning-tree vlan 1 on both non-root switches.") },
       { text: "Which switch has the blocking port?", choices: ["SW1", "SW2", "SW3"], check: (t) => need(t.reply === "SW3", "SW2 and SW3 both have root path cost 4, so the lower bridge ID (same priority, lower MAC) wins the designated role on their link.") },
       { text: "Which of its ports is blocking?", choices: ["G0/1", "G0/2"], check: (t) => need(t.reply === "G0/2", "Its port toward the root (G0/1) is the root port; the port on the SW2-SW3 link is Altn BLK.") },
+      { text: "On SW3, show spanning-tree root gives one line per VLAN. What Root Cost does it show for VLAN 1?", ask: "Cost", check: (t) => need(t.ran("SW3", /^show spanning-tree root$/) && is.num(t.reply, 4), "One gigabit hop to the root: cost 4 (short method), through Root Port Gi0/1.") },
     ],
-    solution: { SW2: ["enable", "show spanning-tree vlan 1"], SW3: ["enable", "show spanning-tree vlan 1"] },
-    answers: { 1: "SW3", 2: "G0/2" },
+    solution: { SW2: ["enable", "show spanning-tree vlan 1"], SW3: ["enable", "show spanning-tree vlan 1", "show spanning-tree root"] },
+    answers: { 1: "SW3", 2: "G0/2", 3: "4" },
     teach: "On each non-root switch the root port is the lowest root path cost (then lowest neighbor bridge ID, then lowest neighbor port ID). On each link the designated port is on the switch with the lower root path cost, then the lower bridge ID. Any port that is neither blocks: Altn BLK.",
   }),  lab({
     id: "stp-port-priority", module: M, title: "Port priority: choosing between two equal links",

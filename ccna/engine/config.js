@@ -119,6 +119,7 @@ function interfaceBlock(dev, f) {
   if (f.clockRate) add(`clock rate ${f.clockRate}`);
   if (f.speed !== "auto") add(`speed ${f.speed}`);
   if (f.duplex !== "auto") add(`duplex ${f.duplex}`);
+  if (f.noUnreach) add("no ip unreachables");
   if (!f.cdp) add("no cdp enable");
   if (f.shutdown) add("shutdown");
   return lines.join("\n");

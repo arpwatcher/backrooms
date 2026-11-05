@@ -169,8 +169,11 @@ export default [
     tasks: [
       { text: "Create a read-only community named M0nit0r.", check: (t) => need(t.dev("R1").snmp.communities.M0nit0r?.access === "ro", "Expected snmp-server community M0nit0r ro.") },
       { text: "Set the location to Athens DC and the contact to noc@mycompany.lab.", check: (t) => need(t.dev("R1").snmp.location === "Athens DC" && t.dev("R1").snmp.contact === "noc@mycompany.lab", "Expected snmp-server location and snmp-server contact.") },
+      { text: "Before the community exists, what does show snmp answer?", choices: ["%SNMP agent not enabled", "0 SNMP packets input", "SNMP logging: disabled", "% Invalid input detected"], check: (t) => need(t.reply === "%SNMP agent not enabled", "The agent only starts once a community (or an SNMPv3 user) is configured.") },
+      { text: "Afterwards, which Location does show snmp report?", ask: "Location", check: (t) => need(t.ran("R1", /^(do )?show snmp$/) && is.text(t.reply, "Athens DC"), "show snmp (do show snmp from config mode) lists Chassis, Contact and Location, then the packet counters.") },
     ],
-    solution: { R1: [...EN, "snmp-server community M0nit0r ro", "snmp-server location Athens DC", "snmp-server contact noc@mycompany.lab"] },
+    solution: { R1: ["enable", "show snmp", "configure terminal", "snmp-server community M0nit0r ro", "snmp-server location Athens DC", "snmp-server contact noc@mycompany.lab", "do show snmp"] },
+    answers: { 2: "%SNMP agent not enabled", 3: "Athens DC" },
     teach: "SNMPv2c sends the community string in clear text; SNMPv3 adds authentication and encryption. The manager sends Get and Set (UDP 161); the agent sends Trap and Inform (UDP 162).",
   }),
   lab({
@@ -182,8 +185,10 @@ export default [
     tasks: [
       { text: "Display R1's CDP neighbors.", check: (t) => need(t.ran("R1", /^show cdp neighbors/), "Run show cdp neighbors.") },
       { text: "Disable CDP on G0/1 (toward the ISP) only.", check: (t) => need(!t.f("R1", "g0/1").cdp && t.dev("R1").cdp, t.dev("R1").cdp ? "Expected no cdp enable on G0/1." : "no cdp run disables CDP everywhere. Only G0/1 was asked for.") },
+      { text: "Check it with show cdp interface. Which interfaces does it still list?", choices: ["Every interface except G0/1", "Only G0/0", "Every interface, G0/1 too", "None"], check: (t) => need(t.ran("R1", /^(do )?show cdp interface/) && t.reply === "Every interface except G0/1", "show cdp interface lists every port that runs CDP (up or down, serial ones too) with its timer and holdtime; G0/1 is gone.") },
     ],
-    solution: { R1: ["enable", "show cdp neighbors", "configure terminal", "interface g0/1", "no cdp enable"] },
+    solution: { R1: ["enable", "show cdp neighbors", "configure terminal", "interface g0/1", "no cdp enable", "end", "show cdp interface"] },
+    answers: { 2: "Every interface except G0/1" },
     teach: "CDP (Cisco proprietary, Layer 2) shows neighboring devices, ports, platform and IP address. Do not leave it on toward external networks, because it gives that information away. no cdp run disables it on the whole device.",
   }),
   lab({

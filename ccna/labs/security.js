@@ -263,4 +263,24 @@ export default [
     failingPings: true,
     teach: "Telnet (TCP 23) and SSH (TCP 22) both reach the vty lines; transport input decides which ones a line accepts. login uses the line password, login local the usernames (SSH always needs a username). A refused connection means the device is reachable but its lines do not take that protocol; a timeout means nothing answered.",
   }),
+  lab({
+    id: "no-ip-unreachables", module: M, title: "no ip unreachables",
+    cmds: ["no ip unreachables", "ping", "traceroute"],
+    devices: [
+      R("R1", 55, 22, cfg("interface g0/0", "ip address 10.0.0.1 255.255.255.0", "no shutdown")),
+      HOST("PC1", 20, 50, "linux", { ip: "10.0.0.11/24", gateway: "10.0.0.1" }),
+    ],
+    links: [["R1", "g0/0", "PC1", "fa0"]],
+    intro: "R1 answers every packet it cannot route with an ICMP unreachable. That tells a scanner exactly which networks do not exist. Make it drop them quietly on the inside interface.",
+    tasks: [
+      { text: "From PC1, ping 198.51.100.7, which R1 has no route to. Who answers?", choices: ["R1 (10.0.0.1): Destination Net Unreachable", "198.51.100.7", "Nobody: the ping times out", "PC1 itself: Destination Host Unreachable"], check: (t) => need(t.ran("PC1", /^ping .*198\.51\.100\.7/) && t.reply === "R1 (10.0.0.1): Destination Net Unreachable", "The From 10.0.0.1 lines: R1 has no route and says so.") },
+      { text: "Stop R1 from sending ICMP unreachables out G0/0.", check: (t) => need(t.f("R1", "g0/0").noUnreach, "no ip unreachables under interface g0/0: unreachables go out the interface the packet came in on.") },
+      { text: "Ping 198.51.100.7 again. What does PC1 see now?", choices: ["Nothing comes back: 100% packet loss", "The same Destination Net Unreachable", "Administratively prohibited", "Replies"], check: (t) => need(t.reply === "Nothing comes back: 100% packet loss", "R1 still drops the packet, but silently: the sender can only wait for the timeout.") },
+      { text: "What is the cost of turning them off?", choices: ["Troubleshooting is slower: a missing route looks like a host that does not answer", "Pings to R1 itself stop working", "OSPF stops", "Path MTU discovery is not affected at all"], check: (t) => need(t.reply === "Troubleshooting is slower: a missing route looks like a host that does not answer", "Without the unreachable, a missing route and a silent host look the same (and IPv4 path MTU discovery relies on ICMP too).") },
+    ],
+    solution: { PC1: ["ping -c 2 198.51.100.7"], R1: [...EN, "interface g0/0", "no ip unreachables", "end"], "PC1#2": ["ping -c 2 198.51.100.7"] },
+    answers: { 0: "R1 (10.0.0.1): Destination Net Unreachable", 2: "Nothing comes back: 100% packet loss", 3: "Troubleshooting is slower: a missing route looks like a host that does not answer" },
+    failingPings: true,
+    teach: "A router that cannot deliver a packet answers the sender with ICMP Destination Unreachable (net, host, administratively prohibited). no ip unreachables on an interface stops those messages for packets that arrived on it, which gives a scanner less to learn; the packets are still dropped. ping and traceroute then just time out.",
+  }),
 ];

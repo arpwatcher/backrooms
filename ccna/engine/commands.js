@@ -430,6 +430,8 @@ def(IF_MODES, "clock rate <rate:num:300-8000000>", (c) =>
   }),
 );
 def(IF_MODES, "mtu <bytes:num:64-9216>", (c) => each(c, (f) => (f.mtu = c.args.bytes)));
+def(IF_MODES, "no ip unreachables", (c) => each(c, (f) => (f.noUnreach = true)));
+def(IF_MODES, "ip unreachables", (c) => each(c, (f) => delete f.noUnreach));
 def(IF_MODES, "cdp enable", (c) => each(c, (f) => (f.cdp = true)));
 def(IF_MODES, "no cdp enable", (c) => each(c, (f) => (f.cdp = false)));
 def(IF_MODES, "lldp (transmit | receive)", (c) => each(c, (f) => (f[c.has("transmit") ? "lldpTx" : "lldpRx"] = true)));

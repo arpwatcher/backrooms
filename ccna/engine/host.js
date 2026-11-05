@@ -318,7 +318,7 @@ export const pings = (n) => counted(ICMP, n);
 // came in by and why (route, acl-in, acl-out): that router may answer the
 // sender with ICMP unreachable.
 const dropped = (seen, router, inIf, why) => {
-  seen.drop ??= { router, at: inIf?.ip ?? null, why };
+  seen.drop ??= { router, at: inIf?.ip ?? null, why, quiet: Boolean(inIf?.noUnreach) };
   return null;
 };
 function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
@@ -371,7 +371,7 @@ export function fromRouter(router, ip, kind = ICMP, from = null) {
   const path = pathFrom(router, ip, seen, kind.go(src, ip, router));
   if (path === null) {
     const d = seen.drop;
-    const unreach = d && d.router !== router && d.at && pathFrom(d.router, src) !== null ? { at: d.at, why: d.why } : null;
+    const unreach = d && d.router !== router && d.at && !d.quiet && pathFrom(d.router, src) !== null ? { at: d.at, why: d.why } : null;
     return { ok: false, hops: upTo(partial(router, ip, src), unreach), arp: first, src, unreach };
   }
   if (seen.exit) return { ok: true, hops: path, arp: first, src };
@@ -791,7 +791,7 @@ function arpWin(dev) {
 // that failed, which records the drop
 function netUnreachable(dev, ip) {
   const d = dev.host.atGateway && dev.host.drop;
-  if (!d || !d.at || pathFrom(d.router, own(dev).ip) === null) return null;
+  if (!d || !d.at || d.quiet || pathFrom(d.router, own(dev).ip) === null) return null;
   return { at: d.at, why: d.why };
 }
 // the routers a PC's trace gets answers from before the break
