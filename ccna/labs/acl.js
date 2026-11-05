@@ -1,4 +1,5 @@
 import { lab, R, PC, SRV, cfg, EN, need, is } from "./kit.js";
+import { fromRouter, pings } from "../engine/host.js";
 
 const M = "acl";
 // the remarks typed just before an entry
@@ -220,5 +221,26 @@ export default [
     solution: { R1: ["enable", "ping 10.0.3.1"], R2: ["enable", "show access-lists", "clear access-list counters"], "R1#2": ["traceroute 10.0.3.1"], "R2#2": ["show access-lists"] },
     answers: { 0: "4", 1: "R1 lost the first echo while it ARPed for 10.0.12.2, so it never reached R2", 3: "6", 4: "0" },
     teach: "show access-lists counts the packets each entry matched, in the direction the ACL is applied. A router's first ping to a next hop it has not ARPed for loses one packet (.!!!!) before it leaves. IOS, Linux and macOS traceroute send UDP probes (three per TTL, ports from 33434); Windows tracert sends ICMP echoes. clear access-list counters [acl] starts the counts again.",
+  }),
+  lab({
+    id: "acl-router-itself", module: M, title: "An inbound ACL and the router's own traffic",
+    cmds: ["ip access-group in", "ping", "echo", "echo-reply"],
+    devices: [
+      R("R1", 25, 30, cfg("interface g0/0", "ip address 10.0.12.1 255.255.255.0", "no shutdown")),
+      R("R2", 75, 30, cfg("access-list 101 deny icmp any host 10.0.12.2", "access-list 101 permit ip any any", "interface g0/0", "ip address 10.0.12.2 255.255.255.0", "ip access-group 101 in", "no shutdown")),
+    ],
+    links: [["R1", "g0/0", "R2", "g0/0"]],
+    intro: "Someone wanted R2 to stop answering pings, and put ACL 101 inbound on its G0/0. Now R2's own pings to R1 fail too.",
+    tasks: [
+      { text: "Ping R2 (10.0.12.2) from R1. What does R1 print?", choices: ["U.U.U", "!!!!!", ".....", "% Unrecognized host"], check: (t) => need(t.ran("R1", /^ping 10\.0\.12\.2$/) && t.reply === "U.U.U", "R2 drops the echo with the ACL and answers administratively prohibited (U), rate-limited.") },
+      { text: "Does an inbound ACL also filter packets addressed to the router itself?", choices: ["Yes", "No, only packets it routes"], check: (t) => need(t.reply === "Yes", "Inbound ACLs see every packet that arrives on the interface, the router's own addresses included (that is how vty and management traffic is filtered).") },
+      { text: "Ping R1 (10.0.12.1) from R2. Why does it fail as well?", choices: ["R1's echo replies come back in on G0/0 and match the deny", "Outbound ACLs block the router's own pings", "R1 has no route to R2", "ICMP is off on R1"], check: (t) => need(t.ran("R2", /^ping 10\.0\.12\.1$/) && t.reply === "R1's echo replies come back in on G0/0 and match the deny", "The echo leaves R2 fine, but the echo reply is ICMP to host 10.0.12.2, arriving inbound on G0/0.") },
+      { text: "Change ACL 101 so it drops only echo requests to 10.0.12.2, and let everything else through.", check: (t) => { const a = t.acl("R2", 101); const deny = a?.entries.find((e) => e.action === "deny"); return need(deny?.proto === "icmp" && /^echo$/.test(deny.icmpType ?? deny.icmp ?? deny.type ?? "") && fromRouter(t.dev("R2"), "10.0.12.1", pings(0))?.ok && !fromRouter(t.dev("R1"), "10.0.12.2", pings(0))?.ok, "no access-list 101, then access-list 101 deny icmp any host 10.0.12.2 echo and access-list 101 permit ip any any."); } },
+      { text: "Would an outbound ACL on R2's G0/0 have filtered R2's own pings?", choices: ["No: an outbound ACL does not filter traffic the router itself sends", "Yes, always", "Only with the log keyword", "Only for ICMP"], check: (t) => need(t.reply === "No: an outbound ACL does not filter traffic the router itself sends", "Outbound ACLs filter packets routed through the router; packets it originates (its pings, routing updates) skip them.") },
+    ],
+    solution: { R1: ["enable", "ping 10.0.12.2"], R2: ["enable", "ping 10.0.12.1", "configure terminal", "no access-list 101", "access-list 101 deny icmp any host 10.0.12.2 echo", "access-list 101 permit ip any any", "end", "ping 10.0.12.1"] },
+    answers: { 0: "U.U.U", 1: "Yes", 2: "R1's echo replies come back in on G0/0 and match the deny", 4: "No: an outbound ACL does not filter traffic the router itself sends" },
+    failingPings: true,
+    teach: "An inbound ACL checks every packet that arrives on the interface, including those addressed to the router itself, and the replies to the router's own pings. An outbound ACL checks only packets the router forwards out that interface, not ones it originates. To stop pings to the router without breaking its own, deny icmp ... echo and leave echo-reply alone.",
   }),
 ];
