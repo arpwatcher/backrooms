@@ -7,7 +7,7 @@ import { parseIp, maskBits, wildcardBits, network, broadcast, ipText, parseIpv6P
 import { normalize, expandRange, isSub, parentOf, kind, short } from "./iface.js";
 import { SHOWS, routeTable } from "./show.js";
 import { runningConfig, aceText } from "./config.js";
-import { fromRouter, fromRouter6, vtySession, TRACE, pings } from "./host.js";
+import { fromRouter, fromRouter6, vtySession, TRACE, pings, traced } from "./host.js";
 import { status, stpRoot, bridgePriority, routerId, clearCounters } from "./net.js";
 
 export const COMMANDS = { user: [], priv: [], config: [], if: [], subif: [], range: [], line: [], router: [], vlan: [], dhcp: [], "acl-std": [], "acl-ext": [], tacacs: [], radius: [], "sg-tacacs": [], "sg-radius": [] };
@@ -927,9 +927,11 @@ def("config", "ipv6 route <pfx:ipv6pfx> (<via:ipv6> | <out:iface> [<via2:ipv6>])
   if (c.args.via && expandIpv6(c.args.via).startsWith("fe80")) fail("% Interface has to be specified for a link-local nexthop");
   c.dev.ipv6Routes.push({ addr: p.addr, bits: p.bits, via: c.args.via ? expandIpv6(c.args.via) : c.args.via2 ? expandIpv6(c.args.via2) : null, out: c.args.out ?? null, ad: c.args.ad ?? 1 });
 }, { only: ["router", "l3switch"] });
-def("config", "no ipv6 route <pfx:ipv6pfx> [(<via:ipv6> | <out:iface>)]", (c) => {
+def("config", "no ipv6 route <pfx:ipv6pfx> [(<via:ipv6> | <out:iface> [<via2:ipv6>])] [<ad:num:1-254>]", (c) => {
   const p = parseIpv6Prefix(c.args.pfx);
-  c.dev.ipv6Routes = c.dev.ipv6Routes.filter((r) => !(r.addr === p.addr && r.bits === p.bits));
+  const via = c.args.via ?? c.args.via2;
+  // with a next hop or an interface, only that route goes
+  c.dev.ipv6Routes = c.dev.ipv6Routes.filter((r) => !(r.addr === p.addr && r.bits === p.bits && (!via || r.via === expandIpv6(via)) && (!c.args.out || r.out === c.args.out)));
 }, { only: ["router", "l3switch"] });
 
 // --- routing protocols -----------------------------------------------------------------------------------------
@@ -1337,10 +1339,13 @@ function ping(dev, target, count, src = null) {
     if (!dev.domainLookup) return `% Unrecognized host or address, or protocol not running.\n`;
     return `Translating "${target}"...domain server (${dev.nameServers[0] ?? "255.255.255.255"})\n% Unrecognized host or address, or protocol not running.\n`;
   }
-  const r = fromRouter(dev, ip, pings(count), src);
-  const ok = r ? r.ok : reachable(dev, ip);
-  // the first packet to a next hop the router has not ARPed for yet is lost
+  const first = fromRouter(dev, ip, pings(0), src);
   dev.arped ??= [];
+  // the first packet to a next hop the router has not ARPed for yet is lost
+  // before it leaves, so the routers further on see one packet fewer
+  const lost = first?.ok && first.arp && !dev.arped.includes(first.arp) ? 1 : 0;
+  const r = fromRouter(dev, ip, pings(count - lost), src);
+  const ok = r ? r.ok : reachable(dev, ip);
   const miss = ok && r?.arp && !dev.arped.includes(r.arp) ? 1 : 0;
   if (r?.arp && (ok || r.hops.length)) dev.arped.push(r.arp);
   else if (r?.arp && !(dev.lab?.all ?? []).some((d) => Object.values(d.interfaces).some((f) => f.ip === r.arp)) && !dev.arped.includes(r.arp)) dev.arped.push(r.arp);
@@ -1376,6 +1381,8 @@ function trace(dev, target) {
   if (!ip) return "% Unrecognized host or address, or protocol not running.";
   const head = `Type escape sequence to abort.\nTracing the route to ${ip}\nVRF info: (vrf in name/id, vrf out name/id)`;
   const r = fromRouter(dev, ip, TRACE);
+  // the probes count in the ACLs they cross: three per TTL, as far as each goes
+  if (r) fromRouter(dev, ip, traced(TRACE, r.hops.length + (r.unreach ? 1 : r.ok ? 0 : 3), 1));
   if (!r) return `${head}\n  1 ${reachable(dev, ip) ? ip + " 1 msec 0 msec 1 msec" : "*  *  *"}`;
   if (r.arp && (r.ok || r.hops.length)) (dev.arped ??= []).push(r.arp);
   const rows = r.hops.map((h, i) => `${String(i + 1).padStart(3)} ${h} ${i} msec ${i + 1} msec ${i} msec`);

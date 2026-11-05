@@ -200,4 +200,25 @@ export default [
     answers: { 3: "show running-config", 4: "Nothing" },
     teach: "remark <text> (inside a named ACL) or access-list <n> remark <text> adds a comment of up to 100 characters. It belongs to the entry typed after it and prints just above that entry in the running-config; show access-lists leaves remarks out. Remarks never match packets.",
   }),
+  lab({
+    id: "acl-counters", module: M, title: "Reading ACL match counters",
+    cmds: ["show access-lists", "clear access-list counters", "ping", "traceroute"],
+    devices: [
+      R("R1", 15, 30, cfg("interface g0/0", "ip address 10.0.12.1 255.255.255.0", "no shutdown", "ip route 10.0.3.0 255.255.255.0 10.0.12.2")),
+      R("R2", 50, 30, cfg("access-list 100 permit icmp any any", "access-list 100 permit udp any any", "access-list 100 permit ip any any", "interface g0/0", "ip address 10.0.12.2 255.255.255.0", "ip access-group 100 in", "no shutdown", "interface g0/1", "ip address 10.0.23.1 255.255.255.0", "no shutdown", "ip route 10.0.3.0 255.255.255.0 10.0.23.3")),
+      R("R3", 85, 30, cfg("interface g0/0", "ip address 10.0.23.3 255.255.255.0", "no shutdown", "interface loopback 0", "ip address 10.0.3.1 255.255.255.0", "ip route 10.0.12.0 255.255.255.0 10.0.23.1")),
+    ],
+    links: [["R1", "g0/0", "R2", "g0/0"], ["R2", "g0/1", "R3", "g0/0"]],
+    intro: "ACL 100 on R2's G0/0 permits everything, in three lines, so its counters show what kind of traffic comes in from R1. Send some and read them.",
+    tasks: [
+      { text: "From R1, ping 10.0.3.1 once (five echoes). How many matches does R2's permit icmp line show?", ask: "Matches", check: (t) => need(t.ran("R1", /^ping 10\.0\.3\.1$/) && is.num(t.reply, 4), "show access-lists on R2: (4 matches).") },
+      { text: "Why not 5?", choices: ["R1 lost the first echo while it ARPed for 10.0.12.2, so it never reached R2", "The ACL drops one packet in five", "R3 did not answer the first", "Echo replies are not counted"], check: (t) => need(t.reply === "R1 lost the first echo while it ARPed for 10.0.12.2, so it never reached R2", "The .!!!! on R1: the first packet waits for ARP and is dropped. The echo replies enter R2 on G0/1, which has no ACL.") },
+      { text: "Reset the counters on R2.", check: (t) => need(t.ran("R2", /^clear access-list counters/), "clear access-list counters (or clear access-list counters 100) in privileged EXEC.") },
+      { text: "Now trace from R1 to 10.0.3.1. How many matches does the permit udp line show?", ask: "Matches", check: (t) => need(t.ran("R1", /^traceroute 10\.0\.3\.1$/) && is.num(t.reply, 6), "IOS traceroute sends three UDP probes per TTL. The TTL 1 probes reach R2 and expire there, the TTL 2 probes pass it and reach R3: 3 + 3 = 6.") },
+      { text: "And the permit icmp line, after the trace?", ask: "Matches", check: (t) => need(is.num(t.reply, 0), "The time-exceeded and port-unreachable answers are ICMP, but they come back into R2 on G0/1, where there is no ACL.") },
+    ],
+    solution: { R1: ["enable", "ping 10.0.3.1"], R2: ["enable", "show access-lists", "clear access-list counters"], "R1#2": ["traceroute 10.0.3.1"], "R2#2": ["show access-lists"] },
+    answers: { 0: "4", 1: "R1 lost the first echo while it ARPed for 10.0.12.2, so it never reached R2", 3: "6", 4: "0" },
+    teach: "show access-lists counts the packets each entry matched, in the direction the ACL is applied. A router's first ping to a next hop it has not ARPed for loses one packet (.!!!!) before it leaves. IOS, Linux and macOS traceroute send UDP probes (three per TTL, ports from 33434); Windows tracert sends ICMP echoes. clear access-list counters [acl] starts the counts again.",
+  }),
 ];

@@ -313,6 +313,15 @@ function passes(router, name, pkt) {
 export const counted = (kind, n) => ({ go: (...a) => ({ ...kind.go(...a), count: n }), back: (...a) => ({ ...kind.back(...a), count: n }) });
 // n echo requests from a router's own ping
 export const pings = (n) => counted(ICMP, n);
+// a traceroute's probes, three per TTL over hops hops: the router at hop i
+// receives the probes whose TTL reaches it (TTL >= i) and forwards the ones
+// that live on (TTL > i). off is 1 when a router sends them (it is in seen
+// already), 0 for a PC
+export const traced = (kind, hops, off) => ({
+  go: (...a) => ({ ...kind.go(...a), countAt: (s, dir) => { const i = s - off + 1; return 3 * Math.max(0, dir === "in" ? hops - i + 1 : hops - i); } }),
+  back: (...a) => kind.back(...a),
+});
+const at = (pkt, s, dir) => (pkt?.countAt ? { ...pkt, count: pkt.countAt(s, dir) } : pkt);
 
 // Where a packet is dropped, seen.drop records the router, the address it
 // came in by and why (route, acl-in, acl-out): that router may answer the
@@ -322,16 +331,18 @@ const dropped = (seen, router, inIf, why) => {
   return null;
 };
 function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
-  if (pkt?.count) carry(router, inIf, pkt.count, "in");
-  if (pkt && inIf?.aclIn && !passes(router, inIf.aclIn, pkt)) return dropped(seen, router, inIf, "acl-in");
+  const here = at(pkt, seen.size, "in");
+  if (here?.count) carry(router, inIf, here.count, "in");
+  if (pkt && inIf?.aclIn && !passes(router, inIf.aclIn, here)) return dropped(seen, router, inIf, "acl-in");
   if (ownsIp(router, ip)) return [];
   if (seen.has(router) || seen.size > 15) return null;
   seen.add(router);
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
   if (!best) return dropped(seen, router, inIf, "route");
   const exit = exitOf(router, best, ip);
-  if (pkt && pkt.from !== router && exit?.aclOut && !passes(router, exit.aclOut, pkt)) return dropped(seen, router, inIf, "acl-out");
-  if (pkt?.count) carry(router, exit, pkt.count, "out");
+  const out = at(pkt, seen.size - 1, "out");
+  if (pkt && pkt.from !== router && exit?.aclOut && !passes(router, exit.aclOut, out)) return dropped(seen, router, inIf, "acl-out");
+  if (out?.count) carry(router, exit, out.count, "out");
   if (best.code === "C") {
     const o = owner(router, ip);
     if (o?.device.type === "phone" && !segment(o.device).some((n) => n.device === router && n.iface === exit)) return null;
@@ -852,6 +863,7 @@ function tracertWin(dev, target) {
   // the routers before the break answer their hops; the one that reports
   // net unreachable answers its own hop first, then reports on the next
   const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, found || null);
+  reaches(dev, r.ip, false, traced(ICMP, ok ? hops.length : hops.length + 1, 0));
   const ms = (i) => (i === 0 ? "<1 ms" : `${i} ms`).padStart(9);
   const rows = hops.map((h, i) => `${String(i + 1).padStart(3)}${ms(i)}${ms(i)}${ms(i)}  ${h}`);
   if (u) return [`\nTracing route to ${r.name ? `${r.name} [${r.ip}]` : r.ip}`, "over a maximum of 30 hops:", "", ...rows, `${String(rows.length + 1).padStart(3)}  ${u.at}  reports: Destination net unreachable.`, "", "Trace complete."].join("\n");
@@ -1028,6 +1040,7 @@ function traceUnix(dev, target, mac) {
   const ok = reaches(dev, r.ip, false, TRACE);
   const u = !ok && netUnreachable(dev, r.ip);
   const hops = ok ? hopsTo(dev, r.ip) : hopsBefore(dev, r.ip, u);
+  reaches(dev, r.ip, false, traced(TRACE, ok ? hops.length : hops.length + 1, 0));
   const rows = hops.map((h, i) => ` ${i + 1}  ${h} (${h})  ${i + 1}.${i}12 ms  ${i + 1}.${i}05 ms  ${i + 1}.${i}01 ms`);
   // traceroute marks the hop that answers unreachable: !N no route, !X administratively prohibited
   const mark = u?.why === "route" ? "!N" : "!X";
@@ -1328,7 +1341,11 @@ function hop6(router, r) {
   const ll = (d, f) => expandIpv6(f.ipv6LinkLocal ?? eui64("fe80::", d.mac));
   const near = r.out && far(router, r.out);
   if (near?.iface && ll(near.device, near.iface) === r.via && v6Up(near.device, near.iface)) return { device: near.device, iface: near.iface };
-  for (const d of router.lab?.all ?? []) for (const f of Object.values(d.interfaces)) if (d !== router && v6Up(d, f) && ll(d, f) === r.via) return { device: d, iface: f };
+  if (!near || !isSwitch(near.device)) return null;
+  for (const [port, end] of Object.entries(near.device.links)) {
+    const d = end.device, f = d.interfaces[end.iface];
+    if (d !== router && port !== near.name && f && v6Up(d, f) && ll(d, f) === r.via) return { device: d, iface: f };
+  }
   return null;
 }
 const best6 = (d, ip) => table6(d).filter((r) => ipv6Network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits || a.ad - b.ad)[0];
@@ -1345,7 +1362,8 @@ function path6(router, ip, seen = new Set(), sender = true) {
   if (!o || !ROUTER6(o.device)) return null;
   const rest = path6(o.device, ip, seen, false);
   if (rest === null) return null;
-  return owns6(o.device, ip) ? [ip] : [best.via, ...rest];
+  const shown = best.via.startsWith("fe80") ? o.iface.ipv6.find((a) => !a.addr.startsWith("fe80"))?.addr ?? best.via : best.via;
+  return owns6(o.device, ip) ? [ip] : [shown, ...rest];
 }
 // a ping or traceroute to an IPv6 address from a router: the hops, and
 // whether the reply finds its way back to the exit interface's address
