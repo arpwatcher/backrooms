@@ -165,8 +165,10 @@ English.
   two ACLs to hunt down from what the pings and traceroutes say, and AAA
   that locks everyone out (TACACS+ with no fallback, then RADIUS), and a
   branch whose phone never learns its voice VLAN, behind a slow uplink and
-  with no IPv6 yet. Exam mode has a harder option made only of these.
-  242 labs, 56 of them sims.
+  with no IPv6 yet, and an IPv6-only branch that takes its prefix from the
+  ISP by SLAAC, and a traceroute that stops halfway while pings work. Exam
+  mode has a harder option made only of these.
+  248 labs, 58 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -209,7 +211,16 @@ English.
   mismatch message. A host whose ARP goes unanswered reports Destination
   host unreachable itself, and a router keeps the entry as Incomplete. An
   IP phone learns its voice VLAN from the switch's CDP, tags its own
-  frames and passes the PC behind it untagged. A test replays every model answer and fails if one of its
+  frames, takes its address by DHCP in that VLAN (with option 150 for its
+  TFTP server) and passes the PC behind it untagged. Routers take a SLAAC
+  address too (`ipv6 address autoconfig default` adds an ND default
+  route), link-local next hops resolve on their own link, and `show ipv6
+  neighbors` lists the PCs behind a switch. ACL counters count what really
+  crossed them: a router's first ping that is lost to ARP never reaches
+  the next router, and traceroute's probes count three per TTL as far as
+  each one goes. An inbound ACL filters packets for the router itself
+  (and the replies to its own pings), `no ip unreachables` makes a router
+  drop silently, and serial links count their traffic too. A test replays every model answer and fails if one of its
   pings gets no reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
