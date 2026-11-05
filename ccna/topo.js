@@ -145,7 +145,7 @@ export function drawTopology(svg, lab, { onPick, selected, statusOf }) {
     const name = el("text", { x: 0, y: 26 * SCALE + 14, class: "devname", "text-anchor": "middle" }, g);
     name.textContent = d.type === "phone" ? d.name : lab.devices[d.name].hostname ?? d.name;
     // a PC with a terminal says which OS it runs
-    const sub = [d.os && { windows: "Win", linux: "Linux", mac: "Mac" }[d.os], d.ip].filter(Boolean).join(" · ");
+    const sub = [d.os && { windows: "Win", linux: "Linux", mac: "Mac" }[d.os], d.ip || (d.dhcp && "DHCP")].filter(Boolean).join(" · ");
     if (sub) {
       const ip = el("text", { x: 0, y: 26 * SCALE + 38, class: "devip", "text-anchor": "middle" }, g);
       ip.textContent = sub;

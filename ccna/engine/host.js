@@ -230,6 +230,7 @@ const shortName = (n) => n.replace("FastEthernet", "Fa").replace("GigabitEtherne
 // messages per device
 export function settle(all) {
   const said = new Map();
+  for (const d of all) if (d.phoneDhcp) phoneLease(d);
   for (const d of all) {
     if (!isSwitch(d)) continue;
     for (const f of Object.values(d.interfaces)) {
@@ -745,6 +746,34 @@ const dropLease = (dev) => {
     if (d.snooping?.bindings) d.snooping.bindings = d.snooping.bindings.filter((b) => b.mac !== dev.mac);
   }
 };
+// an IP phone keeps asking for an address in the VLAN it sends in (the voice
+// VLAN it learned by CDP, or the access VLAN): it holds a lease while a server
+// answers there, and loses it when none does
+function phoneLease(ph) {
+  const f = ph.interfaces["FastEthernet0/1"], st = ph.phoneDhcp;
+  const offer = dhcpOffer(ph);
+  if (!offer) {
+    if (st.leased) Object.assign(f, { ip: null, mask: null }), (ph.gateway = null), dropLease(ph), Object.assign(st, { leased: false, tftp: null, server: null });
+    return;
+  }
+  const bits = maskBits(offer.pool.mask);
+  // a lease it holds is renewed with what the pool gives now
+  if (st.leased && f.ip && network(f.ip, bits) === offer.pool.network) return void ((ph.gateway = offer.pool.router?.[0] ?? null), (st.tftp = offer.pool.options?.[150] ?? null));
+  const excluded = (ip) => (offer.from.dhcp.excluded ?? []).some((e) => toN(ip) >= toN(e.from) && toN(ip) <= toN(e.to ?? e.from));
+  let ip = null;
+  for (let n = toN(offer.pool.network) + 1; !ip && n < toN(offer.pool.network) + 2 ** (32 - bits) - 1; n++) {
+    const cand = fromN(n);
+    if (!excluded(cand) && !owner(ph, cand) && cand !== offer.gw.ip) ip = cand;
+  }
+  if (!ip) return;
+  Object.assign(f, { ip, mask: offer.pool.mask });
+  ph.gateway = offer.pool.router?.[0] ?? null;
+  Object.assign(st, { leased: true, tftp: offer.pool.options?.[150] ?? null, server: offer.server });
+  dropLease(ph);
+  const srv = offer.from.dhcp;
+  (srv.leases ??= []).push({ ip, mac: ph.mac, clientId: true, pool: Object.keys(srv.pools).find((k) => srv.pools[k] === offer.pool), days: offer.pool.lease ?? 1 });
+}
+
 function renew(dev) {
   const h = dev.host, f = own(dev);
   if (!h.dhcp) return "\nWindows IP Configuration\n\nThe operation failed as no adapter is in the state permissible for\nthis operation.";

@@ -14,6 +14,8 @@ export function buildLab(def) {
   const devices = {};
   for (const d of def.devices) {
     const dev = createDevice({ name: d.name, type: d.type, hostname: d.hostname ?? (d.keepDefaultName ? undefined : d.name), ports: d.ports, mac: d.mac });
+    // a phone that takes its address by DHCP in the voice VLAN (option 150 tells it the TFTP server)
+    if (d.type === "phone" && d.dhcp) dev.phoneDhcp = { leased: false, tftp: null };
     if (d.type === "phone") dev.hostname = d.hostname ?? `SEP${dev.mac.replace(/\./g, "").toUpperCase()}`;
     // a server in the lab that answers TACACS+ or RADIUS: { tacacs: key, radius: key, users: [...] }
     dev.aaaService = d.aaa ?? null;

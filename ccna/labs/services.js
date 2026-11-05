@@ -1,4 +1,4 @@
-import { lab, R, S, PC, SRV, HOST, cfg, EN, need, is } from "./kit.js";
+import { lab, R, S, PC, SRV, HOST, PHONE, cfg, EN, need, is } from "./kit.js";
 
 const M = "services";
 const lanRouter = (extra = []) => R("R1", 30, 25, cfg("interface g0/0", "ip address 10.10.10.1 255.255.255.0", "no shutdown", ...extra));
@@ -278,5 +278,28 @@ export default [
     },
     answers: { 0: "60", 2: "60", 5: "40", 6: "timer 20, holdtime 60" },
     teach: "CDP (Cisco) and LLDP (802.1AB, any vendor) advertise on every port at an interval and carry a holdtime: how long the neighbor keeps the entry if no new advertisement arrives. CDP: cdp timer (60 s) and cdp holdtime (180 s), shown by show cdp. LLDP: lldp timer (30 s), lldp holdtime (120 s) and lldp reinit (2 s, the wait before LLDP starts again on a port), shown by show lldp. LLDP is off until lldp run. Keep the holdtime well above the timer.",
+  }),
+  lab({
+    id: "voice-dhcp", module: M, title: "DHCP for IP phones: a voice pool and option 150",
+    cmds: ["ip dhcp pool", "option 150 ip", "ip dhcp excluded-address", "show ip dhcp binding", "ipconfig /renew"],
+    devices: [
+      R("R1", 50, 10, cfg("ip dhcp excluded-address 10.10.0.1 10.10.0.9", "ip dhcp pool DATA", "network 10.10.0.0 255.255.255.0", "default-router 10.10.0.1", "exit", "interface g0/0", "no shutdown", "interface g0/0.10", "encapsulation dot1q 10", "ip address 10.10.0.1 255.255.255.0", "interface g0/0.150", "encapsulation dot1q 150", "ip address 10.15.0.1 255.255.255.0")),
+      S("SW1", 50, 36, cfg("vlan 10", "name DATA", "vlan 150", "name VOICE", "exit", "interface g0/1", "switchport mode trunk", "interface fa0/3", "switchport mode access", "switchport access vlan 10", "switchport voice vlan 150")),
+      PHONE("IP1", 28, 62, undefined, undefined, { dhcp: true, mac: "0011.2233.4477" }),
+      HOST("PC1", 72, 62, "windows", { dhcp: true, mac: "0050.7966.0331" }),
+    ],
+    links: [["R1", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/3", "IP1", "fa0/1"], ["IP1", "fa0/2", "PC1", "fa0"]],
+    intro: "The phone on Fa0/3 boots, learns voice VLAN 150 from CDP and asks for an address there, but R1 only has a pool for the data VLAN. Phones also need option 150: the TFTP server (the call manager, 10.15.0.5) they download their configuration from.",
+    tasks: [
+      { text: "Keep 10.15.0.1 to 10.15.0.9 out of the voice pool.", check: (t) => need((t.dev("R1").dhcp.excluded ?? []).some((e) => e.from === "10.15.0.1" && e.to === "10.15.0.9"), "ip dhcp excluded-address 10.15.0.1 10.15.0.9") },
+      { text: "Create pool VOICE for 10.15.0.0/24 with gateway 10.15.0.1 and option 150 pointing at 10.15.0.5.", check: (t) => { const p = t.dev("R1").dhcp.pools.VOICE; return need(p?.network === "10.15.0.0" && p.mask === "255.255.255.0" && p.router?.[0] === "10.15.0.1" && p.options?.[150] === "10.15.0.5", !p ? "ip dhcp pool VOICE" : p.options?.[150] !== "10.15.0.5" ? "option 150 ip 10.15.0.5 inside the pool." : "network 10.15.0.0 255.255.255.0 and default-router 10.15.0.1."); } },
+      { text: "Which address did the phone get (show ip dhcp binding)?", ask: "IP address", check: (t) => need(t.dev("IP1").phoneDhcp?.leased && is.ip(t.reply, t.dev("IP1").interfaces["FastEthernet0/1"].ip), t.dev("IP1").phoneDhcp?.leased ? "show ip dhcp binding on R1: the client ID 0100.1122.3344.77 is the phone." : "The phone has no lease yet: the VOICE pool is missing or incomplete.") },
+      { text: "Get PC1 (behind the phone) an address, and say which pool it came from.", choices: ["DATA", "VOICE"], check: (t) => need(t.ran("PC1", /^ipconfig \/renew/) && t.dev("PC1").host.leased && t.reply === "DATA", "ipconfig /renew on PC1: its frames are untagged, so they land in the access VLAN 10 and the DATA pool answers.") },
+      { text: "Which VLAN does the phone's DHCP Discover arrive in at R1?", ask: "VLAN", check: (t) => need(is.num(t.reply, 150), "Tagged with the voice VLAN, so on subinterface G0/0.150, the one inside 10.15.0.0/24.") },
+      { text: "What does option 150 give the phone?", choices: ["The TFTP server to fetch its configuration from", "Its default gateway", "Its voice VLAN", "Its DNS server"], check: (t) => need(t.reply === "The TFTP server to fetch its configuration from", "Option 150 (Cisco) is the TFTP server list; the voice VLAN comes from CDP, the gateway from default-router.") },
+    ],
+    solution: { R1: [...EN, "ip dhcp excluded-address 10.15.0.1 10.15.0.9", "ip dhcp pool VOICE", "network 10.15.0.0 255.255.255.0", "default-router 10.15.0.1", "option 150 ip 10.15.0.5", "end", "show ip dhcp binding"], PC1: ["ipconfig /renew"] },
+    answers: { 2: "10.15.0.10", 3: "DATA", 4: "150", 5: "The TFTP server to fetch its configuration from" },
+    teach: "An IP phone learns its voice VLAN by CDP and sends its DHCP Discover tagged in it, so the router needs a pool for the voice subnet (on the voice subinterface or SVI, or a relay there). Cisco phones also want option 150, the TFTP server they load their configuration from (the call manager). The PC behind the phone sends untagged and gets its lease from the data pool.",
   }),
 ];
