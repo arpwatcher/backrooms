@@ -95,8 +95,8 @@ function interfaceBlock(dev, f) {
     if (grp.preempt) add(`standby ${n}preempt`);
   }
   if (f.ipv6LinkLocal) add(`ipv6 address ${compressIpv6(f.ipv6LinkLocal)} link-local`);
-  for (const a of f.ipv6) add(`ipv6 address ${compressIpv6(a.eui ? a.addr.split(":").slice(0, 4).join(":") + "::" : a.addr)}/${a.bits}${a.eui ? " eui-64" : ""}`);
-  if (f.ipv6Auto) add("ipv6 address autoconfig");
+  for (const a of f.ipv6.filter((x) => !x.auto)) add(`ipv6 address ${compressIpv6(a.eui ? a.addr.split(":").slice(0, 4).join(":") + "::" : a.addr)}/${a.bits}${a.eui ? " eui-64" : ""}`);
+  if (f.ipv6Auto) add(`ipv6 address autoconfig${f.ipv6AutoDefault ? " default" : ""}`);
   if (f.ipv6Dhcp) add("ipv6 address dhcp");
   if (f.ipv6Enabled && !f.ipv6.length && !f.ipv6LinkLocal && !f.ipv6Auto && !f.ipv6Dhcp) add("ipv6 enable");
   if (f.snoopTrust) add("ip dhcp snooping trust");
@@ -265,7 +265,7 @@ export function runningConfig(dev, onlyIface) {
   if (dev.http) L.push("ip http server");
   L.push("ip classless");
   for (const r of dev.routes) L.push(`ip route ${r.net} ${r.mask} ${r.out ?? ""}${r.out && r.via ? " " : ""}${r.via ?? ""}${r.ad !== 1 ? " " + r.ad : ""}`);
-  for (const r of dev.ipv6Routes) L.push(`ipv6 route ${compressIpv6(r.addr)}/${r.bits} ${r.out ?? ""}${r.out && r.via ? " " : ""}${r.via ? compressIpv6(r.via) : ""}${r.ad !== 1 ? " " + r.ad : ""}`);
+  for (const r of dev.ipv6Routes.filter((x) => !x.nd)) L.push(`ipv6 route ${compressIpv6(r.addr)}/${r.bits} ${r.out ?? ""}${r.out && r.via ? " " : ""}${r.via ? compressIpv6(r.via) : ""}${r.ad !== 1 ? " " + r.ad : ""}`);
   if (dev.type !== "router" && dev.defaultGateway) L.push(`ip default-gateway ${dev.defaultGateway}`);
   bang();
   for (const [name, acl] of Object.entries(dev.acls)) {

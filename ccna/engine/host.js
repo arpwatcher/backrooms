@@ -5,7 +5,7 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network, expandIpv6, parseIpv6Prefix } from "./ip.js";
-import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry } from "./net.js";
+import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry, far } from "./net.js";
 import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
@@ -1216,6 +1216,7 @@ function slaacAddr(dev, prefix) {
 // the PCs' addresses and default routes, worked out again from what the
 // routers advertise now (a static gateway may be the router's link-local)
 export function syncIpv6(all = []) {
+  syncRouterSlaac(all);
   for (const dev of all) {
     const h = dev.host;
     if (!h || (!h.slaac && !h.ipv6Static)) continue;
@@ -1240,6 +1241,28 @@ export function syncIpv6(all = []) {
   }
 }
 const v6s = (a) => compressIpv6(a).toLowerCase();
+// a router interface with ipv6 address autoconfig takes the prefix the router at
+// the other end advertises (EUI-64, as IOS does) and, with default, a default
+// route to it (ND); kept apart from the configured addresses (auto, nd)
+function syncRouterSlaac(all) {
+  const routers = all.filter((d) => ROUTER6(d) && !d.host);
+  for (const d of routers) {
+    d.ipv6Routes = d.ipv6Routes.filter((r) => !r.nd);
+    for (const f of Object.values(d.interfaces)) f.ipv6 = f.ipv6.filter((a) => !a.auto);
+  }
+  for (const d of routers) {
+    for (const f of Object.values(d.interfaces)) {
+      if (!f.ipv6Auto || status(d, f)[1] !== "up") continue;
+      const end = far(d, f.name);
+      const r = end?.device, g = end?.iface;
+      if (!r || !g || !ROUTER6(r) || !r.ipv6Routing || !v6Up(r, g)) continue;
+      const a = g.ipv6.find((x) => x.bits === 64 && !x.auto && !x.addr.startsWith("fe80"));
+      if (!a) continue;
+      f.ipv6.push({ addr: eui64(ipv6Network(a.addr, 64), d.mac), bits: 64, auto: true });
+      if (f.ipv6AutoDefault) d.ipv6Routes.push({ addr: expandIpv6("::"), bits: 0, via: a.addr, ll: expandIpv6(g.ipv6LinkLocal ?? eui64("fe80::", r.mac)), out: f.name, ad: 2, nd: true });
+    }
+  }
+}
 const pcV6 = (dev) => own(dev).ipv6?.find((a) => !a.addr.startsWith("fe80"))?.addr ?? null;
 // a ping from a PC to an IPv6 address: out through its first hop (on its own
 // segment), and back
@@ -1298,6 +1321,16 @@ function table6(d) {
   }
   return out;
 }
+// the device a route's next hop belongs to: a global address anywhere, or a
+// link-local one on the far side of the route's exit interface
+function hop6(router, r) {
+  if (!r.via?.startsWith("fe80")) return owner6(router, r.via);
+  const ll = (d, f) => expandIpv6(f.ipv6LinkLocal ?? eui64("fe80::", d.mac));
+  const near = r.out && far(router, r.out);
+  if (near?.iface && ll(near.device, near.iface) === r.via && v6Up(near.device, near.iface)) return { device: near.device, iface: near.iface };
+  for (const d of router.lab?.all ?? []) for (const f of Object.values(d.interfaces)) if (d !== router && v6Up(d, f) && ll(d, f) === r.via) return { device: d, iface: f };
+  return null;
+}
 const best6 = (d, ip) => table6(d).filter((r) => ipv6Network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits || a.ad - b.ad)[0];
 const ROUTER6 = (d) => d.type === "router" || d.type === "l3switch";
 // hop by hop; a router other than the sender forwards only with ipv6 unicast-routing
@@ -1308,7 +1341,7 @@ function path6(router, ip, seen = new Set(), sender = true) {
   const best = best6(router, ip);
   if (!best) return null;
   if (best.code === "C" && !best.via) return owner6(router, ip) ? [ip] : null;
-  const o = owner6(router, best.via);
+  const o = hop6(router, best);
   if (!o || !ROUTER6(o.device)) return null;
   const rest = path6(o.device, ip, seen, false);
   if (rest === null) return null;

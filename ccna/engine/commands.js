@@ -665,7 +665,10 @@ def(IF_MODES, "ipv6 address <addr:ipv6> link-local", (c) =>
     f.ipv6LinkLocal = expandIpv6(c.args.addr);
     f.ipv6Enabled = true;
   }));
-def(IF_MODES, "ipv6 address autoconfig [default]", (c) => each(c, (f) => ((f.ipv6Auto = true), (f.ipv6Enabled = true))));
+// SLAAC on a router's interface: an address from the prefix a neighbor router
+// advertises (EUI-64), and with default a default route to that router
+def(IF_MODES, "ipv6 address autoconfig [default]", (c) => each(c, (f) => ((f.ipv6Auto = true), (f.ipv6AutoDefault = c.has("default")), (f.ipv6Enabled = true))));
+def(IF_MODES, "no ipv6 address autoconfig [default]", (c) => each(c, (f) => ((f.ipv6Auto = false), (f.ipv6AutoDefault = false), (f.ipv6 = f.ipv6.filter((a) => !a.auto)))));
 def(IF_MODES, "ipv6 address dhcp", (c) => each(c, (f) => ((f.ipv6Dhcp = true), (f.ipv6Enabled = true))));
 def(IF_MODES, "ipv6 enable", (c) => each(c, (f) => (f.ipv6Enabled = true)));
 def(IF_MODES, "no ipv6 address [<pfx:ipv6pfx>]", (c) => each(c, (f) => (f.ipv6 = c.args.pfx ? f.ipv6.filter((a) => a.addr !== parseIpv6Prefix(c.args.pfx).addr) : [])));
@@ -919,6 +922,7 @@ def("config", "no ip route <net:ip> <mask:mask> [(<via:ip> | <out:iface> [<via2:
 }, { only: ["router", "l3switch"] });
 def("config", "ipv6 route <pfx:ipv6pfx> (<via:ipv6> | <out:iface> [<via2:ipv6>]) [<ad:num:1-254>]", (c) => {
   const p = parseIpv6Prefix(c.args.pfx);
+  if (c.args.via && expandIpv6(c.args.via).startsWith("fe80")) fail("% Interface has to be specified for a link-local nexthop");
   c.dev.ipv6Routes.push({ addr: p.addr, bits: p.bits, via: c.args.via ? expandIpv6(c.args.via) : c.args.via2 ? expandIpv6(c.args.via2) : null, out: c.args.out ?? null, ad: c.args.ad ?? 1 });
 }, { only: ["router", "l3switch"] });
 def("config", "no ipv6 route <pfx:ipv6pfx> [(<via:ipv6> | <out:iface>)]", (c) => {

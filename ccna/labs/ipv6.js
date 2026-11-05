@@ -1,5 +1,6 @@
 import { lab, R, S, PC, HOST, cfg, EN, need, is } from "./kit.js";
 import { expandIpv6 } from "../engine/ip.js";
+import { fromRouter6 } from "../engine/host.js";
 
 const M = "ipv6";
 const has6 = (t, d, i, addr, bits) => t.f(d, i).ipv6.some((a) => a.addr === expandIpv6(addr) && a.bits === bits);
@@ -61,13 +62,19 @@ export default [
   }),
   lab({
     id: "ipv6-slaac-client", module: M, title: "Router as a SLAAC client",
-    cmds: ["ipv6 address autoconfig", "ipv6 enable"],
-    devices: [R("R1", 30, 30, cfg("interface g0/1", "no shutdown")), PC("ISP", 75, 30)],
-    links: [["R1", "g0/1", "ISP", "fa0"]],
-    intro: "The ISP hands out an IPv6 prefix with Router Advertisements.",
-    tasks: [{ text: "Make G0/1 build its own address with SLAAC.", check: (t) => need(t.f("R1", "g0/1").ipv6Auto, "Expected ipv6 address autoconfig.") }],
-    solution: { R1: [...EN, "interface g0/1", "ipv6 address autoconfig"] },
-    teach: "SLAAC: the host sends an RS, the router answers with an RA carrying the prefix, and the host builds its own interface ID (EUI-64 or random). ipv6 enable creates only a link-local address.",
+    cmds: ["ipv6 address autoconfig", "ipv6 address autoconfig default", "show ipv6 interface brief", "show ipv6 route"],
+    devices: [R("R1", 30, 30, cfg("ipv6 unicast-routing", "interface g0/1", "no shutdown")), R("ISP", 75, 30, cfg("ipv6 unicast-routing", "interface g0/0", "ipv6 address 2001:db8:ffff::1/64", "no shutdown"))],
+    links: [["R1", "g0/1", "ISP", "g0/0"]],
+    intro: "The ISP hands out an IPv6 prefix with Router Advertisements. R1's G0/1 should take an address from it, and a default route too.",
+    tasks: [
+      { text: "Make G0/1 build its own address with SLAAC and install a default route from the advertisement.", check: (t) => need(t.f("R1", "g0/1").ipv6Auto && t.f("R1", "g0/1").ipv6AutoDefault, t.f("R1", "g0/1").ipv6Auto ? "Add default: ipv6 address autoconfig default." : "Expected ipv6 address autoconfig default on G0/1.") },
+      { text: "Which global address did G0/1 build (show ipv6 interface brief)?", ask: "IPv6 address", check: (t) => need(expandIpv6(t.reply.trim().split("/")[0]) === expandIpv6(`2001:db8:ffff:0:${t.dev("R1").mac.replace(/\./g, "").replace(/^(..)/, (m) => (parseInt(m, 16) ^ 2).toString(16).padStart(2, "0")).replace(/^(.{6})/, "$1fffe").match(/.{4}/g).join(":")}`), "The ISP's prefix 2001:db8:ffff::/64 and the EUI-64 interface ID from R1's MAC (IOS uses EUI-64 for autoconfig).") },
+      { text: "How does the default route show up in show ipv6 route?", choices: ["ND ::/0 via the ISP's link-local address", "S ::/0 via 2001:db8:ffff::1", "C ::/0", "It does not appear"], check: (t) => need(t.reply === "ND ::/0 via the ISP's link-local address", "Code ND (ND Default), AD 2, next hop the link-local address the RA came from.") },
+      { text: "Ping the ISP at 2001:db8:ffff::1.", check: (t) => need(t.ran("R1", /^ping 2001:db8:ffff::1$/i) && fromRouter6(t.dev("R1"), expandIpv6("2001:db8:ffff::1"))?.ok, "ping 2001:db8:ffff::1 from R1.") },
+    ],
+    solution: { R1: [...EN, "interface g0/1", "ipv6 address autoconfig default", "end", "show ipv6 interface brief", "show ipv6 route", "ping 2001:db8:ffff::1"] },
+    answers: { 1: "2001:db8:ffff:0:201:42ff:fea3:2466", 2: "ND ::/0 via the ISP's link-local address" },
+    teach: "SLAAC: the host sends an RS, the router answers with an RA carrying the prefix, and the host builds its own interface ID (EUI-64 on IOS, random on Windows and macOS). ipv6 address autoconfig on a router interface does the same; with default it also installs the RA's router as a default route (ND, AD 2). ipv6 enable creates only a link-local address.",
   }),
   lab({
     id: "ipv6-static", module: M, title: "IPv6 static route",
@@ -85,9 +92,14 @@ export default [
     id: "ipv6-default", module: M, title: "IPv6 default route",
     cmds: ["ipv6 route ::/0"],
     devices: pair(addressed[0], addressed[1]), links: pairLinks,
-    intro: "R2 is a stub router: every unknown network goes to R1.",
-    tasks: [{ text: "Default route on R2 with exit interface G0/1 and the link-local next hop FE80::1.", check: (t) => { const r = r6(t, "R2", "::", 0); return need(r && r.out === "GigabitEthernet0/1" && r.via === expandIpv6("fe80::1"), r ? "The default route exists, but not with g0/1 and fe80::1." : "Expected ipv6 route ::/0 g0/1 fe80::1."); } }],
-    solution: { R2: [...EN, "ipv6 route ::/0 g0/1 fe80::1"], R1: [...EN, "interface g0/1", "ipv6 address fe80::1 link-local"] },
+    intro: "R2 is a stub router: every unknown network goes to R1, whose G0/1 should answer at the easy-to-read link-local FE80::1.",
+    tasks: [
+      { text: "Default route on R2 with exit interface G0/1 and the link-local next hop FE80::1.", check: (t) => { const r = r6(t, "R2", "::", 0); return need(r && r.out === "GigabitEthernet0/1" && r.via === expandIpv6("fe80::1"), r ? "The default route exists, but not with g0/1 and fe80::1." : "Expected ipv6 route ::/0 g0/1 fe80::1."); } },
+      { text: "What does IOS answer to ipv6 route ::/0 fe80::1, with no interface?", choices: ["% Interface has to be specified for a link-local nexthop", "Nothing: the route is added", "% Invalid input detected", "% Bad mask"], check: (t) => need(t.reply === "% Interface has to be specified for a link-local nexthop", "Try it: a link-local address exists on every link, so IOS needs the interface to know which one.") },
+      { text: "From R2, ping R1's LAN address 2001:db8:1::1.", check: (t) => need(t.ran("R2", /^ping 2001:db8:1::1$/i) && fromRouter6(t.dev("R2"), expandIpv6("2001:db8:1::1"))?.ok, "R1 needs fe80::1 on G0/1 (the next hop R2 points at); R1 answers from its connected route back.") },
+    ],
+    solution: { R1: [...EN, "interface g0/1", "ipv6 address fe80::1 link-local"], R2: [...EN, "ipv6 route ::/0 fe80::1", "ipv6 route ::/0 g0/1 fe80::1", "end", "ping 2001:db8:1::1"] },
+    answers: { 1: "% Interface has to be specified for a link-local nexthop" },
     teach: "::/0 is the IPv6 default route, the equivalent of 0.0.0.0/0.",
   }),
   lab({

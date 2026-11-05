@@ -5,7 +5,7 @@ import { sortedInterfaces } from "./state.js";
 import { maskBits, network, parseIp, compressIpv6, ipv6Network } from "./ip.js";
 import { short, isSub, compare } from "./iface.js";
 import { runningConfig, aceText, rangeText } from "./config.js";
-import { ntpSync, aaaServerUp, phoneVlan } from "./host.js";
+import { ntpSync, aaaServerUp, phoneVlan, syncIpv6, segment } from "./host.js";
 import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, passive, routerId, role, ospfElection, stpRoot, bridgePriority, hsrpRanking, carries, stpPorts, stpCost, suspended, stpPortNumber, ospfCost, ospfRoutes, staticUsable, linkMode, counters } from "./net.js";
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -784,14 +784,22 @@ function ipv6Brief(dev) {
 // finds them
 function ipv6Neighbors(dev, only) {
   const rows = ["IPv6 Address                              Age Link-layer Addr State Interface"];
+  const row = (a, mac, state, f) => rows.push(`${pad(compressIpv6(a).toUpperCase(), 42)}${"0".padStart(3)} ${pad(mac, 16)}${pad(state, 6)}${short(f.name)}`);
   for (const f of sortedInterfaces(dev)) {
     if ((only && f.name !== only) || !(f.ipv6Enabled || f.ipv6.length) || status(dev, f)[1] !== "up") continue;
     const end = far(dev, f.name);
     const p = end?.iface;
-    if (!p || !(p.ipv6Enabled || p.ipv6?.length) || status(end.device, p)[1] !== "up") continue;
-    const mine = f.ipv6.map((a) => ipv6Network(a.addr, a.bits));
-    const addrs = [...p.ipv6.filter((a) => mine.includes(ipv6Network(a.addr, a.bits))).map((a) => a.addr), p.ipv6LinkLocal ?? linkLocal(end.device)];
-    for (const a of addrs) rows.push(`${pad(compressIpv6(a).toUpperCase(), 42)}${"0".padStart(3)} ${pad(end.device.mac, 16)}${pad("REACH", 6)}${short(f.name)}`);
+    if (p && (p.ipv6Enabled || p.ipv6?.length) && status(end.device, p)[1] === "up" && !end.device.host) {
+      const mine = f.ipv6.map((a) => ipv6Network(a.addr, a.bits));
+      for (const a of [...p.ipv6.filter((a) => mine.includes(ipv6Network(a.addr, a.bits))).map((a) => a.addr), p.ipv6LinkLocal ?? linkLocal(end.device)]) row(a, end.device.mac, "REACH", f);
+    }
+    // PCs whose frames reach this interface (or its subinterface): their
+    // link-local from the Router Solicitation, their global address once used
+    for (const pc of (dev.lab?.all ?? []).filter((d) => d.host && Object.values(d.interfaces)[0].ipv6?.length)) {
+      if (!segment(pc).some((n) => n.device === dev && n.iface === f)) continue;
+      for (const a of Object.values(pc.interfaces)[0].ipv6) row(a.addr, pc.mac, "REACH", f);
+      row(linkLocal(pc), pc.mac, "STALE", f);
+    }
   }
   return rows.join("\n");
 }
@@ -803,11 +811,12 @@ function linkLocal(dev) {
 }
 
 function ipv6Route(dev) {
-  const out = ["IPv6 Routing Table - default - 1 entries", "Codes: C - Connected, L - Local, S - Static, U - Per-user Static route", "       B - BGP, R - RIP, I1 - ISIS L1, I2 - ISIS L2", "       IA - ISIS interarea, IS - ISIS summary, D - EIGRP, EX - EIGRP external", "       O - OSPF Intra, OI - OSPF Inter, OE1 - OSPF ext 1, OE2 - OSPF ext 2", ""];
+  const out = ["IPv6 Routing Table - default - 1 entries", "Codes: C - Connected, L - Local, S - Static, U - Per-user Static route", "       B - BGP, R - RIP, I1 - ISIS L1, I2 - ISIS L2", "       IA - ISIS interarea, IS - ISIS summary, D - EIGRP, EX - EIGRP external", "       O - OSPF Intra, OI - OSPF Inter, OE1 - OSPF ext 1, OE2 - OSPF ext 2", "       ND - ND Default, NDp - ND Prefix, DCE - Destination, NDr - Redirect", ""];
   for (const f of sortedInterfaces(dev)) {
     if (status(dev, f)[1] !== "up") continue;
     for (const a of f.ipv6) {
-      out.push(`C   ${compressIpv6(ipv6Network(a.addr, a.bits))}/${a.bits} [0/0]`, `     via ${f.name}, directly connected`);
+      if (a.auto) out.push(`NDp ${compressIpv6(ipv6Network(a.addr, a.bits))}/${a.bits} [2/0]`, `     via ${f.name}, directly connected`);
+      else out.push(`C   ${compressIpv6(ipv6Network(a.addr, a.bits))}/${a.bits} [0/0]`, `     via ${f.name}, directly connected`);
       out.push(`L   ${compressIpv6(a.addr)}/128 [0/0]`, `     via ${f.name}, receive`);
     }
   }
@@ -815,9 +824,12 @@ function ipv6Route(dev) {
   // prefix (or its exit interface is up)
   const connected = sortedInterfaces(dev).filter((f) => status(dev, f)[1] === "up").flatMap((f) => f.ipv6.map((a) => ({ net: ipv6Network(a.addr, a.bits), bits: a.bits })));
   const usable = (r) => (r.out ? status(dev, dev.interfaces[r.out] ?? {})[1] === "up" : connected.some((c) => ipv6Network(r.via, c.bits) === c.net));
-  for (const r of dev.ipv6Routes.filter(usable)) out.push(`S   ${compressIpv6(r.addr)}/${r.bits} [${r.ad}/0]`, `     via ${r.via ? compressIpv6(r.via) : ""}${r.out ? (r.via ? ", " : "") + r.out : ""}`);
+  for (const r of dev.ipv6Routes.filter(usable)) {
+    if (r.nd) out.push(`ND  ${compressIpv6(r.addr)}/${r.bits} [2/0]`, `     via ${compressIpv6(r.ll)}, ${r.out}`);
+    else out.push(`S   ${compressIpv6(r.addr)}/${r.bits} [${r.ad}/0]`, `     via ${r.via ? compressIpv6(r.via) : ""}${r.out ? (r.via ? ", " : "") + r.out : ""}`);
+  }
   out.push("L   FF00::/8 [0/0]", "     via Null0, receive");
-  out[0] = `IPv6 Routing Table - default - ${out.filter((l) => /^[CLS] /.test(l)).length} entries`;
+  out[0] = `IPv6 Routing Table - default - ${out.filter((l) => /^([CLS]|NDp?) /.test(l)).length} entries`;
   return out.join("\n");
 }
 
@@ -1004,10 +1016,11 @@ export const SHOWS = {
     ["show port-security [interface <name:iface>]", (d, a) => portSecurity(d, a.name)],
     ["show port-security address", (d) => ["          Secure Mac Address Table", "-----------------------------------------------------------------------------", "Vlan    Mac Address       Type                          Ports   Remaining Age", ...sortedInterfaces(d).flatMap((f) => [...f.ps.macs.map((m) => [m, "SecureConfigured"]), ...(f.ps.learned ?? []).map((l) => [l.mac, l.sticky ? "SecureSticky" : "SecureDynamic"])].map(([m, type]) => `${pad(f.accessVlan, 8)}${pad(m, 18)}${pad(type, 30)}${pad(short(f.name), 8)}-`)), "-----------------------------------------------------------------------------", `Total Addresses in System (excluding one mac per port)     : ${Math.max(0, Object.values(d.interfaces).reduce((n, f) => n + Math.max(0, f.ps.macs.length + (f.ps.learned ?? []).length - 1), 0))}`, "Max Addresses limit in System (excluding one mac per port) : 1024"].join("\n")],
     ["show standby [brief]", (d, a, c) => standby(d, c.has("brief"), d.lab?.all)],
-    ["show ipv6 interface brief", (d) => ipv6Brief(d)],
-    ["show ipv6 neighbors [<name:iface>]", (d, a) => ipv6Neighbors(d, a.name)],
-    ["show ipv6 interface [<name:iface>]", (d, a) => ipv6Brief({ ...d, interfaces: a.name ? { [a.name]: d.interfaces[a.name] } : d.interfaces })],
-    ["show ipv6 route", (d) => ipv6Route(d)],
+    // SLAAC addresses and ND routes follow what the neighbors advertise now
+    ["show ipv6 interface brief", (d) => (syncIpv6(d.lab?.all), ipv6Brief(d))],
+    ["show ipv6 neighbors [<name:iface>]", (d, a) => (syncIpv6(d.lab?.all), ipv6Neighbors(d, a.name))],
+    ["show ipv6 interface [<name:iface>]", (d, a) => (syncIpv6(d.lab?.all), ipv6Brief({ ...d, interfaces: a.name ? { [a.name]: d.interfaces[a.name] } : d.interfaces }))],
+    ["show ipv6 route", (d) => (syncIpv6(d.lab?.all), ipv6Route(d))],
     ["show clock [detail]", (d) => `*${d.clock.set ?? "12:13:47.123 UTC Mon Mar 1 1993"}`.replace(/^\*(\d+:\d+(:\d+)?) (\d+) (\w+) (\d+)$/, "*$1.000 UTC $4 $3 $5")],
     ["show ntp status", (d) => ntpStatus(d)],
     ["show ntp associations", (d) => ntpAssociations(d)],
