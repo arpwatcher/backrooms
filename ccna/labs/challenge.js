@@ -1,6 +1,6 @@
 import { lab, R, S, L3, SRV, ISP, HOST, PHONE, cfg, EN, need, is } from "./kit.js";
 import { aclAllows, ospfElection, linkMode } from "../engine/net.js";
-import { ntpSync, fromRouter6, aaaServerUp } from "../engine/host.js";
+import { ntpSync, fromRouter6, aaaServerUp, syncIpv6 } from "../engine/host.js";
 import { expandIpv6 } from "../engine/ip.js";
 
 // harder sims: bigger topologies, several topics at once, more tasks, faults
@@ -8,6 +8,8 @@ import { expandIpv6 } from "../engine/ip.js";
 const M = "challenge";
 const hard = (def) => lab({ kind: "sim", hard: true, module: M, ...def });
 const all = (list, ok) => list.every(ok);
+// router SLAAC follows the advertisements: work it out before looking
+const syncNd = (t) => syncIpv6(t.dev("R1").lab.all);
 
 // --- a three-switch campus behind a router on a stick -------------------------------------------
 
@@ -904,5 +906,41 @@ export default [
     },
     answers: { 0: "Half, negotiated (a-half)", 3: "10", 4: "CDP is off on Fa0/5, so the phone never learns VLAN 20", 7: "2001:db8:10::250:79ff:fe66:2202" },
     teach: "Three layers, three faults. Layer 1: a fixed end stops autonegotiation, the auto end guesses half duplex, and the half end counts late collisions. Clear the counters after the fix to see that they stay at zero. Layer 2: a voice VLAN only works if the phone learns it, through CDP (or LLDP-MED). Without CDP the phone sends untagged, into the data VLAN. Layer 3: a router sends no Router Advertisements, and hosts get no SLAAC address, until ipv6 unicast-routing is on.",
+  }),
+  // --- an IPv6-only branch behind an ISP that hands out its prefix by SLAAC ----------------------
+  hard({
+    id: "ch-ipv6-edge", title: "Challenge: an IPv6 branch on SLAAC",
+    cmds: ["ipv6 address autoconfig default", "ipv6 unicast-routing", "ipv6 route ::/0", "show ipv6 route", "show ipv6 neighbors", "traceroute", "ping6"],
+    devices: [
+      R("ISP", 12, 14, cfg("ipv6 unicast-routing", "interface g0/0", "ipv6 address 2001:db8:ffff::1/64", "ipv6 address fe80::ff link-local", "no shutdown", "exit", "ipv6 route 2001:db8::/32 g0/0 fe80::1")),
+      R("R1", 40, 14, cfg("ipv6 unicast-routing", "interface g0/1", "ipv6 address fe80::1 link-local", "ipv6 address autoconfig", "no shutdown", "interface g0/0", "ipv6 address 2001:db8:12::1/64", "ipv6 address fe80::1 link-local", "no shutdown", "exit", "ipv6 route 2001:db8:10::/64 2001:db8:12::2")),
+      R("R2", 68, 14, cfg("interface g0/1", "ipv6 address 2001:db8:12::2/64", "no shutdown", "interface g0/0", "ipv6 address 2001:db8:10::1/64", "no shutdown", "exit", "ipv6 route ::/0 g0/0 fe80::1")),
+      S("SW1", 68, 44),
+      HOST("PC1", 46, 74, "windows", { ipv6: "auto", mac: "0050.7966.3301" }),
+      HOST("PC2", 88, 74, "linux", { ipv6: "auto", mac: "0050.7966.3302" }),
+    ],
+    links: [["ISP", "g0/0", "R1", "g0/1"], ["R1", "g0/0", "R2", "g0/1"], ["R2", "g0/0", "SW1", "g0/1"], ["SW1", "fa0/1", "PC1", "fa0"], ["SW1", "fa0/2", "PC2", "fa0"]],
+    intro: "A new IPv6-only branch: the ISP advertises 2001:db8:ffff::/64 to R1, R2 serves the LAN 2001:db8:10::/64, and the PCs should configure themselves. Nothing gets out yet. ISP's server is 2001:db8:ffff::1. You may change R1 and R2.",
+    tasks: [
+      { text: "Why do PC1 and PC2 have no global IPv6 address?", choices: ["R2 does not route IPv6, so it sends no Router Advertisements", "The switch blocks RAs", "The PCs need DHCPv6", "R2's G0/0 has no link-local address"], check: (t) => need(t.reply === "R2 does not route IPv6, so it sends no Router Advertisements", "show running-config on R2: no ipv6 unicast-routing.") },
+      { text: "Get the PCs their SLAAC addresses.", check: (t) => need(t.dev("R2").ipv6Routing && t.dev("PC2").interfaces.FastEthernet0.ipv6?.length > 0, "ipv6 unicast-routing on R2.") },
+      { text: "Which address did PC2 (Linux) build?", ask: "IPv6 address", check: (t) => need(expandIpv6(t.reply.trim().split("/")[0]) === expandIpv6("2001:db8:10::250:79ff:fe66:3302"), "ip -6 addr on PC2: 2001:db8:10::/64 plus EUI-64 from 0050.7966.3302.") },
+      { text: "R1 learns its G0/1 address from the ISP but has no default route. Give it one from the same advertisement.", check: (t) => need(t.dev("R1").ipv6Routes.some((r) => r.nd && r.bits === 0) || (syncNd(t), t.dev("R1").ipv6Routes.some((r) => r.nd && r.bits === 0)), "ipv6 address autoconfig default on G0/1.") },
+      { text: "Through which next hop does R1's default route point (show ipv6 route)?", choices: ["FE80::FF", "2001:DB8:FFFF::1", "FE80::1", "::"], check: (t) => need(t.reply === "FE80::FF", "ND ::/0 [2/0] via FE80::FF: the link-local address the ISP's RA came from.") },
+      { text: "R2's default route is wrong. Fix it so R2 reaches 2001:db8:ffff::1.", check: (t) => need(fromRouter6(t.dev("R2"), expandIpv6("2001:db8:ffff::1"))?.ok, "It points out G0/0 (the LAN). The next hop fe80::1 is R1 across G0/1: no ipv6 route ::/0 g0/0 fe80::1, then ipv6 route ::/0 g0/1 fe80::1.") },
+      { text: "From PC2, ping6 the ISP's server 2001:db8:ffff::1.", check: (t) => need(t.ran("PC2", /^ping6? .*2001:db8:ffff::1\b/) && t.reach6("PC2", "2001:db8:ffff::1"), "ping6 -c 2 2001:db8:ffff::1 on PC2.") },
+      { text: "How many entries does R2's show ipv6 neighbors list for PC2?", ask: "Entries", check: (t) => need(t.ran("R2", /^show ipv6 neighbors/) && is.num(t.reply, 2), "Its global address and its link-local one (from the Router Solicitation), both with PC2's MAC.") },
+      { text: "Trace from R2 to 2001:db8:ffff::1. Which address answers hop 1?", choices: ["2001:DB8:12::1", "FE80::1", "2001:DB8:FFFF::1", "2001:DB8:10::1"], check: (t) => need(t.ran("R2", /^traceroute 2001:db8:ffff::1/) && t.reply === "2001:DB8:12::1", "R1 answers from its global address on the R1-R2 link, even though the route points at its link-local one.") },
+    ],
+    solution: {
+      PC2: ["ip -6 addr"],
+      R2: [...EN, "ipv6 unicast-routing", "no ipv6 route ::/0 g0/0 fe80::1", "ipv6 route ::/0 g0/1 fe80::1", "end"],
+      "PC2#2": ["ip -6 addr"],
+      R1: [...EN, "interface g0/1", "ipv6 address autoconfig default", "end", "show ipv6 route"],
+      "PC2#3": ["ping6 -c 2 2001:db8:ffff::1"],
+      "R2#2": ["show ipv6 neighbors", "traceroute 2001:db8:ffff::1"],
+    },
+    answers: { 0: "R2 does not route IPv6, so it sends no Router Advertisements", 2: "2001:db8:10::250:79ff:fe66:3302", 4: "FE80::FF", 7: "2", 8: "2001:DB8:12::1" },
+    teach: "IPv6 hosts and routers configure themselves from Router Advertisements, which a router sends only with ipv6 unicast-routing. ipv6 address autoconfig takes an address from the RA, and autoconfig default also takes a default route (ND, AD 2) via the RA's link-local source. Static routes may point at a link-local next hop, but then the exit interface decides which link it is on. A router answers a traceroute from its global address on the incoming link.",
   }),
 ];
