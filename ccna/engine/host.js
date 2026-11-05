@@ -346,6 +346,7 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
   if (out?.count) carry(router, exit, out.count, "out");
   if (best.code === "C") {
     const o = owner(router, ip);
+    if (o && ROUTER(o.device) && o.device !== router) return pathFrom(o.device, ip, seen, pkt, o.iface) === null ? null : [ip];
     if (o?.device.type === "phone" && !segment(o.device).some((n) => n.device === router && n.iface === exit)) return null;
     return o || router.lab?.extern?.includes(ip) ? [ip] : null;
   }
@@ -384,7 +385,8 @@ export function fromRouter(router, ip, kind = ICMP, from = null) {
   if (path === null) {
     const d = seen.drop;
     const unreach = d && d.router !== router && d.at && !d.quiet && pathFrom(d.router, src) !== null ? { at: d.at, why: d.why } : null;
-    return { ok: false, hops: upTo(partial(router, ip, src), unreach), arp: first, src, unreach };
+    const cut = unreach ?? (d && d.router !== router && d.at ? { at: d.at, why: d.why } : null);
+    return { ok: false, hops: upTo(partial(router, ip, src), cut), arp: first, src, unreach };
   }
   if (seen.exit) return { ok: true, hops: path, arp: first, src };
   const o = owner(router, ip);
@@ -836,9 +838,11 @@ function netUnreachable(dev, ip) {
 }
 // the routers a PC's trace gets answers from before the break
 function hopsBefore(dev, ip, u) {
+  const d = dev.host.atGateway && dev.host.drop;
+  const cut = u ?? (d?.at ? { at: d.at, why: d.why } : null);
   const r = gatewayRouter(dev);
   if (!dev.host.gw || !reaches(dev, dev.host.gw)) return [];
-  return upTo([dev.host.gw, ...(r ? partial(r, ip, own(dev).ip) : [])], u);
+  return upTo([dev.host.gw, ...(r ? partial(r, ip, own(dev).ip) : [])], cut);
 }
 
 function pingWin(dev, target, count) {

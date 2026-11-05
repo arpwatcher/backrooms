@@ -45,6 +45,23 @@ function interfaces(dev, name) {
         const duplex = up ? (m.duplex === "full" ? "Full-duplex" : "Half-duplex") : f.duplex === "auto" ? "Auto-duplex" : f.duplex === "full" ? "Full-duplex" : "Half-duplex";
         lines.push(`  Keepalive set (10 sec)`, `  ${duplex}, ${speed}, media type is ${f.name.startsWith("Gig") ? "10/100/1000BaseTX" : "10/100BaseTX"}`, "  input flow-control is off, output flow-control is unsupported", "  ARP type: ARPA, ARP Timeout 04:00:00");
       }
+      // a serial link: what crossed it, and the modem control signals
+      if (f.name.startsWith("Serial") && !isSub(f.name)) {
+        const c = counters(dev, f);
+        const up = st === "up";
+        lines.push(
+          `  Keepalive set (10 sec)`, `  Last input ${c.in ? "00:00:02" : "never"}, output ${c.out ? "00:00:01" : "never"}, output hang never`,
+          `  Last clearing of "show interface" counters ${c.cleared ? clock(Date.now() - c.cleared) : "never"}`,
+          "  Input queue: 0/75/0/0 (size/max/drops/flushes); Total output drops: 0", "  Queueing strategy: fifo", "  Output queue: 0/40 (size/max)",
+          "  5 minute input rate 0 bits/sec, 0 packets/sec", "  5 minute output rate 0 bits/sec, 0 packets/sec",
+          `     ${c.in} packets input, ${c.inBytes} bytes, 0 no buffer`, `     Received ${c.cleared ? 0 : Math.round(c.in * 0.6)} broadcasts (0 IP multicasts)`,
+          "     0 runts, 0 giants, 0 throttles", "     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort",
+          `     ${c.out} packets output, ${c.outBytes} bytes, 0 underruns`, `     0 output errors, 0 collisions, ${c.resets} interface resets`,
+          "     0 unknown protocol drops", "     0 output buffer failures, 0 output buffers swapped out", `     ${c.cleared ? 0 : 1} carrier transitions`,
+          up ? "     DCD=up  DSR=up  DTR=up  RTS=up  CTS=up" : "     DCD=down  DSR=down  DTR=up  RTS=up  CTS=down",
+        );
+        return lines.join("\n");
+      }
       if (!eth) {
         lines.push("  5 minute input rate 0 bits/sec, 0 packets/sec", "     0 packets input, 0 bytes, 0 no buffer", "     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored", "     0 packets output, 0 bytes, 0 underruns", "     0 output errors, 0 collisions, 0 interface resets");
         return lines.join("\n");

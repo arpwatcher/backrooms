@@ -76,7 +76,8 @@ export function linkMode(dev, f) {
 const seed = (dev, f) => [...`${dev.hostname}${f.name}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7);
 export function counters(dev, f) {
   const c = ((dev.ctr ??= {})[f.name] ??= { in: 0, inBytes: 0, out: 0, outBytes: 0, crc: 0, runts: 0, coll: 0, late: 0, resets: 0, cleared: null });
-  if (c.cleared || status(dev, f)[1] !== "up" || !topSpeed(f)) return { ...c, mcastIn: 0, bcastIn: 0 };
+  // serial links count too (keepalives and routing updates before a clear)
+  if (c.cleared || status(dev, f)[1] !== "up" || !(topSpeed(f) || f.name.startsWith("Serial"))) return { ...c, mcastIn: 0, bcastIn: 0 };
   const h = seed(dev, f);
   const m = linkMode(dev, f);
   const base = { in: 2100 + (h % 700), out: 5600 + (h % 1300), resets: 1 };
