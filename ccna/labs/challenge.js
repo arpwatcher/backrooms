@@ -943,4 +943,38 @@ export default [
     answers: { 0: "R2 does not route IPv6, so it sends no Router Advertisements", 2: "2001:db8:10::250:79ff:fe66:3302", 4: "FE80::FF", 7: "2", 8: "2001:DB8:12::1" },
     teach: "IPv6 hosts and routers configure themselves from Router Advertisements, which a router sends only with ipv6 unicast-routing. ipv6 address autoconfig takes an address from the RA, and autoconfig default also takes a default route (ND, AD 2) via the RA's link-local source. Static routes may point at a link-local next hop, but then the exit interface decides which link it is on. A router answers a traceroute from its global address on the incoming link.",
   }),
+  // --- a traceroute that stops halfway while pings work -------------------------------------------
+  hard({
+    id: "ch-trace-ticket", title: "Challenge: pings work, traceroute does not",
+    cmds: ["traceroute", "tracert", "show access-lists", "no ip unreachables", "ip unreachables"],
+    devices: [
+      HOST("PC1", 8, 50, "linux", { ip: "10.1.1.10/24", gateway: "10.1.1.1" }),
+      R("R1", 28, 22, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "exit", "ip route 0.0.0.0 0.0.0.0 10.0.12.2")),
+      R("R2", 52, 22, cfg("access-list 110 deny udp any any range 33434 33534", "access-list 110 permit ip any any", "interface g0/1", "ip address 10.0.12.2 255.255.255.252", "ip access-group 110 in", "no ip unreachables", "no shutdown", "interface g0/2", "ip address 10.0.23.1 255.255.255.252", "no shutdown", "exit", "ip route 10.1.1.0 255.255.255.0 10.0.12.1", "ip route 10.3.3.0 255.255.255.0 10.0.23.2")),
+      R("R3", 76, 22, cfg("interface g0/2", "ip address 10.0.23.2 255.255.255.252", "no shutdown", "interface g0/0", "ip address 10.3.3.1 255.255.255.0", "no shutdown", "exit", "ip route 0.0.0.0 0.0.0.0 10.0.23.1")),
+      HOST("PC3", 94, 50, "windows", { ip: "10.3.3.10/24", gateway: "10.3.3.1" }),
+    ],
+    links: [["PC1", "fa0", "R1", "g0/0"], ["R1", "g0/1", "R2", "g0/1"], ["R2", "g0/2", "R3", "g0/2"], ["R3", "g0/0", "PC3", "fa0"]],
+    intro: "The monitoring team says PC3 (10.3.3.10) is down because their traceroute from PC1 never gets there. The user on PC3 says everything works. Find out who is right, and why.",
+    tasks: [
+      { text: "Ping 10.3.3.10 from PC1. Does it answer?", choices: ["Yes", "No"], check: (t) => need(t.ran("PC1", /^ping .*10\.3\.3\.10/) && t.reply === "Yes", "ping -c 2 10.3.3.10 on PC1: replies come back.") },
+      { text: "Now traceroute 10.3.3.10 from PC1. What does the line after hop 1 show?", choices: ["* * *", "10.0.12.2 !X", "10.0.12.2 !N", "10.3.3.10"], check: (t) => need(t.ran("PC1", /^traceroute .*10\.3\.3\.10/) && t.reply === "* * *", "Hop 1 (R1) answers, then nothing: the probes die somewhere after R1 without a word.") },
+      { text: "Which entry on R2 counts PC1's probes (show access-lists)?", choices: ["deny udp any any range 33434 33534", "permit ip any any", "Neither: they never reach R2", "The implicit deny"], check: (t) => need(t.ran("R2", /^show access-lists/) && t.reply === "deny udp any any range 33434 33534", "Linux (and IOS, macOS) traceroute probes are UDP to ports from 33434: line 10 matches them. Pings are ICMP and pass on line 20.") },
+      { text: "R2 drops them with an ACL, yet PC1 gets no !X (administratively prohibited). Why?", choices: ["no ip unreachables on R2's G0/1", "The ACL has no log keyword", "ICMP is blocked on R1", "Linux never shows !X"], check: (t) => need(t.reply === "no ip unreachables on R2's G0/1", "show running-config interface g0/1 on R2: the router drops silently, so traceroute only sees timeouts.") },
+      { text: "Turn the unreachables back on, trace again, and say what PC1 sees for hop 2 now.", choices: ["10.0.12.2 !X", "* * *", "10.0.23.2", "10.0.12.2 !N"], check: (t) => need(!t.f("R2", "g0/1").noUnreach && t.reply === "10.0.12.2 !X", !t.f("R2", "g0/1").noUnreach ? "R2 answers with administratively prohibited from 10.0.12.2: traceroute marks it !X." : "ip unreachables on R2's G0/1 first.") },
+      { text: "Would tracert from a Windows PC have been stopped by that entry?", choices: ["No: Windows tracert sends ICMP echoes, not UDP", "Yes: every traceroute is UDP", "Yes: tracert uses TCP", "Only with a timeout"], check: (t) => need(t.reply === "No: Windows tracert sends ICMP echoes, not UDP", "tracert uses ICMP echo requests with growing TTLs, so line 20 lets them through, the same as the ping.") },
+      { text: "The traces are allowed after all: let UDP 33434-33534 through R2 again, keeping the rest of ACL 110.", check: (t) => need(t.acl("R2", 110) && !t.acl("R2", 110).entries.some((e) => e.action === "deny" && e.proto === "udp") && t.f("R2", "g0/1").aclIn === "110", "ip access-list extended 110, then no 10 (or remove that line), and leave the ACL on G0/1.") },
+      { text: "Trace from PC1 once more. Which address answers hop 3?", ask: "Address", check: (t) => need(t.ran("PC1", /^traceroute .*10\.3\.3\.10/) && is.ip(t.reply, "10.0.23.2"), "Each router answers from the address it received the probe on: R1 10.1.1.1, R2 10.0.12.2, R3 10.0.23.2, then PC3 itself.") },
+    ],
+    solution: {
+      PC1: ["ping -c 2 10.3.3.10", "traceroute 10.3.3.10"],
+      R2: ["enable", "show access-lists", "show running-config interface g0/1", "configure terminal", "interface g0/1", "ip unreachables", "end"],
+      "PC1#2": ["traceroute 10.3.3.10"],
+      "R2#2": ["configure terminal", "ip access-list extended 110", "no 10", "end", "show access-lists"],
+      "PC1#3": ["traceroute 10.3.3.10"],
+    },
+    answers: { 0: "Yes", 1: "* * *", 2: "deny udp any any range 33434 33534", 3: "no ip unreachables on R2's G0/1", 4: "10.0.12.2 !X", 5: "No: Windows tracert sends ICMP echoes, not UDP", 7: "10.0.23.2" },
+    failingPings: true,
+    teach: "ping and traceroute are different traffic: ping is ICMP echo, IOS/Linux/macOS traceroute sends UDP probes to ports from 33434 with growing TTLs (Windows tracert uses ICMP echoes). An ACL can pass one and drop the other. A router that drops a packet answers with ICMP unreachable (!X for an ACL, !N for no route) unless no ip unreachables is set on the interface the packet came in on; then the trace only shows * * *. show access-lists tells which line matched.",
+  }),
 ];
