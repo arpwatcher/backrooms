@@ -62,9 +62,9 @@ const ICONS = {
 
 const SCALE = 2.2;
 // half the icon's size once scaled, for placing lights where the cable leaves it
-// (below the icon the name, and the address if any, count as part of it)
+// (below the icon the name, and the address or DHCP if any, count as part of it)
 const RX = 30 * SCALE, RY = 22 * SCALE;
-const edge = (ux, uy, d) => 1 / Math.hypot(ux / RX, uy / (uy > 0 ? 26 * SCALE + (d.ip || d.os ? 50 : 26) : RY));
+const edge = (ux, uy, d) => 1 / Math.hypot(ux / RX, uy / (uy > 0 ? 26 * SCALE + (d.ip || d.os || d.dhcp ? 50 : 26) : RY));
 
 // a viewBox around the devices, padded for labels, between 5:3 and 5:4 so
 // tall topologies are not shrunk to nothing; never so small that a
