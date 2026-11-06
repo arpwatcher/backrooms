@@ -28,7 +28,7 @@ for (const def of LABS) {
 
 // a ping, traceroute or session in a model answer has to work, unless the
 // lab's point is to watch one fail first
-const failed = /Destination host unreachable|Destination Host Unreachable|Host is down|100\.0% packet loss|Success rate is 0|\n {2}\d+ {2}\* {2}\* {2}\*|% Connection (refused|timed out)|Received = 0|100% packet loss|Request timed out|port 22: Connection/;
+const failed = /Destination host unreachable|Destination Host Unreachable|Host is down|100\.0% packet loss|Success rate is 0|\n {2}\d+ {2}\* {2}\* {2}\*|% Connection (refused|timed out)|Received = 0|100% packet loss|port 22: Connection/;
 for (const def of LABS) {
   if (def.failingPings) continue;
   test(`lab ${def.id}: the pings in the answer get their replies`, () => {

@@ -393,15 +393,16 @@ export function fromRouter(router, ip, kind = ICMP, from = null) {
   const first = best.code === "C" ? ip : best.via;
   const exit = best.out ?? Object.values(router.interfaces).find((f) => f.ip && f.mask && first && network(first, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)))?.name;
   const src = from ?? router.interfaces[exit]?.ip;
+  const arp = exit?.startsWith("Serial") ? null : first;
   const seen = new Set();
   const path = pathFrom(router, ip, seen, kind.go(src, ip, router));
   if (path === null) {
     const d = seen.drop;
     const unreach = d && d.router !== router && d.at && !d.quiet && pathFrom(d.router, src) !== null ? { at: d.at, why: d.why } : null;
     const cut = unreach ?? (d && d.router !== router && d.at ? { at: d.at, why: d.why } : null);
-    return { ok: false, hops: upTo(partial(router, ip, src), cut), arp: first, src, unreach };
+    return { ok: false, hops: upTo(partial(router, ip, src), cut), arp, src, unreach };
   }
-  if (seen.exit) return { ok: true, hops: path, arp: first, src };
+  if (seen.exit) return { ok: true, hops: path, arp, src };
   const o = owner(router, ip);
   const target = o?.device;
   let ok = true;
@@ -419,7 +420,7 @@ export function fromRouter(router, ip, kind = ICMP, from = null) {
       ok = Boolean(gw && ROUTER(gw.device) && pathFrom(gw.device, src, new Set(), reply, gw.iface) !== null);
     }
   }
-  return { ok, hops: ok ? path : partial(router, ip, src), arp: first, src };
+  return { ok, hops: ok ? path : partial(router, ip, src), arp, src };
 }
 // a Layer 2 switch sends from its management SVI, like a host: straight to
 // its own subnet, through ip default-gateway to the rest
@@ -865,20 +866,66 @@ function hopsBefore(dev, ip, u) {
   return upTo([dev.host.gw, ...(r ? partial(r, ip, own(dev).ip) : [])], cut);
 }
 
+// a router on the way that has not ARPed for its next hop yet drops the
+// first echo while it waits: the first router (1 = the gateway) that does,
+// or 0. It ARPs as it goes, so the next ping loses nothing.
+function arpGap(dev, ip, commit, stopAt = null) {
+  if (local(dev, ip)) return 0;
+  const hops = hopsTo(dev, ip);
+  let gap = 0;
+  for (let k = 0; k < hops.length - 1; k++) {
+    const r = owner(dev, hops[k])?.device;
+    // a router that dropped the packet never forwarded it, so it ARPed for nothing
+    if (stopAt && r === stopAt) break;
+    if (!r || !ROUTER(r)) continue;
+    const next = hops[k + 1];
+    const out = Object.values(r.interfaces).find((x) => x.ip && x.mask && network(x.ip, maskBits(x.mask)) === network(next, maskBits(x.mask)));
+    if (out?.name.startsWith("Serial")) continue;
+    if (!(r.arped ?? []).includes(next) && !r.arpLearned?.[next]) {
+      if (!gap) gap = k + 1;
+      if (commit) {
+        (r.arped ??= []).push(next);
+        // the router it ARPed learns it back from the request
+        const o = owner(dev, next);
+        const mine = Object.values(r.interfaces).find((x) => x.ip && x.mask && network(x.ip, maskBits(x.mask)) === network(next, maskBits(x.mask)));
+        if (o && ROUTER(o.device) && mine) (o.device.arpLearned ??= {})[mine.ip] = { mac: r.mac, iface: o.iface.name };
+      }
+    }
+  }
+  return gap;
+}
+// n echoes of which the first dies at router gap: the routers before it see
+// all n, the one that drops it receives all n but sends n - 1, and every one
+// after it, and the replies, count n - 1
+const lossy = (n, gap) => ({
+  go: (...a) => ({ ...ICMP.go(...a), count: n, countAt: (s, dir) => { const i = s + 1; return !gap || i < gap || (i === gap && dir === "in") ? n : n - 1; } }),
+  back: (...a) => ({ ...ICMP.back(...a), count: gap ? n - 1 : n }),
+});
+// ping from a PC: the path first (did it work, and does a router on it still
+// have to ARP), then the echoes themselves
+function pcPing(dev, ip, count) {
+  const gap = count > 1 ? arpGap(dev, ip, false) : 0;
+  const ok = reaches(dev, ip, true, lossy(count, gap));
+  // the ARPs on the way happen whether or not the ping gets through
+  arpGap(dev, ip, true, ok ? null : dev.host.drop?.router ?? null);
+  return { ok, lost: ok && gap ? 1 : 0 };
+}
+
 function pingWin(dev, target, count) {
   const r = lookup(dev, target);
   if (r.error) return `Ping request could not find host ${target}. Please check the name and try again.`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return `\nPinging ${r.ip} with 32 bytes of data:\n${"PING: transmit failed. General failure.\n".repeat(count)}\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = 0, Lost = ${count} (100% loss),`;
-  const ok = reaches(dev, r.ip, true, counted(ICMP, count));
+  const { ok, lost } = pcPing(dev, r.ip, count);
   const head = r.name ? `\nPinging ${r.name} [${r.ip}] with 32 bytes of data:` : `\nPinging ${r.ip} with 32 bytes of data:`;
   // Windows counts an unreachable answer as received (an ACL's
   // administratively prohibited is left as a timeout here)
   if (!ok && arpFails(dev, r.ip)) return [head, ...Array(count).fill(`Reply from ${f.ip}: Destination host unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
   const u = !ok && netUnreachable(dev, r.ip);
   if (u?.why === "route") return [head, ...Array(count).fill(`Reply from ${u.at}: Destination net unreachable.`), `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${count}, Lost = 0 (0% loss),`].join("\n");
-  const lines = Array.from({ length: count }, (_, i) => (ok ? `Reply from ${r.ip}: bytes=32 time${i === 0 ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
-  const stats = `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${ok ? count : 0}, Lost = ${ok ? 0 : count} (${ok ? 0 : 100}% loss),`;
+  const lines = Array.from({ length: count }, (_, i) => (ok && i >= lost ? `Reply from ${r.ip}: bytes=32 time${i === lost ? "=2ms" : "<1ms"} TTL=${ttl(dev, r.ip)}` : "Request timed out."));
+  const got = ok ? count - lost : 0;
+  const stats = `\nPing statistics for ${r.ip}:\n    Packets: Sent = ${count}, Received = ${got}, Lost = ${count - got} (${Math.round(((count - got) * 100) / count)}% loss),`;
   return [head, ...lines, stats + (ok ? "\nApproximate round trip times in milli-seconds:\n    Minimum = 0ms, Maximum = 2ms, Average = 0ms" : "")].join("\n");
 }
 
@@ -1070,7 +1117,7 @@ function pingUnix(dev, target, count, mac) {
   if (r.error) return mac ? `ping: cannot resolve ${target}: Unknown host` : `ping: ${target}: ${r.error === "noserver" ? "Temporary failure in name resolution" : "Name or service not known"}`;
   const f = own(dev);
   if (noRoute(dev, r.ip)) return mac ? `PING ${r.ip} (${r.ip}): 56 data bytes\nping: sendto: No route to host\n\n--- ${r.ip} ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss` : "ping: connect: Network is unreachable";
-  const ok = reaches(dev, r.ip, true, counted(ICMP, count));
+  const { ok, lost } = pcPing(dev, r.ip, count);
   const shown = r.name ? `${r.name} (${r.ip})` : `${r.ip} (${r.ip})`;
   if (!ok && arpFails(dev, r.ip)) {
     if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}${i < count - 1 ? "\nping: sendto: Host is down" : ""}`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 packets received, 100.0% packet loss`].join("\n");
@@ -1081,9 +1128,12 @@ function pingUnix(dev, target, count, mac) {
   const why = u && (u.why === "route" ? "Destination Net Unreachable" : mac ? "Communication prohibited by filter" : "Packet filtered");
   if (u && mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...Array.from({ length: count }, (_, i) => `92 bytes from ${u.at}: ${why}\nVr HL TOS  Len   ID Flg  off TTL Pro  cks      Src      Dst\n 4  5  00 5400 ${(0x6a1c + i).toString(16)}   0 0000  3f  01 ${(0xb12f - i).toString(16)} ${f.ip}  ${r.ip}\n`), `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 packets received, 100.0% packet loss`].join("\n");
   if (u) return [`PING ${shown} 56(84) bytes of data.`, ...Array.from({ length: count }, (_, i) => `From ${u.at} icmp_seq=${i + 1} ${why}`), "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, 0 received, +${count} errors, 100% packet loss, time ${count === 1 ? 0 : (count - 1) * 1000 + 3}ms`].join("\n");
-  const replies = ok ? Array.from({ length: count }, (_, i) => (mac ? `64 bytes from ${r.ip}: icmp_seq=${i} ttl=${ttl(dev, r.ip)} time=1.${2 + i}04 ms` : `64 bytes from ${r.name ? shown : r.ip}: icmp_seq=${i + 1} ttl=${ttl(dev, r.ip)} time=1.${2 + i}4 ms`)) : mac ? Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}`) : [];
-  if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${ok ? count : 0} packets received, ${ok ? "0.0" : "100.0"}% packet loss`, ...(ok ? ["round-trip min/avg/max/stddev = 1.204/1.354/1.504/0.112 ms"] : [])].join("\n");
-  return [`PING ${shown} 56(84) bytes of data.`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${ok ? count : 0} received, ${ok ? 0 : 100}% packet loss, time ${count === 1 ? 0 : (count - 1) * 1000 + 3}ms`, ...(ok ? [`rtt min/avg/max/mdev = 1.214/1.364/1.514/0.112 ms`] : [])].join("\n");
+  // the first echo lost to a router's ARP: Linux skips its sequence number, macOS reports the timeout
+  const replies = ok ? Array.from({ length: count }, (_, i) => (i < lost ? (mac ? `Request timeout for icmp_seq ${i}` : null) : mac ? `64 bytes from ${r.ip}: icmp_seq=${i} ttl=${ttl(dev, r.ip)} time=1.${2 + i}04 ms` : `64 bytes from ${r.name ? shown : r.ip}: icmp_seq=${i + 1} ttl=${ttl(dev, r.ip)} time=1.${2 + i}4 ms`)).filter(Boolean) : mac ? Array.from({ length: count }, (_, i) => `Request timeout for icmp_seq ${i}`) : [];
+  const got = ok ? count - lost : 0;
+  const loss = Math.round(((count - got) * 1000) / count) / 10;
+  if (mac) return [`PING ${r.name ?? r.ip} (${r.ip}): 56 data bytes`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${got} packets received, ${loss.toFixed(1)}% packet loss`, ...(got ? ["round-trip min/avg/max/stddev = 1.204/1.354/1.504/0.112 ms"] : [])].join("\n");
+  return [`PING ${shown} 56(84) bytes of data.`, ...replies, "", `--- ${r.name ?? r.ip} ping statistics ---`, `${count} packets transmitted, ${got} received, ${Math.round(loss)}% packet loss, time ${count === 1 ? 0 : (count - 1) * 1000 + 3}ms`, ...(got ? [`rtt min/avg/max/mdev = 1.214/1.364/1.514/0.112 ms`] : [])].join("\n");
 }
 
 function traceUnix(dev, target, mac) {
