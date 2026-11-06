@@ -324,6 +324,7 @@ export function ospfCost(dev, f) {
 // a static route is in use only while its exit is up: the interface it
 // names, or a connected subnet its next hop is on (as in routeTable)
 export function staticUsable(d, x) {
+  if (x.out === "Null0") return true;
   if (x.out) return Boolean(d.interfaces[x.out]) && status(d, d.interfaces[x.out])[1] === "up";
   return Object.values(d.interfaces).some((f) => f.ip && f.mask && status(d, f)[1] === "up" && network(x.via, maskBits(f.mask)) === network(f.ip, maskBits(f.mask)));
 }

@@ -1,4 +1,4 @@
-import { lab, R, PC, ISP, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, HOST, ISP, cfg, EN, need } from "./kit.js";
 
 const M = "routing";
 // R1 - R2 - R3 in a line, LANs on the ends
@@ -73,6 +73,27 @@ export default [
     tasks: [{ text: "On R1, add one summary route that covers exactly the four networks, through 10.0.12.2.", check: (t) => need(has(t, "R1", "172.16.0.0", "255.255.252.0", "10.0.12.2"), "172.16.0-3.0 fit in 172.16.0.0/22: ip route 172.16.0.0 255.255.252.0 10.0.12.2.") }],
     solution: { R1: [...EN, "ip route 172.16.0.0 255.255.252.0 10.0.12.2"] },
     teach: "To summarise, find the common bits: 0-3 in the third octet is 000000xx, so 16 + 6 bits = /22 = 255.255.252.0.",
+  }),
+  lab({
+    id: "null0-route", module: M, title: "Discard route to Null0",
+    cmds: ["ip route <net> <mask> null0", "show ip route"],
+    devices: [
+      R("R1", 20, 28, cfg("interface g0/0", "ip address 10.1.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.12.1 255.255.255.252", "no shutdown", "ip route 172.16.0.0 255.255.252.0 10.0.12.2")),
+      R("R2", 70, 28, cfg("interface g0/1", "ip address 10.0.12.2 255.255.255.252", "no shutdown", "interface lo0", "ip address 172.16.0.1 255.255.255.0", "interface lo1", "ip address 172.16.1.1 255.255.255.0", "interface lo2", "ip address 172.16.2.1 255.255.255.0", "ip route 0.0.0.0 0.0.0.0 10.0.12.1")),
+      HOST("PC1", 20, 56, "windows", { ip: "10.1.1.10/24", gateway: "10.1.1.1" }),
+    ],
+    links: [["R1", "g0/1", "R2", "g0/1"], ["R1", "g0/0", "PC1", "fa0"]],
+    intro: "R1 sends the whole summary 172.16.0.0/22 to R2, but R2 only has 172.16.0.0/24 to 172.16.2.0/24. A packet for 172.16.3.x reaches R2, matches nothing but its default route and goes straight back to R1. A discard route on R2 ends that.",
+    tasks: [
+      { text: "On R2, send the summary 172.16.0.0/22 to Null0.", check: (t) => need(has(t, "R2", "172.16.0.0", "255.255.252.0", "Null0"), "ip route 172.16.0.0 255.255.252.0 null0 on R2.") },
+      { text: "How does show ip route on R2 list the new route?", choices: ["S 172.16.0.0/22 [1/0] is directly connected, Null0", "S 172.16.0.0/22 [1/0] via 10.0.12.1", "C 172.16.0.0/22 is directly connected, Null0", "It is not listed: Null0 routes stay out of the table"], check: (t) => need(t.ran("R2", /^(do )?show ip route/) && t.reply === "S 172.16.0.0/22 [1/0] is directly connected, Null0", "A static route with an exit interface shows as directly connected. Null0 is always up, so the route is always in the table.") },
+      { text: "Ping 172.16.3.5 from PC1. What comes back?", choices: ["Reply from 10.0.12.2: Destination net unreachable.", "Request timed out.", "Reply from 10.1.1.1: Destination host unreachable.", "Reply from 172.16.3.5: bytes=32"], check: (t) => need(t.ran("PC1", /^ping 172\.16\.3\.5/) && t.reply === "Reply from 10.0.12.2: Destination net unreachable.", "R2 matches the Null0 route, drops the packet and answers net unreachable from the interface it came in on.") },
+      { text: "Ping 172.16.1.1 from PC1. It still works: the /24 is a longer match than the /22 to Null0.", check: (t) => need(t.ran("PC1", /^ping 172\.16\.1\.1/) && t.reach("PC1", "172.16.1.1"), "Ping 172.16.1.1 from PC1; the connected /24 on R2 wins over the /22.") },
+    ],
+    solution: { R2: [...EN, "ip route 172.16.0.0 255.255.252.0 null0", "end", "show ip route"], PC1: ["ping 172.16.3.5", "ping 172.16.1.1"] },
+    answers: { 1: "S 172.16.0.0/22 [1/0] is directly connected, Null0", 2: "Reply from 10.0.12.2: Destination net unreachable." },
+    failingPings: true,
+    teach: "Null0 is a virtual interface that is always up and throws away whatever is routed to it. A summary pointed at Null0 on the router that owns the summary stops packets for unused parts of it from looping. Longest match still sends traffic for the subnets that exist to them.",
   }),
   lab({
     id: "sim-static", module: M, title: "Sim: full routing with static routes", kind: "sim",

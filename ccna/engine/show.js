@@ -300,6 +300,7 @@ export function routeTable(dev) {
     }
   }
   const usable = (r) => {
+    if (r.out === "Null0") return true;
     if (r.out) return status(dev, dev.interfaces[r.out])[1] === "up";
     return routes.some((c) => c.code === "C" && network(r.via, c.bits) === c.net);
   };

@@ -915,7 +915,8 @@ def("config", "ip route <net:ip> <mask:mask> (<via:ip> | <out:iface> [<via2:ip>]
   const bits = maskBits(c.args.mask);
   if (bits < 0) fail("%Inconsistent address and mask");
   if (network(c.args.net, bits) !== c.args.net) fail("%Inconsistent address and mask");
-  if (c.args.out && !c.dev.interfaces[c.args.out]) fail("% Invalid input detected at '^' marker.");
+  // Null0 is always there and always up: a discard route
+  if (c.args.out && c.args.out !== "Null0" && !c.dev.interfaces[c.args.out]) fail("% Invalid input detected at '^' marker.");
   const r = { net: c.args.net, mask: c.args.mask, via: c.args.via ?? c.args.via2 ?? null, out: c.args.out ?? null, ad: c.args.ad ?? 1 };
   c.dev.routes = c.dev.routes.filter((x) => routeKey(x) !== routeKey(r));
   c.dev.routes.push(r);

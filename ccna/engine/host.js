@@ -384,6 +384,8 @@ function pathFrom(router, ip, seen = new Set(), pkt = null, inIf = null) {
   seen.add(router);
   const best = routeTable(router).filter((r) => r.code !== "L" && network(ip, r.bits) === r.net).sort((a, b) => b.bits - a.bits)[0];
   if (!best) return dropped(seen, router, inIf, "route");
+  // a route to Null0 throws the packet away (and answers unreachable, as for no route)
+  if (best.out === "Null0") return dropped(seen, router, inIf, "route");
   const exit = exitOf(router, best, ip);
   const out = at(pkt, seen.size - 1, "out");
   if (pkt && pkt.from !== router && exit?.aclOut && !passes(router, exit.aclOut, out)) return dropped(seen, router, inIf, "acl-out");

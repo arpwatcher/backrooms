@@ -11,6 +11,7 @@ export const TYPES = [
   ["Vlan", "Vl"],
   ["Port-channel", "Po"],
   ["Tunnel", "Tu"],
+  ["Null", "Nu"],
 ];
 
 // which full type a typed prefix means (null if none or ambiguous); IOS
@@ -21,7 +22,7 @@ export function typeOf(prefix) {
   const hits = TYPES.filter(([full]) => full.toLowerCase().startsWith(p));
   if (hits.length === 1) return hits[0][0];
   // exact short forms that are otherwise ambiguous
-  const exact = { e: "Ethernet", g: "GigabitEthernet", f: "FastEthernet", s: "Serial", l: "Loopback", v: "Vlan", p: "Port-channel", t: "Tunnel" };
+  const exact = { e: "Ethernet", g: "GigabitEthernet", f: "FastEthernet", s: "Serial", l: "Loopback", v: "Vlan", p: "Port-channel", t: "Tunnel", n: "Null" };
   return exact[p] ?? null;
 }
 
