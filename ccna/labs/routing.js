@@ -93,4 +93,24 @@ export default [
     },
     teach: "The most common trap: traffic gets there but cannot come back. Every router on the path must know both ends. A router's own ping is sent from its exit interface, here 10.0.12.1, so it also needs the far router to know that link; ping with source g0/0 tests what PC1 would see.",
   }),
+  lab({
+    id: "sim-serial-clock", module: M, title: "Sim: a serial link that stays down", kind: "sim",
+    cmds: ["show ip interface brief", "show controllers", "clock rate", "ping"],
+    devices: [
+      R("R1", 25, 28, cfg("interface s0/0/0", "ip address 172.16.0.1 255.255.255.252", "no shutdown")),
+      R("R2", 75, 28, cfg("interface s0/0/0", "ip address 172.16.0.2 255.255.255.252", "no shutdown")),
+    ],
+    links: [["R1", "s0/0/0", "R2", "s0/0/0"]],
+    intro: "A new serial cable joins R1 and R2 back to back. Both interfaces are configured and enabled, yet R1 cannot ping R2.",
+    tasks: [
+      { text: "What does show ip interface brief say about R1's Serial0/0/0?", choices: ["up / down", "up / up", "administratively down / down", "down / down"], check: (t) => need(t.ran("R1", /^show ip interface brief/) && t.reply === "up / down", "The cable is there (status up) but the line protocol does not come up.") },
+      { text: "Which router has the DCE end of the cable (show controllers s0/0/0)?", choices: ["R1", "R2"], check: (t) => need(t.ran("R1", /^show controllers /) && t.reply === "R1", "R1 reports DCE V.35, no clock; R2 reports DTE, clocks stopped.") },
+      { text: "Bring the line protocol up with a clock of 64000 bit/s.", check: (t) => need(t.f("R1", "s0/0/0").clockRate === 64000 && t.up("R1", "s0/0/0"), "clock rate 64000 under interface s0/0/0 on the DCE end, R1.") },
+      { text: "Ping R2 (172.16.0.2) from R1.", check: (t) => need(t.ran("R1", /^ping 172\.16\.0\.2$/), "ping 172.16.0.2") },
+      { text: "Would clock rate on R2 have fixed it?", choices: ["No: only the DCE end supplies the clock", "Yes: either end can", "Yes, but only with bandwidth set too", "No: serial links never need a clock"], check: (t) => need(t.reply === "No: only the DCE end supplies the clock", "The DCE end clocks the line; R2 is DTE and takes its timing from R1.") },
+    ],
+    solution: { R1: ["enable", "show ip interface brief", "show controllers s0/0/0", "configure terminal", "interface s0/0/0", "clock rate 64000", "end", "ping 172.16.0.2"] },
+    answers: { 0: "up / down", 1: "R1", 4: "No: only the DCE end supplies the clock" },
+    teach: "A back-to-back serial cable has a DCE end and a DTE end. The DCE end must supply the clock (clock rate <bps>), or the line protocol stays down: status up, protocol down. show controllers serial says which end a router has (DCE V.35 / DTE V.35) and whether a clock is set or detected.",
+  }),
 ];

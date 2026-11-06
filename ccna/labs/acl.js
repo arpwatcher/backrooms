@@ -1,4 +1,4 @@
-import { lab, R, PC, SRV, cfg, EN, need, is } from "./kit.js";
+import { lab, R, PC, SRV, HOST, cfg, EN, need, is } from "./kit.js";
 import { fromRouter, pings } from "../engine/host.js";
 
 const M = "acl";
@@ -242,5 +242,27 @@ export default [
     answers: { 0: "U.U.U", 1: "Yes", 2: "R1's echo replies come back in on G0/0 and match the deny", 4: "No: an outbound ACL does not filter traffic the router itself sends" },
     failingPings: true,
     teach: "An inbound ACL checks every packet that arrives on the interface, including those addressed to the router itself, and the replies to the router's own pings. An outbound ACL checks only packets the router forwards out that interface, not ones it originates. To stop pings to the router without breaking its own, deny icmp ... echo and leave echo-reply alone.",
+  }),
+  lab({
+    id: "acl-log", module: M, title: "Logging ACL matches",
+    cmds: ["access-list ... log", "show logging", "show access-lists"],
+    devices: [
+      R("R1", 50, 25, cfg("interface g0/0", "ip address 10.0.10.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 10.0.20.1 255.255.255.0", "no shutdown")),
+      HOST("PC1", 15, 55, "linux", { ip: "10.0.10.11/24", gateway: "10.0.10.1" }),
+      SRV("SRV1", 85, 55, "10.0.20.80/24", "10.0.20.1"),
+    ],
+    links: [["R1", "g0/0", "PC1", "fa0"], ["R1", "g0/1", "SRV1", "fa0"]],
+    intro: "Security wants a record every time someone on the user LAN pings the server farm, and the pings blocked.",
+    tasks: [
+      { text: "ACL 110: deny ICMP echo from 10.0.10.0/24 to 10.0.20.0/24 and log it, then permit everything else.", check: (t) => { const e = t.acl("R1", 110)?.entries ?? []; return need(e[0]?.action === "deny" && e[0].proto === "icmp" && e[0].icmp === "echo" && e[0].log && e[1]?.action === "permit" && e[1].proto === "ip", "access-list 110 deny icmp 10.0.10.0 0.0.0.255 10.0.20.0 0.0.0.255 echo log, then access-list 110 permit ip any any."); } },
+      { text: "Apply it where the pings come in from the user LAN.", check: (t) => need(t.f("R1", "g0/0").aclIn === "110", "ip access-group 110 in on G0/0.") },
+      { text: "Ping 10.0.20.80 from PC1, then read R1's show logging. Which message ID does the entry log?", choices: ["%SEC-6-IPACCESSLOGDP", "%SEC-6-IPACCESSLOGS", "%LINEPROTO-5-UPDOWN", "%SYS-5-CONFIG_I"], check: (t) => need(t.ran("PC1", /^ping .*10\.0\.20\.80/) && t.reply === "%SEC-6-IPACCESSLOGDP", "IPACCESSLOGDP: an ICMP match (with type/code 8/0, an echo). IPACCESSLOGS is a standard ACL, IPACCESSLOGP one with ports.") },
+      { text: "How many packets does that log line count?", ask: "Packets", check: (t) => need(is.num(t.reply, 4), "ping -c 4 sends four echoes: ..., 4 packets. show access-lists shows the same 4 matches.") },
+      { text: "Which severity level is a SEC-6 message?", choices: ["informational", "notifications", "warnings", "debugging"], check: (t) => need(t.reply === "informational", "Level 6 is informational; logging trap 6 or higher sends it to a syslog server.") },
+    ],
+    solution: { R1: [...EN, "access-list 110 deny icmp 10.0.10.0 0.0.0.255 10.0.20.0 0.0.0.255 echo log", "access-list 110 permit ip any any", "interface g0/0", "ip access-group 110 in", "end"], PC1: ["ping -c 4 10.0.20.80"], "R1#2": ["show logging", "show access-lists"] },
+    answers: { 2: "%SEC-6-IPACCESSLOGDP", 3: "4", 4: "informational" },
+    failingPings: true,
+    teach: "log at the end of an ACL entry makes the router send a syslog message when the entry matches: %SEC-6-IPACCESSLOGDP for ICMP (with type/code), IPACCESSLOGP for TCP/UDP (with ports), IPACCESSLOGS for a standard ACL. IOS logs the first match at once and then a total every five minutes. Use it on deny entries you want a record of; on a busy permit it costs CPU.",
   }),
 ];
