@@ -238,8 +238,10 @@ export default [
     tasks: [
       { text: "On R1, map the name R2 to 10.0.12.2.", check: (t) => need(t.dev("R1").hosts.R2 === "10.0.12.2", "Expected ip host R2 10.0.12.2.") },
       { text: "Ping R2 by name.", check: (t) => need(t.ran("R1", /^ping R2$/i), "Run ping R2.") },
+      { text: "Check the name table with show hosts. How does R1 look names up?", choices: ["static mappings", "domain service", "broadcast", "NetBIOS"], check: (t) => need(t.ran("R1", /^show hosts$/) && t.reply === "static mappings", "With no ip name-server, R1 can only use its own ip host entries (perm, OK in the table).") },
     ],
-    solution: { R1: [...EN, "ip host R2 10.0.12.2", "end", "ping R2"] },
+    solution: { R1: [...EN, "ip host R2 10.0.12.2", "end", "ping R2", "show hosts"] },
+    answers: { 2: "static mappings" },
     teach: "ip host builds a local name table, like /etc/hosts. For real DNS: ip name-server <ip> and ip domain-lookup.",
   }),
   lab({

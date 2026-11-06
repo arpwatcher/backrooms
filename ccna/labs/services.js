@@ -117,8 +117,12 @@ export default [
     tasks: [
       { text: "Synchronize R1's clock to 10.0.0.100.", check: (t) => need(t.dev("R1").ntp.servers.some((s) => s.ip === "10.0.0.100"), "Expected ntp server 10.0.0.100.") },
       { text: "Verify that the clock is synchronized.", check: (t) => need(t.ran("R1", /^show ntp (status|associations)$/), "Run show ntp status.") },
+      { text: "R1 is in Athens: zone EET, two hours ahead of UTC.", check: (t) => need(t.dev("R1").clock.timezone?.zone === "EET" && t.dev("R1").clock.timezone.hours === 2, "clock timezone EET 2") },
+      { text: "Summer time EEST, with the EU rule: from the last Sunday of March 3:00 to the last Sunday of October 4:00.", check: (t) => need(t.dev("R1").clock.summer === "EEST" && /last\s+sun\w*\s+mar\w*\s+3:00\s+last\s+sun\w*\s+oct\w*\s+4:00/i.test(t.dev("R1").clock.summerRule ?? ""), "clock summer-time EEST recurring last Sun Mar 3:00 last Sun Oct 4:00 (recurring alone is the US rule).") },
+      { text: "Run show clock. Why does it not start with a * any more?", choices: ["The time is authoritative: NTP has synchronized it", "The time zone is set", "Summer time is on", "The clock was set by hand"], check: (t) => need(t.ran("R1", /^show clock/) && t.reply === "The time is authoritative: NTP has synchronized it", "A leading * means the clock is not authoritative (never set or synchronized); once NTP syncs it the * goes. show clock detail says Time source is NTP.") },
     ],
-    solution: { R1: [...EN, "ntp server 10.0.0.100", "end", "show ntp status"] },
+    solution: { R1: [...EN, "ntp server 10.0.0.100", "clock timezone EET 2", "clock summer-time EEST recurring last Sun Mar 3:00 last Sun Oct 4:00", "end", "show ntp status", "show clock detail"] },
+    answers: { 4: "The time is authoritative: NTP has synchronized it" },
     teach: "NTP uses UDP 123. The stratum is the distance from the reference clock (stratum 1 is attached to an atomic or GPS clock). ntp master <n> makes a router a server itself.",
   }),
   lab({
@@ -170,10 +174,11 @@ export default [
       { text: "Create a read-only community named M0nit0r.", check: (t) => need(t.dev("R1").snmp.communities.M0nit0r?.access === "ro", "Expected snmp-server community M0nit0r ro.") },
       { text: "Set the location to Athens DC and the contact to noc@mycompany.lab.", check: (t) => need(t.dev("R1").snmp.location === "Athens DC" && t.dev("R1").snmp.contact === "noc@mycompany.lab", "Expected snmp-server location and snmp-server contact.") },
       { text: "Before the community exists, what does show snmp answer?", choices: ["%SNMP agent not enabled", "0 SNMP packets input", "SNMP logging: disabled", "% Invalid input detected"], check: (t) => need(t.reply === "%SNMP agent not enabled", "The agent only starts once a community (or an SNMPv3 user) is configured.") },
+      { text: "Let R1 send traps when something happens, instead of waiting to be polled.", check: (t) => need(t.dev("R1").snmp.traps, "snmp-server enable traps (and snmp-server host for where they go).") },
       { text: "Afterwards, which Location does show snmp report?", ask: "Location", check: (t) => need(t.ran("R1", /^(do )?show snmp$/) && is.text(t.reply, "Athens DC"), "show snmp (do show snmp from config mode) lists Chassis, Contact and Location, then the packet counters.") },
     ],
-    solution: { R1: ["enable", "show snmp", "configure terminal", "snmp-server community M0nit0r ro", "snmp-server location Athens DC", "snmp-server contact noc@mycompany.lab", "do show snmp"] },
-    answers: { 2: "%SNMP agent not enabled", 3: "Athens DC" },
+    solution: { R1: ["enable", "show snmp", "configure terminal", "snmp-server community M0nit0r ro", "snmp-server location Athens DC", "snmp-server contact noc@mycompany.lab", "snmp-server enable traps", "do show snmp"] },
+    answers: { 2: "%SNMP agent not enabled", 4: "Athens DC" },
     teach: "SNMPv2c sends the community string in clear text; SNMPv3 adds authentication and encryption. The manager sends Get and Set (UDP 161); the agent sends Trap and Inform (UDP 162).",
   }),
   lab({
@@ -200,8 +205,9 @@ export default [
     tasks: [
       { text: "Enable LLDP on both switches.", check: (t) => need(t.dev("SW1").lldp && t.dev("SW2").lldp, "Expected lldp run on both switches.") },
       { text: "Display SW1's LLDP neighbors.", check: (t) => need(t.ran("SW1", /^show lldp neighbors/), "Run show lldp neighbors.") },
+      { text: "Fa0/24 on SW1 faces a public area: it may listen to LLDP but must not advertise.", check: (t) => need(t.f("SW1", "fa0/24").lldpTx === false && t.f("SW1", "fa0/24").lldpRx !== false, "no lldp transmit under interface fa0/24 (lldp receive stays on).") },
     ],
-    solution: { SW1: [...EN, "lldp run", "end", "show lldp neighbors"], SW2: [...EN, "lldp run"] },
+    solution: { SW1: [...EN, "lldp run", "interface fa0/24", "no lldp transmit", "end", "show lldp neighbors"], SW2: [...EN, "lldp run"] },
     teach: "LLDP (802.1AB) is disabled by default on Cisco devices. Per interface there are lldp transmit and lldp receive.",
   }),
   lab({
