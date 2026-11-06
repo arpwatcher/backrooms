@@ -43,6 +43,10 @@ export function status(dev, f) {
   if (end.iface.shutdown) return ["down", "down"];
   if (f.errdisabled) return ["down", "down"];
   if (linkMode(dev, f)?.up === false) return ["down", "down"];
+  if (f.name.startsWith("Serial")) {
+    const dce = f.dce ? f : end.iface.dce ? end.iface : null;
+    if (dce && !dce.clockRate) return ["up", "down"];
+  }
   return ["up", "up"];
 }
 

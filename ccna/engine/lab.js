@@ -35,6 +35,8 @@ export function buildLab(def) {
     if (!A || !B || !A.interfaces[an] || !B.interfaces[bn]) throw new Error(`lab ${def.id}: bad link ${a} ${ai} - ${b} ${bi}`);
     A.links[an] = { device: B, iface: bn };
     B.links[bn] = { device: A, iface: an };
+    // a serial cable has a DCE end (the first device named): it must clock the line
+    if (an.startsWith("Serial") && bn.startsWith("Serial")) A.interfaces[an].dce = true;
   }
   const all = Object.values(devices);
   for (const dev of all) dev.lab.all = all;

@@ -121,6 +121,8 @@ function interfaceBlock(dev, f) {
   if (f.duplex !== "auto") add(`duplex ${f.duplex}`);
   if (f.noUnreach) add("no ip unreachables");
   if (!f.cdp) add("no cdp enable");
+  if (f.lldpTx === false) add("no lldp transmit");
+  if (f.lldpRx === false) add("no lldp receive");
   if (f.shutdown) add("shutdown");
   return lines.join("\n");
 }
@@ -294,6 +296,7 @@ export function runningConfig(dev, onlyIface) {
   for (const [name, c] of Object.entries(dev.snmp.communities)) L.push(`snmp-server community ${name} ${c.access.toUpperCase()}${c.acl ? " " + c.acl : ""}`);
   if (dev.snmp.location) L.push(`snmp-server location ${dev.snmp.location}`);
   if (dev.snmp.contact) L.push(`snmp-server contact ${dev.snmp.contact}`);
+  if (dev.snmp.traps) L.push("snmp-server enable traps");
   for (const h of dev.snmp.hosts) L.push(`snmp-server host ${h.ip} ${h.community}`);
   bang();
   const d = dev.motdDelimiter === "#" ? "^C" : "^C";
@@ -343,6 +346,7 @@ export function runningConfig(dev, onlyIface) {
   if (dev.ntp.master) L.push(`ntp master${dev.ntp.master !== 8 ? " " + dev.ntp.master : ""}`);
   if (dev.ntp.updateCalendar) L.push("ntp update-calendar");
   if (dev.clock.timezone) L.push(`clock timezone ${dev.clock.timezone.zone} ${dev.clock.timezone.hours}${dev.clock.timezone.minutes ? " " + dev.clock.timezone.minutes : ""}`);
+  if (dev.clock.summer) L.push(`clock summer-time ${dev.clock.summer} recurring${dev.clock.summerRule ? " " + dev.clock.summerRule : ""}`);
   bang();
   L.push("end");
   const body = L.join("\n");

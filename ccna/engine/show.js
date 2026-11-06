@@ -883,6 +883,59 @@ function flash(dev) {
   return `Directory of flash:/\n\n    3  -rw-    33591768          <no date>  ${image}\n    2  -rw-       28282          <no date>  sigdef-category.xml\n    1  -rw-      227537          <no date>  sigdef-default.xml\n\n255744000 bytes total (221896413 bytes free)`;
 }
 
+// the clock, in the local zone (clock timezone, an hour more in summer time).
+// A * means it is not authoritative: never set by hand and not synced by NTP.
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const nthSunday = (y, m, n) => { const first = new Date(Date.UTC(y, m, 1)).getUTCDay(); return 1 + ((7 - first) % 7) + (n - 1) * 7; };
+const lastSunday = (y, m) => { const last = new Date(Date.UTC(y, m + 1, 0)); return last.getUTCDate() - last.getUTCDay(); };
+function inSummer(dev, ms) {
+  const t = new Date(ms), y = t.getUTCFullYear();
+  const eu = /last\s+sun\w*\s+mar/i.test(dev.clock.summerRule ?? "");
+  const start = eu ? Date.UTC(y, 2, lastSunday(y, 2), 1) : Date.UTC(y, 2, nthSunday(y, 2, 2), 7);
+  const end = eu ? Date.UTC(y, 9, lastSunday(y, 9), 1) : Date.UTC(y, 10, nthSunday(y, 10, 1), 6);
+  return ms >= start && ms < end;
+}
+export function clockText(dev, detail = false) {
+  const tz = dev.clock.timezone;
+  const offset = tz ? (tz.hours * 60 + (tz.hours < 0 ? -1 : 1) * (tz.minutes ?? 0)) * 60000 : 0;
+  const synced = (dev.ntp.servers.length || dev.ntp.master) && ntpSync(dev);
+  let utc = Date.UTC(1993, 2, 1, 12, 13, 47, 123);
+  if (dev.clock.set) {
+    const [time, x, z, year] = dev.clock.set.split(" ");
+    const month = MONTHS.findIndex((m) => [x, z].some((w) => w && w.toLowerCase().startsWith(m)));
+    const day = Number([x, z].find((w) => /^\d+$/.test(w)));
+    const [h, mi, se = 0] = time.split(":").map(Number);
+    utc = Date.UTC(Number(year), Math.max(0, month), day, h, mi, se, 3) - offset;
+  }
+  if (synced && !dev.clock.set) utc = Date.UTC(2026, 10, 3, 9, 14, 22, 517);
+  const dst = dev.clock.summer && inSummer(dev, utc);
+  const t = new Date(utc + offset + (dst ? 3600000 : 0));
+  const two = (n) => String(n).padStart(2, "0");
+  const zone = dst ? dev.clock.summer : tz?.zone ?? "UTC";
+  const line = `${synced || dev.clock.set ? "" : "*"}${two(t.getUTCHours())}:${two(t.getUTCMinutes())}:${two(t.getUTCSeconds())}.${String(t.getUTCMilliseconds()).padStart(3, "0")} ${zone} ${DAYS[t.getUTCDay()]} ${MONTHS[t.getUTCMonth()][0].toUpperCase() + MONTHS[t.getUTCMonth()].slice(1)} ${t.getUTCDate()} ${t.getUTCFullYear()}`;
+  return detail ? `${line}\n${synced ? "Time source is NTP" : dev.clock.set ? "Time source is user configuration" : "No time source"}` : line;
+}
+
+// show hosts: the name lookup settings and the static and learned names
+function hostsTable(dev) {
+  const rows = [`Default domain is ${dev.domainName ?? "not set"}`, `Name/address lookup uses ${dev.domainLookup && dev.nameServers.length ? "domain service" : "static mappings"}`, ...(dev.nameServers.length ? [`Name servers are ${dev.nameServers.join(", ")}`] : []), "", "Codes: UN - unknown, EX - expired, OK - OK, ?? - revalidate", "       temp - temporary, perm - permanent", "       NA - Not Applicable None - Not defined", "", `${pad("Host", 26)}${pad("Port", 6)}${pad("Flags", 11)}${pad("Age", 4)}${pad("Type", 7)}Address(es)`];
+  for (const [name, ip] of Object.entries(dev.hosts)) rows.push(`${pad(name, 26)}${pad("None", 6)}${pad("(perm, OK)", 11)}${pad("0", 4)}${pad("IP", 7)}${ip}`);
+  return rows.join("\n");
+}
+// show controllers serial: which end of the cable this is, and its clock
+function controllers(dev, name) {
+  const f = dev.interfaces[name];
+  if (!f?.name.startsWith("Serial")) return "% Invalid input detected at '^' marker.";
+  const end = far(dev, f.name);
+  const head = [`Interface ${f.name}`, "Hardware is GT96K"];
+  if (!end) return [...head, "No serial cable attached", "idb at 0x6913E3B0, driver data structure at 0x6914B8E0"].join("\n");
+  const dce = f.dce;
+  const clocked = dce ? f.clockRate : end.iface.clockRate;
+  const line = dce ? (f.clockRate ? `DCE V.35, clock rate ${f.clockRate}` : "DCE V.35, no clock") : clocked ? "DTE V.35 TX and RX clocks detected." : "DTE V.35 clocks stopped.";
+  return [...head, line, "idb at 0x6913E3B0, driver data structure at 0x6914B8E0", "wic_info 0x6914C0C8", "Physical Port 0, SCC Num 0", "MPSC Registers:", "MMCR_L=0x000304C0, MMCR_H=0x00000000, MPCR=0x00000000", "CHR1=0x00FE007E, CHR2=0x00000000, CHR3=0x0000064A, CHR4=0x00000000"].join("\n");
+}
+
 function ntpStatus(dev) {
   if (!dev.ntp.master && !dev.ntp.servers.length) return "%NTP is not enabled.";
   const s = ntpSync(dev);
@@ -1063,7 +1116,9 @@ export const SHOWS = {
     ["show ipv6 neighbors [<name:iface>]", (d, a) => (syncIpv6(d.lab?.all), ipv6Neighbors(d, a.name))],
     ["show ipv6 interface [<name:iface>]", (d, a) => (syncIpv6(d.lab?.all), ipv6Brief({ ...d, interfaces: a.name ? { [a.name]: d.interfaces[a.name] } : d.interfaces }))],
     ["show ipv6 route", (d) => (syncIpv6(d.lab?.all), ipv6Route(d))],
-    ["show clock [detail]", (d) => `*${d.clock.set ?? "12:13:47.123 UTC Mon Mar 1 1993"}`.replace(/^\*(\d+:\d+(:\d+)?) (\d+) (\w+) (\d+)$/, "*$1.000 UTC $4 $3 $5")],
+    ["show hosts", (d) => hostsTable(d)],
+    ["show controllers <name:iface>", (d, a) => controllers(d, a.name)],
+    ["show clock [detail]", (d, a, c) => clockText(d, c.has("detail"))],
     ["show ntp status", (d) => ntpStatus(d)],
     ["show ntp associations", (d) => ntpAssociations(d)],
     ["show logging", (d) => logging(d)],

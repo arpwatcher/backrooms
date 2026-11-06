@@ -191,6 +191,18 @@ function learnMacs(dev, n, count = 0) {
 
 // --- layer 2 security on the way: port security, DAI, DHCP snooping -----------------------------
 
+// what an ACL entry with log reports, as IOS words it per kind of entry
+function aclLog(router, name, e, pkt) {
+  const verb = e.action === "permit" ? "permitted" : "denied";
+  const n = `${pkt.count} packet${pkt.count === 1 ? "" : "s"}`;
+  if (router.acls[String(name)]?.type === "standard") return `%SEC-6-IPACCESSLOGS: list ${name} ${verb} ${pkt.src} ${n}`;
+  if (pkt.proto === "icmp") {
+    const code = { echo: "8/0", "echo-reply": "0/0", unreachable: "3/1", "time-exceeded": "11/0" }[pkt.icmp] ?? "8/0";
+    return `%SEC-6-IPACCESSLOGDP: list ${name} ${verb} icmp ${pkt.src} -> ${pkt.dst} (${code}), ${n}`;
+  }
+  if (pkt.sport !== undefined) return `%SEC-6-IPACCESSLOGP: list ${name} ${verb} ${pkt.proto} ${pkt.src}(${pkt.sport}) -> ${pkt.dst}(${pkt.dport}), ${n}`;
+  return `%SEC-6-IPACCESSLOGNP: list ${name} ${verb} ${pkt.proto} ${pkt.src} -> ${pkt.dst}, ${n}`;
+}
 // a message on a switch's console, kept for show logging
 function logOn(sw, msg) {
   (sw.logBuffer ??= []).push(`*Mar  1 00:${String(10 + (sw.logBuffer.length % 50)).padStart(2, "0")}:17.${String(100 + sw.logBuffer.length * 37).slice(-3)}: ${msg}`);
@@ -308,6 +320,7 @@ function passes(router, name, pkt) {
   if (!router.acls[String(name)]) return true;
   const e = aclEntry(router, name, pkt);
   if (e && pkt.count) e.matches = (e.matches ?? 0) + pkt.count;
+  if (e?.log && pkt.count) logOn(router, aclLog(router, name, e, pkt));
   return e?.action === "permit";
 }
 // a packet kind whose packets count n times in the ACLs they cross
@@ -562,6 +575,13 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     if (n.device.host && !portAdmit(n.device)) return false;
     learnArp(dev, ip);
     if (ping) learnMacs(dev, n, kind.go(f.ip, ip).count ?? 0);
+    // a router on the segment still checks the packet against its inbound
+    // ACL (and counts it) when the packet is for the router itself
+    if (ROUTER(n.device)) {
+      const pkt = at(kind.go(f.ip, ip), 0, "in");
+      if (pkt.count) carry(n.device, n.iface, pkt.count, "in");
+      if (n.iface.aclIn && !passes(n.device, n.iface.aclIn, pkt)) return (dev.host.atGateway = true), (dev.host.drop = { router: n.device, at: n.iface.ip ?? null, why: "acl-in", quiet: Boolean(n.iface.noUnreach) }), false;
+    }
     return true;
   }
   if (dev.host.apipa) return false;

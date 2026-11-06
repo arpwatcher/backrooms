@@ -1191,7 +1191,10 @@ def("config", "clock timezone <zone:word> <hours:word> [<minutes:num:0-59>]", (c
   if (!/^[+-]?\d{1,2}$/.test(c.args.hours) || Math.abs(Number(c.args.hours)) > 23) fail("% Invalid input detected at '^' marker.");
   c.dev.clock.timezone = { zone: c.args.zone, hours: Number(c.args.hours), minutes: c.args.minutes ?? 0 };
 });
-def("config", "clock summer-time <zone:word> recurring", (c) => (c.dev.clock.summer = c.args.zone));
+// recurring alone is the US rule; the EU one is spelled out: last Sun Mar 1:00 last Sun Oct 1:00
+def("config", "clock summer-time <zone:word> recurring [<rule:rest>]", (c) => ((c.dev.clock.summer = c.args.zone), (c.dev.clock.summerRule = c.args.rule ?? null)));
+def("config", "no clock summer-time", (c) => ((c.dev.clock.summer = null), (c.dev.clock.summerRule = null)));
+def("config", "no clock timezone", (c) => (c.dev.clock.timezone = null));
 const LEVELS = ["emergencies", "alerts", "critical", "errors", "warnings", "notifications", "informational", "debugging"];
 const levelPattern = "(<lvl:num:0-7> | emergencies | alerts | critical | errors | warnings | notifications | informational | debugging)";
 const levelOf = (c) => (c.args.lvl !== undefined ? c.args.lvl : LEVELS.findIndex((l) => c.has(l)));
@@ -1255,7 +1258,7 @@ for (const [pattern, fn, privOnly] of SHOWS.patterns) def(privOnly ? "priv" : EX
 
 // --- helpers --------------------------------------------------------------------------------------------------------------------
 
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term", "logBuffer"]);
 function stripRuntime(d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) if (!RUNTIME.has(k)) o[k] = v;
