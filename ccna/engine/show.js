@@ -10,6 +10,46 @@ import { status, operMode, far, bundled, protocolOf, ospfNeighbors, ospfOf, pass
 
 const pad = (s, n) => String(s).padEnd(n);
 
+// show ip interface: what IP does on one interface, in IOS's order
+function ipInterface(dev, f) {
+  const head = `${f.name} is ${status(dev, f).join(", line protocol is ")}`;
+  if (!f.ip) return `${head}\n  Internet protocol processing disabled`;
+  const bits = maskBits(f.mask);
+  const bcast = f.ip.split(".").map((o, i) => (Number(o) | (~Number(f.mask.split(".")[i]) & 255))).join(".");
+  return [
+    head,
+    `  Internet address is ${f.ip}/${bits}`,
+    `  Broadcast address is ${bcast}`,
+    "  Address determined by " + (f.dhcp ? "DHCP" : "setup command"),
+    `  MTU is ${f.mtu ?? 1500} bytes`,
+    `  Helper address is ${f.helpers?.join(", ") || "not set"}`,
+    "  Directed broadcast forwarding is disabled",
+    ...(ospfOf(dev, f) ? ["  Multicast reserved groups joined: 224.0.0.5 224.0.0.6"] : []),
+    `  Outgoing access list is ${f.aclOut ?? "not set"}`,
+    `  Inbound  access list is ${f.aclIn ?? "not set"}`,
+    "  Proxy ARP is enabled",
+    "  Local Proxy ARP is disabled",
+    "  Security level is default",
+    "  Split horizon is enabled",
+    `  ICMP redirects are always sent`,
+    `  ICMP unreachables are ${f.noUnreach ? "never" : "always"} sent`,
+    "  ICMP mask replies are never sent",
+    "  IP fast switching is enabled",
+    "  IP CEF switching is enabled",
+    "  IP multicast fast switching is enabled",
+    "  Router Discovery is disabled",
+    "  IP output packet accounting is disabled",
+    "  IP access violation accounting is disabled",
+    "  TCP/IP header compression is disabled",
+    "  RTP/IP header compression is disabled",
+    "  Probe proxy name replies are disabled",
+    "  Policy routing is disabled",
+    `  Network address translation is ${f.nat ? `enabled, interface in domain ${f.nat}` : "disabled"}`,
+    "  BGP Policy Mapping is disabled",
+    "  Input features: MCI Check",
+  ].join("\n");
+}
+
 function ipIntBrief(dev) {
   const rows = [`${pad("Interface", 23)}${pad("IP-Address", 16)}OK? Method Status                Protocol`];
   for (const f of sortedInterfaces(dev)) {
@@ -1054,7 +1094,7 @@ export const SHOWS = {
     ["show startup-config", (d) => (d.saved ? runningConfig({ ...d.saved, lab: d.lab, links: d.links }).replace("Building configuration...\n\nCurrent configuration", "Using 1024 out of 262136 bytes\n!") : "startup-config is not present"), true],
     ["show version", (d) => version(d)],
     ["show ip interface brief", (d) => ipIntBrief(d)],
-    ["show ip interface [<name:iface>]", (d, a) => sortedInterfaces(d).filter((f) => !a.name || f.name === a.name).map((f) => `${f.name} is ${status(d, f).join(", line protocol is ")}\n  Internet address is ${f.ip ? `${f.ip}/${maskBits(f.mask)}` : "not set"}\n  Helper address is ${f.helpers.join(", ") || "not set"}\n  Outgoing access list is ${f.aclOut ?? "not set"}\n  Inbound  access list is ${f.aclIn ?? "not set"}`).join("\n")],
+    ["show ip interface [<name:iface>]", (d, a) => sortedInterfaces(d).filter((f) => !a.name || f.name === a.name).map((f) => ipInterface(d, f)).join("\n")],
     ["show interfaces [<name:iface>]", (d, a) => interfaces(d, a.name)],
     ["show interfaces <name:iface> switchport", (d, a) => switchportInfo(d, a.name)],
     ["show interfaces switchport", (d) => sortedInterfaces(d).filter((f) => f.switchport).map((f) => switchportInfo(d, f.name)).join("\n\n")],
