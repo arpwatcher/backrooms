@@ -1,4 +1,4 @@
-import { lab, R, PC, SRV, ISP, cfg, EN, need } from "./kit.js";
+import { lab, R, PC, SRV, ISP, HOST, cfg, EN, need, is } from "./kit.js";
 
 const M = "nat";
 const edge = (extra = []) => R("R1", 50, 25, cfg("interface g0/0", "ip address 192.168.1.1 255.255.255.0", "no shutdown", "interface g0/1", "ip address 203.0.113.2 255.255.255.248", "no shutdown", "ip route 0.0.0.0 0.0.0.0 203.0.113.1", ...extra));
@@ -92,5 +92,23 @@ export default [
     ],
     solution: { R1: ["enable", "show running-config | include nat", "configure terminal", "interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "no access-list 1", "access-list 1 permit 192.168.1.0 0.0.0.255"] },
     teach: "NAT troubleshooting checklist: inside and outside on the right interfaces, an ACL that matches the inside addresses (wildcard, not mask), the right ACL number in ip nat inside source, overload for PAT, and a route out.",
+  }),
+  lab({
+    id: "nat-verify", module: M, title: "Verifying PAT: translations and statistics",
+    cmds: ["show ip nat translations", "show ip nat statistics", "clear ip nat translation *", "clear ip nat statistics"],
+    devices: [edge(["interface g0/0", "ip nat inside", "interface g0/1", "ip nat outside", "exit", "access-list 1 permit 192.168.1.0 0.0.0.255", "ip nat inside source list 1 interface g0/1 overload"]), HOST("PC1", 18, 52, "linux", { ip: "192.168.1.10/24", gateway: "192.168.1.1" }), ISP("Internet", 85, 25)],
+    links: [["R1", "g0/0", "PC1", "fa0"], ["R1", "g0/1", "Internet", "g0/0"]],
+    extern: ["8.8.8.8"],
+    intro: "PAT is configured on R1. Send some traffic out and read what NAT did with it.",
+    tasks: [
+      { text: "Ping 8.8.8.8 from PC1 (four echoes). Which inside global address does R1's translation show?", ask: "Address", check: (t) => need(t.ran("PC1", /^ping .*8\.8\.8\.8/) && is.ip(t.reply, "203.0.113.2"), "show ip nat translations: Inside global is G0/1's address, 203.0.113.2, with the inside local 192.168.1.10.") },
+      { text: "Which protocol does the translation list?", choices: ["icmp", "tcp", "udp", "none: PAT entries have no protocol"], check: (t) => need(t.ran("R1", /^show ip nat translations/) && t.reply === "icmp", "Pro icmp, with the echo identifier where a TCP/UDP entry has a port.") },
+      { text: "show ip nat statistics: how many misses?", ask: "Misses", check: (t) => need(t.ran("R1", /^show ip nat statistics/) && is.num(t.reply, 1), "One miss: the first packet created the translation. Every packet after it, both ways, is a hit.") },
+      { text: "Clear the dynamic translations and the counters.", check: (t) => need(t.ran("R1", /^clear ip nat translation \*/) && t.ran("R1", /^clear ip nat statistics/) && !(t.dev("R1").nat.live ?? []).length, "clear ip nat translation * and clear ip nat statistics.") },
+      { text: "Does clearing the translations break PC1's next ping?", choices: ["No: the next packet simply creates a new translation", "Yes, until R1 reloads", "Yes, until the ACL is reapplied", "Only for TCP"], check: (t) => need(t.reply === "No: the next packet simply creates a new translation", "Dynamic entries are rebuilt on demand; only static ones are permanent.") },
+    ],
+    solution: { PC1: ["ping -c 4 8.8.8.8"], R1: ["enable", "show ip nat translations", "show ip nat statistics", "clear ip nat translation *", "clear ip nat statistics"] },
+    answers: { 0: "203.0.113.2", 1: "icmp", 2: "1", 4: "No: the next packet simply creates a new translation" },
+    teach: "show ip nat translations lists inside local, inside global, outside local and outside global addresses (with ports or ICMP IDs for PAT). show ip nat statistics counts active translations, the inside and outside interfaces, and hits (packets that found a translation) against misses (packets that had to create one). clear ip nat translation * removes the dynamic entries, clear ip nat statistics the counters.",
   }),
 ];

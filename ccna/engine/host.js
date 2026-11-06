@@ -524,14 +524,17 @@ function natGlobal(router, local) {
   const used = live.filter((t) => t.pool === rule.pool && !t.overload && t.local !== local).map((t) => t.global);
   return range(p.start, p.end).find((a) => rule.overload || !used.includes(a)) ?? null;
 }
-function translate(router, local, target) {
+function translate(router, local, target, out = 1, back = out) {
   const nat = router.nat;
+  const stats = (router.natStats ??= { hits: 0, misses: 0 });
   const st = nat.statics.find((s) => s.local === local && !s.proto);
   const rule = !st && nat.dynamic.find((d) => aclPermits(router.acls[d.acl], local));
   nat.live ??= [];
-  if (nat.live.some((t) => t.local === local && t.target === target)) return;
+  if (nat.live.some((t) => t.local === local && t.target === target)) return void (stats.hits += out + back);
   const global = natGlobal(router, local);
-  if (!global) return;
+  if (!global) return void (stats.misses += 1);
+  stats.misses += 1;
+  stats.hits += out - 1 + back;
   const id = nat.live.filter((t) => t.global === global).length + 1;
   nat.live.push({ local, target, global, id, pool: rule?.pool ?? null, overload: Boolean(rule?.overload), dynamic: !st });
 }
@@ -610,7 +613,7 @@ function reaches(dev, ip, ping = false, kind = ICMP) {
     const outside = exitOf(seen.exit, routeTable(seen.exit).filter((x) => x.code !== "L" && network(ip, x.bits) === x.net).sort((a, b) => b.bits - a.bits)[0] ?? {}, ip);
     if (outside?.aclIn && !passes(seen.exit, outside.aclIn, kind.back(ip, global))) return false;
     if (pathFrom(seen.exit, f.ip, new Set(), kind.back(ip, f.ip)) === null) return false;
-    if (ping && global !== f.ip) translate(seen.exit, f.ip, ip);
+    if (ping && global !== f.ip) translate(seen.exit, f.ip, ip, kind.go(f.ip, ip).count ?? 1, kind.back(ip, f.ip).count ?? kind.go(f.ip, ip).count ?? 1);
     return true;
   }
   const r = gatewayRouter(dev);

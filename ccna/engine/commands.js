@@ -210,6 +210,7 @@ def("priv", "clear port-security (all | configured | dynamic | sticky) [(interfa
   }
 }, { only: ["switch", "l3switch"] });
 def("priv", "clear ip nat translation *", (c) => { c.dev.nat.live = []; });
+def("priv", "clear ip nat statistics", (c) => { c.dev.natStats = { hits: 0, misses: 0 }; });
 def("priv", "clear access-list counters [<name:word>]", (c) => {
   for (const [n, acl] of Object.entries(c.dev.acls)) if (!c.args.name || n === c.args.name) for (const e of acl.entries) e.matches = 0;
 });
@@ -1258,7 +1259,7 @@ for (const [pattern, fn, privOnly] of SHOWS.patterns) def(privOnly ? "priv" : EX
 
 // --- helpers --------------------------------------------------------------------------------------------------------------------
 
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term", "logBuffer"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term", "logBuffer", "natStats"]);
 function stripRuntime(d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) if (!RUNTIME.has(k)) o[k] = v;
