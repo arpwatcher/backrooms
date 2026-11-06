@@ -5,7 +5,7 @@
 // network really allows it.
 
 import { maskBits, network, parseIp, compressIpv6, eui64, wildcardMatch, ipv6Network, expandIpv6, parseIpv6Prefix } from "./ip.js";
-import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry, far } from "./net.js";
+import { status, operMode, carries, hsrpRanking, aclAllows, aclEntry, carry, far, ospfNeighbors, ospfElection, ospfOf } from "./net.js";
 import { routeTable } from "./show.js";
 
 const OS_NAME = { windows: "Windows", linux: "Linux", mac: "macOS" };
@@ -203,6 +203,36 @@ function aclLog(router, name, e, pkt) {
   if (pkt.sport !== undefined) return `%SEC-6-IPACCESSLOGP: list ${name} ${verb} ${pkt.proto} ${pkt.src}(${pkt.sport}) -> ${pkt.dst}(${pkt.dport}), ${n}`;
   return `%SEC-6-IPACCESSLOGNP: list ${name} ${verb} ${pkt.proto} ${pkt.src} -> ${pkt.dst}, ${n}`;
 }
+// OSPF says on the console when a neighbor reaches FULL or drops from it.
+// What a lab starts with is taken as it is, without messages.
+function ospfChanges(all, said) {
+  for (const d of all) {
+    if (!d.ospf || !Object.keys(d.ospf).length) {
+      if (d.ospfFull) d.ospfFull = {};
+      continue;
+    }
+    const now = {};
+    for (const n of ospfNeighbors(d).filter((x) => x.up)) {
+      const el = ospfElection(d, n.iface);
+      if (el && el.mine === "DROTHER" && el.roleOf(n.rid) === "DROTHER") continue;
+      now[`${n.rid}|${n.iface.name}`] = ospfOf(d, n.iface)?.pid ?? 1;
+    }
+    const before = d.ospfFull;
+    d.ospfFull = now;
+    if (!before) continue;
+    const msgs = [];
+    for (const k of Object.keys(now)) if (!(k in before)) msgs.push(`%OSPF-5-ADJCHG: Process ${now[k]}, Nbr ${k.split("|")[0]} on ${k.split("|")[1]} from LOADING to FULL, Loading Done`);
+    for (const k of Object.keys(before)) {
+      if (k in now) continue;
+      const f = d.interfaces[k.split("|")[1]];
+      const why = !f || status(d, f)[1] !== "up" ? "Interface down or detached" : "Dead timer expired";
+      msgs.push(`%OSPF-5-ADJCHG: Process ${before[k]}, Nbr ${k.split("|")[0]} on ${k.split("|")[1]} from FULL to DOWN, Neighbor Down: ${why}`);
+    }
+    for (const m of msgs) logOn(d, m);
+    if (msgs.length) said.set(d, [...(said.get(d) ?? []), ...msgs]);
+  }
+}
+
 // a message on a switch's console, kept for show logging
 function logOn(sw, msg) {
   (sw.logBuffer ??= []).push(`*Mar  1 00:${String(10 + (sw.logBuffer.length % 50)).padStart(2, "0")}:17.${String(100 + sw.logBuffer.length * 37).slice(-3)}: ${msg}`);
@@ -242,6 +272,7 @@ const shortName = (n) => n.replace("FastEthernet", "Fa").replace("GigabitEtherne
 // messages per device
 export function settle(all) {
   const said = new Map();
+  ospfChanges(all, said);
   for (const d of all) if (d.phoneDhcp) phoneLease(d);
   for (const d of all) {
     if (!isSwitch(d)) continue;

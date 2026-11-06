@@ -1259,7 +1259,7 @@ for (const [pattern, fn, privOnly] of SHOWS.patterns) def(privOnly ? "priv" : EX
 
 // --- helpers --------------------------------------------------------------------------------------------------------------------
 
-const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term", "logBuffer", "natStats"]);
+const RUNTIME = new Set(["saved", "history", "ran", "mode", "ctx", "pending", "debugs", "links", "erased", "savedSize", "lab", "gateway", "transfers", "ctr", "execHistory", "configHistory", "term", "logBuffer", "natStats", "ospfFull"]);
 function stripRuntime(d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) if (!RUNTIME.has(k)) o[k] = v;

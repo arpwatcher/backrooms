@@ -17,8 +17,10 @@ export default [
       { text: "Start OSPF process 1 on R1.", check: (t) => need(t.dev("R1").ospf[1], "Expected router ospf 1.") },
       { text: "Put 10.1.1.0/24 in area 0.", check: (t) => need(area(t, "R1", "g0/0") === 0, "G0/0 (10.1.1.0/24) is not in OSPF area 0. Use network 10.1.1.0 0.0.0.255 area 0 (a wildcard, not a mask).") },
       { text: "Put the link to R2 (10.0.12.0/30) in area 0 so that an adjacency forms.", check: (t) => need(t.ospfAdj("R1", "R2"), area(t, "R1", "g0/1") === undefined ? "G0/1 is not in OSPF: network 10.0.12.0 0.0.0.3 area 0." : "No adjacency formed with R2.") },
+      { text: "Which message did the console print when the adjacency came up?", choices: ["%OSPF-5-ADJCHG ... from LOADING to FULL, Loading Done", "%LINEPROTO-5-UPDOWN ... changed state to up", "%OSPF-4-ERRRCV ... mismatched area ID", "Nothing: OSPF works silently"], check: (t) => need(t.reply === "%OSPF-5-ADJCHG ... from LOADING to FULL, Loading Done", "OSPF reports every neighbor that reaches FULL (and every one that drops) with %OSPF-5-ADJCHG, also kept in show logging.") },
     ],
     solution: { R1: [...EN, "router ospf 1", "network 10.1.1.0 0.0.0.255 area 0", "network 10.0.12.0 0.0.0.3 area 0"] },
+    answers: { 3: "%OSPF-5-ADJCHG ... from LOADING to FULL, Loading Done" },
     teach: "network <address> <wildcard> area <n> enables OSPF on every interface whose IP matches. Wildcard = 255.255.255.255 minus the mask (/24 is 0.0.0.255, /30 is 0.0.0.3). The process ID is local and need not match the neighbor's.",
   }),
   lab({
