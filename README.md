@@ -170,7 +170,7 @@ English.
   ISP by SLAAC, a traceroute that stops halfway while pings work, and a
   branch on a serial line with no clock, no route, the wrong time and a
   logging ACL. Exam mode has a harder option made only of these.
-  253 labs, 60 of them sims.
+  254 labs, 60 of them sims.
 - **A network that behaves like one.** OSPF routes are worked out from the
   adjacencies you actually brought up (costs, O IA, the O*E2 default), a
   PC only reaches what its VLAN, the trunks and the routers' tables allow,
@@ -227,8 +227,11 @@ English.
   the end). A PC's first echo dies at a router that still has to ARP for
   its next hop (Windows prints Request timed out., then the replies), ACL
   entries with `log` leave `%SEC-6-IPACCESSLOG` lines, NAT counts its hits
-  and misses, and `show clock` follows `clock timezone` and summer time. A test replays every model answer and fails if one of its
-  pings gets no reply.
+  and misses, and `show clock` follows `clock timezone` and summer time.
+  OSPF prints `%OSPF-5-ADJCHG` when a neighbor reaches FULL or goes down,
+  and a route to Null0 drops what matches it and answers net unreachable.
+  A test replays every model answer and fails if one of its pings gets no
+  reply.
 - **Exam mode.** Timed random labs with no hints, scored out of 1000
   (pass at 825).
 - **Your work stays.** Finished labs and every line typed in a lab are kept
